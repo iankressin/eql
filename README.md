@@ -1,3 +1,7 @@
+# EVM Query Language
+
+This query language allows users to interact with EVM chain data and perform various operations on entities like accounts, blocks, and transactions. Below is a summary of the entities and expressions available in this language:
+
 ## Entities:
 ### Account:
 - address [id]
