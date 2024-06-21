@@ -1,0 +1,12 @@
+[package]
+name = "eql"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pest = "2.7.10"
+clap = { version = "4.5.7", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+pest_derive = "2.6"
+alloy = { version = "0.1.2", features = ["full"] }
+

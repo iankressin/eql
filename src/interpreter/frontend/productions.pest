@@ -1,0 +1,38 @@
+program = _{ (get){1, } }
+
+get    = {
+    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ chain
+}
+fields = { (account_field_list | block_field_list | tx_field_list) }
+entiky = { account | block | tx }
+
+// Account
+account            = { "account" ~ WHITESPACE* ~ account_id }
+account_field_list = { account_field ~ (", " ~ account_field)* }
+account_field      = { "nonce" | "balance" }
+account_id         = { address | ens }
+
+// Block
+block            = { "block" ~ WHITESPACE* ~ integer }
+block_field_list = { block_field ~ (", " ~ block_field_list)* }
+block_field      = { "number" | "timestamp" | "size" | "hash" | "parent_hash" | "reward" }
+
+// Transaction
+tx            = { "tx" ~ WHITESPACE* ~ hash }
+tx_field_list = { tx_field ~ (", " ~ tx_field)* }
+tx_field      = { "hash" | "from" | "to" | "data" | "value" | "fee" | "gas_price" | "timestamp" | "status" }
+
+chain = _{ "ON" ~ WHITESPACE* ~ available_chain }
+
+// Terminals
+unit            = { "ether" | "gwei" | "wei" }
+number          = { float | integer }
+integer         = { (ASCII_DIGIT)+ }
+float           = { integer ~ "." ~ integer }
+available_chain = { "eth" | "arb" | "op" | "base" | "blast" }
+address         = { "0x" ~ (ASCII_HEX_DIGIT){40} }
+hash            = { "0x" ~ (ASCII_HEX_DIGIT){64} }
+ens             = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
+
+// Helpers
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
