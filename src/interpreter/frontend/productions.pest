@@ -1,38 +1,35 @@
 program = _{ (get){1, } }
 
-get    = {
-    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ chain
+get       = {
+    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain
 }
-fields = { (account_field_list | block_field_list | tx_field_list) }
-entiky = { account | block | tx }
+fields    = { (account_field_list | block_field_list | tx_field_list) }
+entity    = { "account" | "block" | "tx" }
+entity_id = { account_id | integer | hash }
 
 // Account
-account            = { "account" ~ WHITESPACE* ~ account_id }
-account_field_list = { account_field ~ (", " ~ account_field)* }
-account_field      = { "nonce" | "balance" }
+account_field_list = _{ account_field ~ (", " ~ account_field)* }
+account_field      =  { "nonce" | "balance" }
 account_id         = { address | ens }
 
 // Block
-block            = { "block" ~ WHITESPACE* ~ integer }
-block_field_list = { block_field ~ (", " ~ block_field_list)* }
-block_field      = { "number" | "timestamp" | "size" | "hash" | "parent_hash" | "reward" }
+block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
+block_field      =  { "number" | "timestamp" | "size" | "hash" | "parent_hash" | "reward" }
 
 // Transaction
-tx            = { "tx" ~ WHITESPACE* ~ hash }
-tx_field_list = { tx_field ~ (", " ~ tx_field)* }
-tx_field      = { "hash" | "from" | "to" | "data" | "value" | "fee" | "gas_price" | "timestamp" | "status" }
-
-chain = _{ "ON" ~ WHITESPACE* ~ available_chain }
+tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }
+tx_field      =  { "hash" | "from" | "to" | "data" | "value" | "fee" | "gas_price" | "timestamp" | "status" }
 
 // Terminals
-unit            = { "ether" | "gwei" | "wei" }
-number          = { float | integer }
-integer         = { (ASCII_DIGIT)+ }
-float           = { integer ~ "." ~ integer }
-available_chain = { "eth" | "arb" | "op" | "base" | "blast" }
-address         = { "0x" ~ (ASCII_HEX_DIGIT){40} }
-hash            = { "0x" ~ (ASCII_HEX_DIGIT){64} }
-ens             = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
+unit    = { "ether" | "gwei" | "wei" }
+number  = { float | integer }
+integer = { (ASCII_DIGIT)+ }
+float   = { integer ~ "." ~ integer }
+chain   = { "eth" | "arb" | "op" | "base" | "blast" }
+address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
+hash    = { "0x" ~ (ASCII_HEX_DIGIT){64} }
+ens     = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 
 // Helpers
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+

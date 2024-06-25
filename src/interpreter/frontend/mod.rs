@@ -1,3 +1,2 @@
 pub mod parser;
-mod ast;
-
+pub mod sementic_analyzer;
