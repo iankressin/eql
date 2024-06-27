@@ -46,13 +46,12 @@ impl From<&Chain> for u64 {
 impl Chain {
     pub fn rpc_url(&self) -> &str {
         match self {
-            Chain::Ethereum => "https://mainnet.infura.io/v3/",
-            Chain::Arbitrum => "https://arbitrum.infura.io/v3/",
-            Chain::Base => "https://base.infura.io/v3/",
-            Chain::Blast => "https://blast.infura.io/v3/",
-            Chain::Optimism => "https://optimism.infura.io/v3/",
-            Chain::Anvil => "http://localhost:8545/",
+            Chain::Ethereum => "https://eth.llamarpc.com",
+            Chain::Arbitrum => "https://arbitrum.infura.io/v3",
+            Chain::Base => "https://base.infura.io/v3",
+            Chain::Blast => "https://blast.infura.io/v3",
+            Chain::Optimism => "https://optimism.infura.io/v3",
+            Chain::Anvil => "http://localhost:8545",
         }
     }
 }
-

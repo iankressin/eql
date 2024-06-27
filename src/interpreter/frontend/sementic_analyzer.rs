@@ -1,4 +1,27 @@
-use crate::common::types::{Expression, GetExpression, Field, Entity};
+use std::error::Error;
+
+use crate::common::types::{Entity, Expression, Field, GetExpression};
+
+#[derive(Debug)]
+pub enum SemanticError {
+    InvalidField { field: Field, enetity: Entity },
+}
+
+impl std::fmt::Display for SemanticError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SemanticError::InvalidField { field, enetity } => {
+                write!(f, "Invalid field `{}` for entity `{}`", field, enetity)
+            }
+        }
+    }
+}
+
+impl Error for SemanticError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
 
 pub struct SemanticAnalyzer<'a> {
     expressions: &'a Vec<Expression>,
@@ -9,36 +32,43 @@ impl<'a> SemanticAnalyzer<'a> {
         SemanticAnalyzer { expressions }
     }
 
-    pub fn analyze(&self) -> Result<(), &'static str> {
+    pub fn analyze(&self) -> Result<(), Box<dyn Error>> {
         for expression in self.expressions {
             match expression {
                 Expression::Get(get_expr) => {
                     self.analyze_get_expr(get_expr)?;
                 }
-                _ => return Err("Invalid expression"),
             }
         }
 
         Ok(())
     }
 
-    // TODO: enhance error handling
-    fn analyze_get_expr(&self, get_expr: &GetExpression) -> Result<(), &'static str> {
+    fn analyze_get_expr(&self, get_expr: &GetExpression) -> Result<(), Box<dyn Error>> {
         for field in &get_expr.fields {
             match field {
                 Field::Block(_) => {
                     if get_expr.entity != Entity::Block {
-                        return Err("Invalid field for entity")
+                        return Err(Box::new(SemanticError::InvalidField {
+                            field: field.clone(),
+                            enetity: get_expr.entity.clone(),
+                        }));
                     }
                 }
                 Field::Account(_) => {
                     if get_expr.entity != Entity::Account {
-                        return Err("Invalid field for entity entity")
+                        return Err(Box::new(SemanticError::InvalidField {
+                            field: field.clone(),
+                            enetity: get_expr.entity.clone(),
+                        }));
                     }
                 }
                 Field::Transaction(_) => {
                     if get_expr.entity != Entity::Transaction {
-                        return Err("Invalid field for entity")
+                        return Err(Box::new(SemanticError::InvalidField {
+                            field: field.clone(),
+                            enetity: get_expr.entity.clone(),
+                        }));
                     }
                 }
             }
@@ -52,28 +82,28 @@ impl<'a> SemanticAnalyzer<'a> {
 mod test {
     use crate::common::{
         chain::Chain,
-        types::{
-            BlockField,
-            Entity,
-            Expression,
-            Field,
-            GetExpression
-        },
+        types::{BlockField, Entity, Expression, Field, GetExpression},
     };
 
     #[test]
     fn test_analyze_get_expression_with_wrong_fields() {
-        let expressions = vec![
-            Expression::Get(GetExpression {
-                entity: Entity::Account,
-                entity_id: "0x1234567890123456789012345678901234567890".try_into().unwrap(),
-                chain: Chain::Ethereum,
-                fields: vec![Field::Block(BlockField::Number)],
-            }),
-        ];
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Account,
+            entity_id: "0x1234567890123456789012345678901234567890"
+                .try_into()
+                .unwrap(),
+            chain: Chain::Ethereum,
+            fields: vec![Field::Block(BlockField::Number)],
+        })];
         let analyzer = super::SemanticAnalyzer::new(&expressions);
-        let result = analyzer.analyze();
-
-        assert_eq!(result, Err("Invalid field for entity"));
+        match analyzer.analyze() {
+            Ok(_) => panic!("Expected an error"),
+            Err(error) => {
+                assert_eq!(
+                    error.to_string(),
+                    "Invalid field `number` for entity `account`"
+                );
+            }
+        }
     }
 }
