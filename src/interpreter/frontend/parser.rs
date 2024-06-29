@@ -42,8 +42,9 @@ impl<'a> Parser<'a> {
             match pair.as_rule() {
                 Rule::get => {
                     let inner_pair = pair.clone().into_inner();
-                    let get_expr = self.parse_get_expr(inner_pair)?;
-
+                    let mut get_expr = self.parse_get_expr(inner_pair)?;
+                    // This is being done here since [`inner_pair`] doesn't have the verb. E.g. `GET`
+                    get_expr.query = pair.as_str().to_string();
                     expressions.push(Expression::Get(get_expr));
                 }
                 _ => {
@@ -58,8 +59,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_get_expr(&self, pairs: Pairs<Rule>) -> Result<GetExpression, Box<dyn Error>> {
-        let mut current_pair = pairs;
         let mut get_expr = GetExpression::default();
+        let mut current_pair = pairs;
 
         while let Some(pair) = current_pair.next() {
             match pair.as_rule() {
@@ -68,7 +69,9 @@ impl<'a> Parser<'a> {
                     get_expr.fields = self.get_fields(inner_pair)?;
                 }
                 Rule::entity => get_expr.entity = pair.as_str().try_into()?,
-                Rule::entity_id => get_expr.entity_id = pair.as_str().try_into()?,
+                // We shouldn't need to call `trim()` here, but it the parser is
+                // adding an extra whitespace when entity_id is block number
+                Rule::entity_id => get_expr.entity_id = pair.as_str().trim().try_into()?,
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(
@@ -111,9 +114,7 @@ mod tests {
     #[test]
     fn test_build_get_ast() {
         let source = "GET nonce, balance FROM account 0x1234567890123456789012345678901234567890 ON ethereum";
-        let parser = Parser::new(source);
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
-        let result = parser.parse_expressions().unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
             entity_id: EntityId::Account(address),
@@ -122,7 +123,10 @@ mod tests {
                 Field::Account(AccountField::Balance),
             ],
             chain: Chain::Ethereum,
+            query: source.clone().to_string(),
         })];
+        let parser = Parser::new(source);
+        let result = parser.parse_expressions().unwrap();
 
         assert_eq!(result, expected);
     }

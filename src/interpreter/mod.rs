@@ -2,12 +2,12 @@ pub mod backend;
 pub mod frontend;
 
 use crate::common::types::Expression;
-use backend::execution_engine::{ExecutionEngine, ExpressionResult};
+use backend::execution_engine::{ExecutionEngine, QueryResult};
 use frontend::{parser::Parser, sementic_analyzer::SemanticAnalyzer};
 use std::error::Error;
 
 pub trait InterpreterResultHandler {
-    fn handle_result(&self, result: Vec<ExpressionResult>);
+    fn handle_result(&self, result: Vec<QueryResult>);
 }
 
 pub struct Interpreter<'a, T>
@@ -47,7 +47,7 @@ where
     pub async fn run_backend(
         &self,
         expressions: Vec<Expression>,
-    ) -> Result<Vec<ExpressionResult>, Box<dyn Error>> {
+    ) -> Result<Vec<QueryResult>, Box<dyn Error>> {
         let result = ExecutionEngine::new().run(expressions).await?;
 
         Ok(result)

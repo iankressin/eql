@@ -5,7 +5,7 @@ get       = {
 }
 fields    = { (account_field_list | block_field_list | tx_field_list) }
 entity    = { "account" | "block" | "tx" }
-entity_id = { account_id | integer | hash }
+entity_id = { hash | account_id | integer }
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }

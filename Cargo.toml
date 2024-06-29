@@ -9,4 +9,5 @@ clap = { version = "4.5.7", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 pest_derive = "2.6"
 alloy = { version = "0.1.2", features = ["full"] }
+tabled = "0.15.0"
 

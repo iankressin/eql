@@ -3,6 +3,7 @@ use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, Bytes, FixedBytes, B256, U256},
 };
+use tabled::Tabled;
 
 use std::{error::Error, fmt::Display, str::FromStr};
 
@@ -17,16 +18,17 @@ pub struct GetExpression {
     pub entity_id: EntityId,
     pub fields: Vec<Field>,
     pub chain: Chain,
+    pub query: String,
 }
 
 impl Default for GetExpression {
-    // TODO: check if this is being used
     fn default() -> Self {
         Self {
             entity: Entity::Block,
             entity_id: EntityId::Block(BlockNumberOrTag::Earliest),
             fields: vec![],
             chain: Chain::Ethereum,
+            query: "".to_string(),
         }
     }
 }
@@ -240,7 +242,7 @@ impl TryFrom<&str> for Entity {
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
             "block" => Ok(Entity::Block),
-            "transaction" => Ok(Entity::Transaction),
+            "tx" => Ok(Entity::Transaction),
             "account" => Ok(Entity::Account),
             invalid_entity => Err(Box::new(EntityError::InvalidEntity(
                 invalid_entity.to_string(),
@@ -256,6 +258,7 @@ pub enum EntityId {
     Account(Address),
 }
 
+// TODO: return instance of Error trait instead of &'static str
 impl TryFrom<&str> for EntityId {
     type Error = &'static str;
 
@@ -273,8 +276,10 @@ impl TryFrom<&str> for EntityId {
             }
         } else {
             let block_number = id
-                .parse::<BlockNumberOrTag>()
-                .map_err(|_| "Invalid block number")?;
+                .parse::<u64>()
+                .map_err(|_| "Invalid block number")?
+                .into();
+
             Ok(EntityId::Block(block_number))
         }
     }
@@ -285,7 +290,6 @@ pub enum EntityIdError {
     InvalidAddress,
     InvalidTxHash,
     InvalidBlockNumber,
-    TypeNotSupported,
 }
 
 impl Display for EntityIdError {
@@ -293,8 +297,7 @@ impl Display for EntityIdError {
         match self {
             EntityIdError::InvalidAddress => write!(f, "Invalid address"),
             EntityIdError::InvalidTxHash => write!(f, "Invalid tx hash"),
-            EntityIdError::InvalidBlockNumber => write!(f, "Invalid block number"),
-            EntityIdError::TypeNotSupported => write!(f, "Type not supported"),
+            EntityIdError::InvalidBlockNumber => write!(f, "3. Invalid block number"),
         }
     }
 }
@@ -328,12 +331,17 @@ impl EntityId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Tabled)]
 pub struct BlockQueryRes {
+    #[tabled(display_with = "display_option")]
     pub number: Option<u64>,
+    #[tabled(display_with = "display_option")]
     pub timestamp: Option<u64>,
+    #[tabled(display_with = "display_option")]
     pub hash: Option<B256>,
+    #[tabled(display_with = "display_option")]
     pub size: Option<U256>,
+    #[tabled(display_with = "display_option")]
     pub parent_hash: Option<B256>,
 }
 
@@ -349,10 +357,13 @@ impl Default for BlockQueryRes {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Tabled)]
 pub struct AccountQueryRes {
+    #[tabled(display_with = "display_option")]
     pub nonce: Option<u64>,
+    #[tabled(display_with = "display_option")]
     pub balance: Option<U256>,
+    #[tabled(display_with = "display_option")]
     pub address: Option<Address>,
 }
 
@@ -366,14 +377,21 @@ impl Default for AccountQueryRes {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Tabled)]
 pub struct TransactionQueryRes {
+    #[tabled(display_with = "display_option")]
     pub hash: Option<FixedBytes<32>>,
+    #[tabled(display_with = "display_option")]
     pub from: Option<Address>,
+    #[tabled(display_with = "display_option")]
     pub to: Option<Address>,
+    #[tabled(display_with = "display_option")]
     pub data: Option<Bytes>,
+    #[tabled(display_with = "display_option")]
     pub value: Option<U256>,
+    #[tabled(display_with = "display_option")]
     pub gas_price: Option<u128>,
+    #[tabled(display_with = "display_option")]
     pub status: Option<bool>,
 }
 
@@ -388,5 +406,13 @@ impl Default for TransactionQueryRes {
             gas_price: None,
             status: None,
         }
+    }
+}
+
+// TODO: move to another file
+fn display_option<T: std::fmt::Display>(value: &Option<T>) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None => "-".to_string(),
     }
 }

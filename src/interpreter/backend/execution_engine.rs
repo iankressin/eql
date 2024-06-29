@@ -1,6 +1,6 @@
 use crate::common::types::{
-    AccountField, AccountQueryRes, BlockField, BlockQueryRes, Entity, EntityId, Expression,
-    GetExpression, TransactionField, TransactionQueryRes,
+    AccountField, AccountQueryRes, BlockField, BlockQueryRes, Entity, Expression, GetExpression,
+    TransactionField, TransactionQueryRes,
 };
 use alloy::{
     eips::BlockNumberOrTag,
@@ -9,15 +9,26 @@ use alloy::{
     transports::http::{Client, Http},
 };
 use std::error::Error;
+use tabled::Tabled;
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct QueryResult {
+    pub query: String,
+    pub result: ExpressionResult,
+}
+
+impl QueryResult {
+    pub fn new(query: String, result: ExpressionResult) -> QueryResult {
+        QueryResult { query, result }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Tabled)]
 pub enum ExpressionResult {
     Account(AccountQueryRes),
     Block(BlockQueryRes),
     Transaction(TransactionQueryRes),
 }
-
-pub enum ExecutionEngineError {}
 
 pub struct ExecutionEngine;
 
@@ -29,19 +40,19 @@ impl ExecutionEngine {
     pub async fn run(
         &self,
         expressions: Vec<Expression>,
-    ) -> Result<Vec<ExpressionResult>, Box<dyn Error>> {
-        let mut execution_result = vec![];
+    ) -> Result<Vec<QueryResult>, Box<dyn Error>> {
+        let mut query_results = vec![];
 
         for expression in expressions {
             match expression {
                 Expression::Get(get_expr) => {
                     let result = self.run_get_expr(&get_expr).await?;
-                    execution_result.push(result);
+                    query_results.push(QueryResult::new(get_expr.query, result));
                 }
             }
         }
 
-        Ok(execution_result)
+        Ok(query_results)
     }
 
     async fn run_get_expr(
@@ -65,7 +76,7 @@ impl ExecutionEngine {
 
                     Ok(ExpressionResult::Block(result))
                 } else {
-                    panic!("Invalid block number");
+                    panic!("2. Invalid block number");
                 }
             }
             Entity::Account => {

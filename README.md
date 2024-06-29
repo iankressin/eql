@@ -14,7 +14,6 @@ This query language allows users to interact with EVM chain data and perform var
 - size 
 - hash
 - parent hash
-- reward
 
 ### Transaction:
 - hash [id]
