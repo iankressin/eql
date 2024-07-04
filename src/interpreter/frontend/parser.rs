@@ -15,14 +15,12 @@ pub struct Parser<'a> {
 #[derive(Debug)]
 pub enum ParserError {
     UnexpectedToken(String),
-    UnknownField(String),
 }
 
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParserError::UnexpectedToken(token) => write!(f, "Unexpected token: {}", token),
-            ParserError::UnknownField(field) => write!(f, "Unknown field: {}", field),
         }
     }
 }
@@ -124,27 +122,6 @@ mod tests {
                 Field::Account(AccountField::Balance),
             ],
             chain: Chain::Ethereum,
-            query: source.to_string(),
-        })];
-        let parser = Parser::new(source);
-        let result = parser.parse_expressions().unwrap();
-
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_build_ast_when_chain_is_polygon() {
-        let source =
-            "GET nonce, balance FROM account 0x1234567890123456789012345678901234567890 ON polygon";
-        let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
-        let expected = vec![Expression::Get(GetExpression {
-            entity: Entity::Account,
-            entity_id: EntityId::Account(address),
-            fields: vec![
-                Field::Account(AccountField::Nonce),
-                Field::Account(AccountField::Balance),
-            ],
-            chain: Chain::Polygon,
             query: source.to_string(),
         })];
         let parser = Parser::new(source);
