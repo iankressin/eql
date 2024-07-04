@@ -46,13 +46,13 @@ detect_os() {
 
 download_asset() {
     echo "[INFO] Downloading asset"
-    curl -L -o eql "${REPO_URL}/releases/download/${LATEST_RELEASE_TAG}/${ASSET_NAME}"
+    curl -L -o eql-release "${REPO_URL}/releases/download/${LATEST_RELEASE_TAG}/${ASSET_NAME}"
     echo "[INFO] Asset downloaded"
 }
 
 move_to_bin() {
     echo "[INFO] Moving to /usr/local/bin"
-    sudo mv eql /usr/local/bin/eql
+    sudo mv eql-release /usr/local/bin/eql
     chmod +x /usr/local/bin/eql
     echo "[INFO] Installed to /usr/local/bin/eql"
 }
