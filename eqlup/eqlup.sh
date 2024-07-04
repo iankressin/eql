@@ -95,3 +95,5 @@ main() {
     cleanup
     final_message
 }
+
+main
