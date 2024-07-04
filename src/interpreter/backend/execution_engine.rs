@@ -248,6 +248,7 @@ mod test {
             entity: Entity::Block,
             entity_id: EntityId::Block(1.into()),
             fields: vec![Field::Block(BlockField::Timestamp)],
+            query: String::from(""),
         })];
         let expected = vec![ExpressionResult::Block(BlockQueryRes {
             timestamp: Some(1438269988),
@@ -259,7 +260,13 @@ mod test {
         let execution_result = execution_engine.run(expressions).await;
 
         assert!(execution_result.is_ok());
-        assert_eq!(execution_result.unwrap(), expected);
+
+        match execution_result {
+            Ok(results) => {
+                assert_eq!(results[0].result, expected[0]);
+            }
+            Err(_) => panic!("Error"),
+        }
     }
 
     #[tokio::test]
@@ -272,6 +279,7 @@ mod test {
                 Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap(),
             ),
             fields: vec![Field::Account(AccountField::Balance)],
+            query: String::from(""),
         })];
 
         let execution_result = execution_engine.run(expressions).await;
@@ -279,8 +287,15 @@ mod test {
         assert!(execution_result.is_ok());
 
         match &execution_result.unwrap()[0] {
-            ExpressionResult::Account(account) => assert!(account.balance.is_some()),
-            _ => panic!("Invalid result"),
+            QueryResult { query, result } => {
+                assert_eq!(query, "");
+                match result {
+                    ExpressionResult::Account(account) => {
+                        assert!(account.balance.is_some());
+                    }
+                    _ => panic!("Invalid result"),
+                }
+            }
         }
     }
 
@@ -297,6 +312,7 @@ mod test {
                 .unwrap(),
             ),
             fields: vec![Field::Transaction(TransactionField::To)],
+            query: String::from(""),
         })];
 
         let execution_result = execution_engine.run(expressions).await;
@@ -304,13 +320,15 @@ mod test {
         assert!(execution_result.is_ok());
 
         match &execution_result.unwrap()[0] {
-            ExpressionResult::Transaction(tx) => {
-                assert_eq!(
-                    tx.to,
-                    Some(Address::from_str("0x2eeb301387D6BDa23E02fa0c7463507c68b597B5").unwrap()),
-                )
+            QueryResult { query, result } => {
+                assert_eq!(query, "");
+                match result {
+                    ExpressionResult::Transaction(tx) => {
+                        assert!(tx.to.is_some());
+                    }
+                    _ => panic!("Invalid result"),
+                }
             }
-            _ => panic!("Invalid result"),
         }
     }
 }

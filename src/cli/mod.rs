@@ -1,12 +1,10 @@
-use std::error::Error;
-
-use clap::{Parser, Subcommand};
-use tabled::{settings::Style, Table};
-
 use crate::interpreter::{
     backend::execution_engine::{ExpressionResult, QueryResult},
     Interpreter, InterpreterResultHandler,
 };
+use clap::{Parser, Subcommand};
+use std::error::Error;
+use tabled::{settings::Style, Table};
 
 #[derive(Parser)]
 #[clap(

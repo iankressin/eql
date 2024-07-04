@@ -5,6 +5,7 @@ pub enum Chain {
     Base,
     Blast,
     Optimism,
+    Polygon,
     Anvil,
 }
 
@@ -24,6 +25,7 @@ impl TryFrom<&str> for Chain {
             "base" => Ok(Chain::Base),
             "blast" => Ok(Chain::Blast),
             "optimism" => Ok(Chain::Optimism),
+            "polygon" => Ok(Chain::Polygon),
             "anvil" => Ok(Chain::Anvil),
             _ => Err("Invalid chain"),
         }
@@ -38,6 +40,7 @@ impl From<&Chain> for u64 {
             Chain::Base => 8453,
             Chain::Blast => 238,
             Chain::Optimism => 10,
+            Chain::Polygon => 137,
             Chain::Anvil => 31337,
         }
     }
@@ -51,6 +54,7 @@ impl Chain {
             Chain::Base => "https://base.infura.io/v3",
             Chain::Blast => "https://blast.infura.io/v3",
             Chain::Optimism => "https://optimism.infura.io/v3",
+            Chain::Polygon => "https://polygon.llamarpc.com",
             Chain::Anvil => "http://localhost:8545",
         }
     }
