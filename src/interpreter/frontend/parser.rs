@@ -113,7 +113,8 @@ mod tests {
 
     #[test]
     fn test_build_get_ast() {
-        let source = "GET nonce, balance FROM account 0x1234567890123456789012345678901234567890 ON ethereum";
+        let source =
+            "GET nonce, balance FROM account 0x1234567890123456789012345678901234567890 ON eth";
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -123,7 +124,28 @@ mod tests {
                 Field::Account(AccountField::Balance),
             ],
             chain: Chain::Ethereum,
-            query: source.clone().to_string(),
+            query: source.to_string(),
+        })];
+        let parser = Parser::new(source);
+        let result = parser.parse_expressions().unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_build_ast_when_chain_is_polygon() {
+        let source =
+            "GET nonce, balance FROM account 0x1234567890123456789012345678901234567890 ON polygon";
+        let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Account,
+            entity_id: EntityId::Account(address),
+            fields: vec![
+                Field::Account(AccountField::Nonce),
+                Field::Account(AccountField::Balance),
+            ],
+            chain: Chain::Polygon,
+            query: source.to_string(),
         })];
         let parser = Parser::new(source);
         let result = parser.parse_expressions().unwrap();

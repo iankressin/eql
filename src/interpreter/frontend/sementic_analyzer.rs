@@ -94,6 +94,8 @@ mod test {
                 .unwrap(),
             chain: Chain::Ethereum,
             fields: vec![Field::Block(BlockField::Number)],
+            // The query doesn't matter for this test
+            query: String::from(""),
         })];
         let analyzer = super::SemanticAnalyzer::new(&expressions);
         match analyzer.analyze() {

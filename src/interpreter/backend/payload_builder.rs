@@ -8,7 +8,4 @@ impl PayloadBuilder<'_> {
     fn new(expressions: &Vec<Expression>) -> PayloadBuilder {
         PayloadBuilder { expressions }
     }
-
-
 }
-
