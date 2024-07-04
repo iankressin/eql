@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
                     get_expr.fields = self.get_fields(inner_pair)?;
                 }
                 Rule::entity => get_expr.entity = pair.as_str().try_into()?,
-                // We shouldn't need to call `trim()` here, but it the parser is
+                // We shouldn't need to call `trim()` here, but the parser is
                 // adding an extra whitespace when entity_id is block number
                 Rule::entity_id => get_expr.entity_id = pair.as_str().trim().try_into()?,
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
