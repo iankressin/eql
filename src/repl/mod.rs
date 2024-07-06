@@ -30,10 +30,7 @@ impl Repl {
         let label = String::from("EQL >");
         let mut history_offset: usize = 0;
         let mut stdout = stdout();
-        // let mut expression = String::new();
-        let mut expression = String::from(
-            "GET nonce, balance FROM account 0x00000000219ab540356cBB839Cbe05303d7705Fa ON eth",
-        );
+        let mut expression = String::new();
         execute!(
             stdout,
             Clear(ClearType::All),
@@ -134,7 +131,6 @@ impl Repl {
         label: &str,
         expression: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // let line = format!("{}{}", label, expression);
         queue!(
             self.stdout,
             MoveToColumn(0),
