@@ -18,30 +18,17 @@ To update EQL to the latest version, you can simply run `eqlup` again:
 ```bash
 eqlup
 ```
+## Usage
 
-## Entities:
-### Account:
-- address [id]
-- nonce
-- balance
+Queries can be run by executing `.eql` files with `run` command:
+```bash
+eql run <file>.eql
+```
 
-### Block:
-- number [id]
-- timestamp
-- size 
-- hash
-- parent hash
-
-### Transaction:
-- hash [id]
-- from
-- to
-- data
-- value
-- fee
-- gas price
-- timestamp
-- status
+Or using the language REPL:
+```bash
+eql repl
+```
 
 ## Expressions:
 ### GET:
@@ -64,3 +51,30 @@ eqlup
 *Production*: `<operator>(<[expr, ]>)`
 
 *Example*: `SUM(GET balance FROM vitalik.eth ON base, GET balance FROM vitalik.eth ON ethereum)`
+
+## Entities:
+
+These are the entities that can be queried using the EQL language, each entity is addressed by its name and an id:
+
+### Account:
+- address [id]
+- nonce
+- balance
+
+### Block:
+- number [id]
+- timestamp
+- size 
+- hash
+- parent hash
+
+### Transaction:
+- hash [id]
+- from
+- to
+- data
+- value
+- fee
+- gas price
+- timestamp
+- status
