@@ -1,6 +1,9 @@
-use crate::interpreter::{
-    backend::execution_engine::{ExpressionResult, QueryResult},
-    Interpreter, InterpreterResultHandler,
+use crate::{
+    interpreter::{
+        backend::execution_engine::{ExpressionResult, QueryResult},
+        Interpreter, InterpreterResultHandler,
+    },
+    repl::Repl,
 };
 use clap::{Parser, Subcommand};
 use std::error::Error;
@@ -75,12 +78,12 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             let source = std::fs::read_to_string(run_args.file)?;
             let result_handler = ResultHandler::new();
 
-            Interpreter::new(&source, result_handler)
-                .run_program()
+            Interpreter::new(result_handler)
+                .run_program(&source)
                 .await?;
         }
         SubCommand::Repl => {
-            println!("Starting REPL");
+            Repl::new().run().await?;
         }
     }
 
