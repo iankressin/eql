@@ -38,6 +38,8 @@ impl Repl {
             stdout,
             Clear(ClearType::All),
             MoveTo(0, 0),
+            Print("EQL REPL - Press ESC to exit"),
+            MoveToNextLine(1),
             Print(label.clone().italic().dark_grey().on_dark_yellow()),
             Print(" "),
         )?;

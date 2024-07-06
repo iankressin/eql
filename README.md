@@ -1,6 +1,6 @@
 # EVM Query Language
 
-This query language allows users to interact with EVM chain data and perform various operations on entities like accounts, blocks, and transactions. Below is a summary of the entities and expressions available in this language:
+This query language allows to interact with EVM chain data and perform various operations on entities like accounts, blocks, and transactions. Below is a summary of the entities and expressions available in this language:
 
 ## Installation
 To begin, install eqlup, the EQL version manager, by running the following command:
