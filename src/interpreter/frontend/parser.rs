@@ -34,7 +34,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expressions(&self) -> Result<Vec<Expression>, Box<dyn Error>> {
         let mut expressions: Vec<Expression> = vec![];
-        let pairs = Parser::parse(Rule::program, self.source).unwrap_or_else(|e| panic!("{}", e));
+        let pairs = Parser::parse(Rule::program, self.source)?;
 
         for pair in pairs {
             match pair.as_rule() {
