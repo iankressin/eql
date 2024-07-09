@@ -16,7 +16,10 @@ static REPL_LABEL: &str = "EQL >";
 
 pub struct Repl {
     history: Vec<String>,
+    history_offset: usize,
     stdout: Stdout,
+    cursor_pos: usize,
+    expression: String,
 }
 
 impl Repl {
@@ -24,15 +27,13 @@ impl Repl {
         Repl {
             history: vec![],
             stdout: stdout(),
+            cursor_pos: 1,
+            expression: String::new(),
+            history_offset: 0,
         }
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut history_offset: usize = 0;
-        let mut stdout = stdout();
-        let mut expression = String::new();
-        let mut cursor_pos = 1;
-
         self.clear_screen()?;
         enable_raw_mode()?;
 
@@ -46,104 +47,107 @@ impl Repl {
                             break;
                         }
                         else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'l' {
-                            cursor_pos = 1;
+                            self.cursor_pos = 1;
                             self.clear_screen()?;
                             continue;
                         }
                         else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'u' {
-                            cursor_pos = 1;
-                            expression.clear();
-                            self.redraw_line(&expression, cursor_pos)?;
+                            self.cursor_pos = 1;
+                            self.expression.clear();
+                            self.redraw_line()?;
                         }
                         else {
-                            expression.insert(cursor_pos - 1, ch);
-                            cursor_pos += 1;
-                            self.redraw_line(&expression, cursor_pos)?;
+                            self.expression.insert(self.cursor_pos - 1, ch);
+                            self.cursor_pos += 1;
+                            self.redraw_line()?;
                         }
                     }
                     KeyCode::Backspace => {
                         if key_event.modifiers == KeyModifiers::ALT {
-                            let mut temp = expression.split(" ").collect::<Vec<&str>>();
+                            let mut temp = self.expression.split(" ").collect::<Vec<&str>>();
 
                             if let Some(removed) = temp.pop() {
                                 if temp.len() == 0 {
                                     continue;
                                 } else {
                                     let removed_len = removed.len() + 1; // +1 for the space
-                                    cursor_pos -= removed_len;
-                                    expression = temp.join(" ");
+                                    self.cursor_pos -= removed_len;
+                                    self.expression = temp.join(" ");
                                 }
                             }
 
                         } else {
-                            expression.pop();
+                            self.expression.pop();
 
-                            if cursor_pos > 1 {
-                                cursor_pos -= 1;
+                            if self.cursor_pos > 1 {
+                                self.cursor_pos -= 1;
                             }
                         }
 
-                        self.redraw_line(&expression, cursor_pos)?;
+                        self.redraw_line()?;
                     }
                     KeyCode::Enter => {
-                        self.history.push(expression.trim().to_string());
-
-                        let _ = Repl::run_expression(&expression.trim()).await.map_err(|e| {
+                        let _ = self.run_expression().await.map_err(|e| {
                             for line in e.to_string().split("\n") {
-                                queue!(stdout, MoveToNextLine(1), Print(line.red())).unwrap();
+                                queue!(
+                                    self.stdout,
+                                    MoveToNextLine(1),
+                                    Print(line.red()),
+                                ).unwrap();
                             }
                         });
 
-                        expression.clear();
-                        cursor_pos = 1;
-                        history_offset = 0;
+                        self.history.push(self.expression.trim().to_string());
+                        self.expression.clear();
+                        self.cursor_pos = 1;
+                        self.history_offset = 0;
 
                         queue!(
-                            stdout,
+                            self.stdout,
                             MoveToNextLine(1),
                             Print(REPL_LABEL.italic().dark_grey().on_dark_yellow()),
                             Print(" "),
-                            Print(&expression),
+                            Print(&self.expression),
                         )?;
                     }
                     KeyCode::Up => {
-                        if self.history.len() == 0 || history_offset >= self.history.len() {
+                        if self.history.len() == 0 || self.history_offset >= self.history.len() {
                             continue;
                         }
 
-                        history_offset += 1;
-                        expression = self.history[self.history.len() - history_offset].clone();
-                        cursor_pos = expression.len() + 1;
-                        self.redraw_line(&expression, cursor_pos)?;
+                        self.history_offset += 1;
+                        self.expression = self.history[self.history.len() - self.history_offset].clone();
+                        self.cursor_pos = self.expression.len() + 1;
+                        self.redraw_line()?;
                     }
                     KeyCode::Down => {
-                        if history_offset == 0 {
+                        if self.history_offset == 0 {
                             continue;
                         }
 
-                        history_offset -= 1;
-                        expression = if history_offset == 0 {
-                            cursor_pos = 1;
+                        self.history_offset -= 1;
+                        self.expression = if self.history_offset == 0 {
+                            self.cursor_pos = 1;
                             "".to_string()
                         } else {
-                            let temp = self.history[self.history.len() - history_offset].clone();
-                            cursor_pos = temp.len() + 1;
+                            let temp = self.history[self.history.len() - self.history_offset].clone();
+                            self.cursor_pos = temp.len() + 1;
                             temp
                         };
 
-                        self.redraw_line(&expression, cursor_pos)?;
+                        self.redraw_line()?;
                     }
                     KeyCode::Left => {
-                        if cursor_pos > 0 {
-                            cursor_pos -= 1;
+                        if self.cursor_pos > 0 {
+                            self.cursor_pos -= 1;
                         }
-                        queue!(stdout, MoveLeft(1))?;
+                        queue!(self.stdout, MoveLeft(1))?;
                     }
                     KeyCode::Right => {
-                        if cursor_pos < expression.len() {
-                            cursor_pos += 1;
+                        if self.cursor_pos < self.expression.len() {
+                            self.cursor_pos += 1;
                         }
-                        queue!(stdout, MoveRight(1))?;
+                        queue!(self.stdout, MoveRight(1))?;
                     }
                     KeyCode::Esc => break,
                     _ => {}
@@ -151,7 +155,7 @@ impl Repl {
                 _ => {}
             }
 
-            stdout.flush()?;
+            self.stdout.flush()?;
         }
 
         disable_raw_mode()?;
@@ -159,11 +163,10 @@ impl Repl {
         Ok(())
     }
 
-    fn redraw_line(
-        &mut self,
-        expression: &str,
-        cursor_pos: usize,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn redraw_line(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let expression = self.expression.clone();
+        let cursor_pos = self.cursor_pos;
+
         queue!(
             self.stdout,
             MoveToColumn(0),
@@ -177,9 +180,9 @@ impl Repl {
         Ok(())
     }
 
-    async fn run_expression(expression: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn run_expression(&self) -> Result<(), Box<dyn std::error::Error>> {
         Interpreter::new(ResultHandler::new())
-            .run_program(expression)
+            .run_program(&self.expression)
             .await?;
 
         Ok(())
