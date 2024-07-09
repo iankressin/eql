@@ -3,7 +3,7 @@ use crate::interpreter::{
     Interpreter, InterpreterResultHandler,
 };
 use crossterm::{
-    cursor::{MoveLeft, MoveTo, MoveToColumn, MoveToNextLine},
+    cursor::{MoveLeft, MoveRight, MoveTo, MoveToColumn, MoveToNextLine},
     event::{read, Event, KeyCode, KeyModifiers},
     execute, queue,
     style::{Print, Stylize},
@@ -31,6 +31,7 @@ impl Repl {
         let mut history_offset: usize = 0;
         let mut stdout = stdout();
         let mut expression = String::new();
+        let mut cursor_pos = 1;
 
         self.clear_screen()?;
         enable_raw_mode()?;
@@ -45,24 +46,47 @@ impl Repl {
                             break;
                         }
                         else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'l' {
+                            cursor_pos = 1;
                             self.clear_screen()?;
                             continue;
                         }
                         else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'u' {
+                            cursor_pos = 1;
                             expression.clear();
-                            self.redraw_line(&expression)?;
+                            self.redraw_line(&expression, cursor_pos)?;
                         }
                         else {
-                            expression.push(ch);
-                            self.redraw_line(&expression)?;
+                            expression.insert(cursor_pos - 1, ch);
+                            cursor_pos += 1;
+                            self.redraw_line(&expression, cursor_pos)?;
                         }
                     }
                     KeyCode::Backspace => {
-                        expression.pop();
-                        self.redraw_line(&expression)?;
+                        if key_event.modifiers == KeyModifiers::ALT {
+                            let mut temp = expression.split(" ").collect::<Vec<&str>>();
+
+                            if let Some(removed) = temp.pop() {
+                                if temp.len() == 0 {
+                                    continue;
+                                } else {
+                                    let removed_len = removed.len() + 1; // +1 for the space
+                                    cursor_pos -= removed_len;
+                                    expression = temp.join(" ");
+                                }
+                            }
+
+                        } else {
+                            expression.pop();
+
+                            if cursor_pos > 1 {
+                                cursor_pos -= 1;
+                            }
+                        }
+
+                        self.redraw_line(&expression, cursor_pos)?;
                     }
                     KeyCode::Enter => {
-                        self.history.push(expression.clone());
+                        self.history.push(expression.trim().to_string());
 
                         let _ = Repl::run_expression(&expression.trim()).await.map_err(|e| {
                             for line in e.to_string().split("\n") {
@@ -71,6 +95,7 @@ impl Repl {
                         });
 
                         expression.clear();
+                        cursor_pos = 1;
                         history_offset = 0;
 
                         queue!(
@@ -82,34 +107,43 @@ impl Repl {
                         )?;
                     }
                     KeyCode::Up => {
-                        execute!(
-                            stdout,
-                            MoveToColumn(0),
-                            Clear(ClearType::CurrentLine),
-                            Print(history_offset.to_string())
-                        )?;
-
-                        if history_offset >= self.history.len() {
-                            history_offset = self.history.len() - 1;
+                        if self.history.len() == 0 || history_offset >= self.history.len() {
+                            continue;
                         }
 
-                        expression = self.history[history_offset].clone();
-                        self.redraw_line(&expression)?;
-
                         history_offset += 1;
+                        expression = self.history[self.history.len() - history_offset].clone();
+                        cursor_pos = expression.len() + 1;
+                        self.redraw_line(&expression, cursor_pos)?;
                     }
                     KeyCode::Down => {
                         if history_offset == 0 {
                             continue;
-                        } else {
-                            history_offset -= 1;
-                            expression = self.history[history_offset].clone();
                         }
 
-                        self.redraw_line(&expression)?;
+                        history_offset -= 1;
+                        expression = if history_offset == 0 {
+                            cursor_pos = 1;
+                            "".to_string()
+                        } else {
+                            let temp = self.history[self.history.len() - history_offset].clone();
+                            cursor_pos = temp.len() + 1;
+                            temp
+                        };
+
+                        self.redraw_line(&expression, cursor_pos)?;
                     }
                     KeyCode::Left => {
+                        if cursor_pos > 0 {
+                            cursor_pos -= 1;
+                        }
                         queue!(stdout, MoveLeft(1))?;
+                    }
+                    KeyCode::Right => {
+                        if cursor_pos < expression.len() {
+                            cursor_pos += 1;
+                        }
+                        queue!(stdout, MoveRight(1))?;
                     }
                     KeyCode::Esc => break,
                     _ => {}
@@ -128,6 +162,7 @@ impl Repl {
     fn redraw_line(
         &mut self,
         expression: &str,
+        cursor_pos: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
         queue!(
             self.stdout,
@@ -136,6 +171,7 @@ impl Repl {
             Print(REPL_LABEL.italic().dark_grey().on_dark_yellow()),
             Print(" "),
             Print(expression),
+            MoveToColumn(cursor_pos as u16 + 5),
         )?;
 
         Ok(())
