@@ -1,12 +1,13 @@
 [package]
-name = "eql-cli"
-version.workspace = true
+name = "eql_cli"
+version = "0.1.0"
 rust-version.workspace = true
 edition.workspace = true
+authors.workspace = true
 
 [dependencies]
-eql-common = { workspace = true }
-eql-interpreter = { workspace = true }
+eql_common = { workspace = true }
+eql_interpreter = { workspace = true }
 clap = { version = "4.5.7", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tabled = "0.15.0"

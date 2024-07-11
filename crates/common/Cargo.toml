@@ -1,8 +1,9 @@
 [package]
-name = "eql-common"
-version.workspace = true
+name = "eql_common"
+version = "0.1.0"
 rust-version.workspace = true
 edition.workspace = true
+authors.workspace = true
 
 [dependencies]
 tabled = "0.15.0"

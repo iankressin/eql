@@ -7,8 +7,9 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 rust-version = "1.78"
+authors = ["Ian K. Guimaraes <ianguimaraes31@gmail.com>"]
 
 [workspace.dependencies]
-eql-interpreter = { path = "crates/interpreter" }
-eql-common = { path = "crates/common" }
-eql-cli = { path = "crates/cli" }
+eql_interpreter = { path = "crates/interpreter" }
+eql_common = { path = "crates/common" }
+eql_cli = { path = "crates/cli" }

@@ -1,13 +1,18 @@
 [package]
-name = "eql-interpreter"
+name = "eql_interpreter"
 version.workspace = true
 rust-version.workspace = true
 edition.workspace = true
+authors.workspace = true
+description = "EVM Query Language interpreter"
+license = "MIT"
+repository = "https://github.com/iankressin/eql"
+readme = "README.md"
 
 [dependencies]
 alloy = { version = "0.1.2", features = ["full"] }
-tabled = "0.15.0"
+eql_common = "0.1.0"
 pest = "2.7.10"
 pest_derive = "2.6"
-eql-common = { workspace = true }
+tabled = "0.15.0"
 tokio = { version = "1", features = ["full"] }

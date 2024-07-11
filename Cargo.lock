@@ -1241,19 +1241,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "eql-cli"
+name = "eql_cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "crossterm",
- "eql-common",
- "eql-interpreter",
+ "eql_common",
+ "eql_interpreter",
  "tabled",
  "tokio",
 ]
 
 [[package]]
-name = "eql-common"
+name = "eql_common"
 version = "0.1.0"
 dependencies = [
  "alloy",
@@ -1261,11 +1261,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "eql-interpreter"
+name = "eql_interpreter"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "eql-common",
+ "eql_common",
  "pest",
  "pest_derive",
  "tabled",
