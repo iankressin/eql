@@ -1,0 +1,13 @@
+[package]
+name = "eql-interpreter"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+[dependencies]
+alloy = { version = "0.1.2", features = ["full"] }
+tabled = "0.15.0"
+pest = "2.7.10"
+pest_derive = "2.6"
+eql-common = { workspace = true }
+tokio = { version = "1", features = ["full"] }

@@ -1,6 +1,5 @@
+use eql_common::types::{Entity, Expression, Field, GetExpression};
 use std::error::Error;
-
-use crate::common::types::{Entity, Expression, Field, GetExpression};
 
 #[derive(Debug)]
 pub enum SemanticError {
@@ -80,7 +79,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::common::{
+    use eql_common::{
         chain::Chain,
         types::{BlockField, Entity, Expression, Field, GetExpression},
     };

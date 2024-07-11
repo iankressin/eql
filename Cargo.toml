@@ -1,14 +1,23 @@
-[package]
-name = "eql"
+# [dependencies]
+# pest = "2.7.10"
+# clap = { version = "4.5.7", features = ["derive"] }
+# tokio = { version = "1", features = ["full"] }
+# pest_derive = "2.6"
+# alloy = { version = "0.1.2", features = ["full"] }
+# tabled = "0.15.0"
+# crossterm = "0.27.0"
+
+[workspace]
+members = ["crates/cli", "crates/interpreter", "crates/common"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+rust-version = "1.78"
 
-[dependencies]
-pest = "2.7.10"
-clap = { version = "4.5.7", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-pest_derive = "2.6"
-alloy = { version = "0.1.2", features = ["full"] }
-tabled = "0.15.0"
-crossterm = "0.27.0"
-
+[workspace.dependencies]
+eql-interpreter = { path = "crates/interpreter" }
+eql-common = { path = "crates/common" }
+eql-cli = { path = "crates/cli" }

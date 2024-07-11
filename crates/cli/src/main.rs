@@ -1,11 +1,11 @@
-use crate::{
-    interpreter::{
-        backend::execution_engine::{ExpressionResult, QueryResult},
-        Interpreter, InterpreterResultHandler,
-    },
-    repl::Repl,
-};
+mod repl;
+
+use crate::repl::Repl;
 use clap::{Parser, Subcommand};
+use eql_interpreter::{
+    backend::execution_engine::{ExpressionResult, QueryResult},
+    Interpreter,
+};
 use std::error::Error;
 use tabled::{settings::Style, Table};
 
@@ -40,11 +40,8 @@ impl ResultHandler {
     pub fn new() -> Self {
         ResultHandler
     }
-}
 
-impl InterpreterResultHandler for ResultHandler {
-    // TODO: this can be refactored to be more generic
-    fn handle_result(&self, query_results: Vec<QueryResult>) {
+    pub fn handle_result(&self, query_results: Vec<QueryResult>) {
         for query_result in query_results {
             match query_result.result {
                 ExpressionResult::Account(query_res) => {
@@ -70,6 +67,7 @@ impl InterpreterResultHandler for ResultHandler {
     }
 }
 
+#[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
     let args = Arguments::parse();
 
@@ -77,10 +75,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         SubCommand::Run(run_args) => {
             let source = std::fs::read_to_string(run_args.file)?;
             let result_handler = ResultHandler::new();
+            let result = Interpreter::run_program(&source).await?;
 
-            Interpreter::new(result_handler)
-                .run_program(&source)
-                .await?;
+            result_handler.handle_result(result);
         }
         SubCommand::Repl => {
             Repl::new().run().await?;
