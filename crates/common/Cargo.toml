@@ -1,0 +1,9 @@
+[package]
+name = "eql-common"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tabled = "0.15.0"
+alloy = { version = "0.1.2", features = ["full"] }

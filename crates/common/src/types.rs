@@ -1,4 +1,4 @@
-use crate::common::chain::Chain;
+use crate::chain::Chain;
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, Bytes, FixedBytes, B256, U256},

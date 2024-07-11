@@ -1,13 +1,13 @@
 use std::error::Error;
 use std::fmt::Display;
 
-use crate::common::types::{Expression, Field, GetExpression};
+use eql_common::types::{Expression, Field, GetExpression};
 use pest::iterators::Pairs;
 use pest::Parser as PestParser;
 use pest_derive::Parser as DeriveParser;
 
 #[derive(DeriveParser)]
-#[grammar = "src/interpreter/frontend/productions.pest"]
+#[grammar = "src/frontend/productions.pest"]
 pub struct Parser<'a> {
     source: &'a str,
 }
@@ -105,8 +105,8 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{chain::Chain, types::*};
     use alloy::primitives::Address;
+    use eql_common::{chain::Chain, types::*};
     use std::str::FromStr;
 
     #[test]

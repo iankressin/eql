@@ -1,0 +1,17 @@
+[package]
+name = "eql-cli"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+
+[dependencies]
+eql-common = { workspace = true }
+eql-interpreter = { workspace = true }
+clap = { version = "4.5.7", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+tabled = "0.15.0"
+crossterm = "0.27.0"
+
+[[bin]]
+name = "eql"
+path = "src/main.rs"

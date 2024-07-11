@@ -1,13 +1,13 @@
-use crate::interpreter::{
-    backend::execution_engine::{ExpressionResult, QueryResult},
-    Interpreter, InterpreterResultHandler,
-};
 use crossterm::{
     cursor::{MoveLeft, MoveRight, MoveTo, MoveToColumn, MoveToNextLine},
     event::{read, Event, KeyCode, KeyModifiers},
     execute, queue,
     style::{Print, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+};
+use eql_interpreter::{
+    backend::execution_engine::{ExpressionResult, QueryResult},
+    Interpreter,
 };
 use std::io::{stdout, Stdout, Write};
 use tabled::{settings::Style, Table};
@@ -45,18 +45,15 @@ impl Repl {
                     KeyCode::Char(ch) => {
                         if key_event.modifiers == KeyModifiers::CONTROL && ch == 'c' {
                             break;
-                        }
-                        else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'l' {
+                        } else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'l' {
                             self.cursor_pos = 1;
                             self.clear_screen()?;
                             continue;
-                        }
-                        else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'u' {
+                        } else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'u' {
                             self.cursor_pos = 1;
                             self.expression.clear();
                             self.redraw_line()?;
-                        }
-                        else {
+                        } else {
                             self.expression.insert(self.cursor_pos - 1, ch);
                             self.cursor_pos += 1;
                             self.redraw_line()?;
@@ -75,7 +72,6 @@ impl Repl {
                                     self.expression = temp.join(" ");
                                 }
                             }
-
                         } else {
                             self.expression.pop();
 
@@ -89,11 +85,7 @@ impl Repl {
                     KeyCode::Enter => {
                         let _ = self.run_expression().await.map_err(|e| {
                             for line in e.to_string().split("\n") {
-                                queue!(
-                                    self.stdout,
-                                    MoveToNextLine(1),
-                                    Print(line.red()),
-                                ).unwrap();
+                                queue!(self.stdout, MoveToNextLine(1), Print(line.red()),).unwrap();
                             }
                         });
 
@@ -116,7 +108,8 @@ impl Repl {
                         }
 
                         self.history_offset += 1;
-                        self.expression = self.history[self.history.len() - self.history_offset].clone();
+                        self.expression =
+                            self.history[self.history.len() - self.history_offset].clone();
                         self.cursor_pos = self.expression.len() + 1;
                         self.redraw_line()?;
                     }
@@ -130,7 +123,8 @@ impl Repl {
                             self.cursor_pos = 1;
                             "".to_string()
                         } else {
-                            let temp = self.history[self.history.len() - self.history_offset].clone();
+                            let temp =
+                                self.history[self.history.len() - self.history_offset].clone();
                             self.cursor_pos = temp.len() + 1;
                             temp
                         };
@@ -181,39 +175,12 @@ impl Repl {
     }
 
     async fn run_expression(&self) -> Result<(), Box<dyn std::error::Error>> {
-        Interpreter::new(ResultHandler::new())
-            .run_program(&self.expression)
-            .await?;
-
+        let result = Interpreter::run_program(&self.expression).await?;
+        self.display_result(result);
         Ok(())
     }
 
-    fn clear_screen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        execute!(
-            self.stdout,
-            Clear(ClearType::All),
-            MoveTo(0, 0),
-            Print("EQL REPL - Press ESC to exit"),
-            MoveToNextLine(1),
-            Print("EQL >".italic().dark_grey().on_dark_yellow()),
-            Print(" "),
-        )?;
-
-        Ok(())
-    }
-}
-
-struct ResultHandler;
-
-impl ResultHandler {
-    pub fn new() -> Self {
-        ResultHandler
-    }
-}
-
-impl InterpreterResultHandler for ResultHandler {
-    // TODO: this can be refactored to be more generic
-    fn handle_result(&self, query_results: Vec<QueryResult>) {
+    fn display_result(&self, query_results: Vec<QueryResult>) {
         for query_result in query_results {
             match query_result.result {
                 ExpressionResult::Account(query_res) => {
@@ -239,5 +206,19 @@ impl InterpreterResultHandler for ResultHandler {
                 }
             }
         }
+    }
+
+    fn clear_screen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        execute!(
+            self.stdout,
+            Clear(ClearType::All),
+            MoveTo(0, 0),
+            Print("EQL REPL - Press ESC to exit"),
+            MoveToNextLine(1),
+            Print("EQL >".italic().dark_grey().on_dark_yellow()),
+            Print(" "),
+        )?;
+
+        Ok(())
     }
 }
