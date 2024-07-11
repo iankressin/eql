@@ -1,0 +1,1 @@
+GET hash, size, parent_hash, timestamp FROM block 1 ON eth
