@@ -8,10 +8,11 @@ use alloy::{
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
 };
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tabled::Tabled;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueryResult {
     pub query: String,
     pub result: ExpressionResult,
@@ -23,7 +24,7 @@ impl QueryResult {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Tabled)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub enum ExpressionResult {
     Account(AccountQueryRes),
     Block(BlockQueryRes),

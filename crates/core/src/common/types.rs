@@ -3,6 +3,7 @@ use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, Bytes, FixedBytes, B256, U256},
 };
+use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 
 use std::{error::Error, fmt::Display, str::FromStr};
@@ -331,7 +332,7 @@ impl EntityId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Tabled)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub struct BlockQueryRes {
     #[tabled(display_with = "display_option")]
     pub number: Option<u64>,
@@ -357,7 +358,7 @@ impl Default for BlockQueryRes {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Tabled)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub struct AccountQueryRes {
     #[tabled(display_with = "display_option")]
     pub nonce: Option<u64>,
@@ -377,7 +378,7 @@ impl Default for AccountQueryRes {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Tabled)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub struct TransactionQueryRes {
     #[tabled(display_with = "display_option")]
     pub hash: Option<FixedBytes<32>>,
