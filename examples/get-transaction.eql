@@ -1,0 +1,1 @@
+GET from, to, value, fee, timestamp FROM tx 0xa9e39789f09753e7afa0838c52e3dd332627f1b18eec07e1652ede6f5a958fa1 ON eth
