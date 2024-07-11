@@ -1246,26 +1246,16 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crossterm",
- "eql_common",
- "eql_interpreter",
+ "eql_core",
  "tabled",
  "tokio",
 ]
 
 [[package]]
-name = "eql_common"
+name = "eql_core"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "tabled",
-]
-
-[[package]]
-name = "eql_interpreter"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "eql_common",
  "pest",
  "pest_derive",
  "tabled",

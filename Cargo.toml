@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cli", "crates/interpreter", "crates/common"]
+members = ["crates/cli", "crates/core"]
 resolver = "2"
 
 [workspace.package]
@@ -10,6 +10,5 @@ rust-version = "1.78"
 authors = ["Ian K. Guimaraes <ianguimaraes31@gmail.com>"]
 
 [workspace.dependencies]
-eql_interpreter = { path = "crates/interpreter" }
-eql_common = { path = "crates/common" }
+eql_core = { path = "crates/core" }
 eql_cli = { path = "crates/cli" }

@@ -1,4 +1,4 @@
-use eql_common::types::{Entity, Expression, Field, GetExpression};
+use crate::common::types::{Entity, Expression, Field, GetExpression};
 use std::error::Error;
 
 #[derive(Debug)]
@@ -79,7 +79,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
 #[cfg(test)]
 mod test {
-    use eql_common::{
+    use crate::common::{
         chain::Chain,
         types::{BlockField, Entity, Expression, Field, GetExpression},
     };

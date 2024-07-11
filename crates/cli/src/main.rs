@@ -2,7 +2,7 @@ mod repl;
 
 use crate::repl::Repl;
 use clap::{Parser, Subcommand};
-use eql_interpreter::{
+use eql_core::interpreter::{
     backend::execution_engine::{ExpressionResult, QueryResult},
     Interpreter,
 };

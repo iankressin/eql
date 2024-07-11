@@ -5,7 +5,7 @@ use crossterm::{
     style::{Print, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
-use eql_interpreter::{
+use eql_core::interpreter::{
     backend::execution_engine::{ExpressionResult, QueryResult},
     Interpreter,
 };

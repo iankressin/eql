@@ -1,12 +1,12 @@
+use crate::common::types::{
+    AccountField, AccountQueryRes, BlockField, BlockQueryRes, Entity, Expression, GetExpression,
+    TransactionField, TransactionQueryRes,
+};
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, FixedBytes},
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
-};
-use eql_common::types::{
-    AccountField, AccountQueryRes, BlockField, BlockQueryRes, Entity, Expression, GetExpression,
-    TransactionField, TransactionQueryRes,
 };
 use std::error::Error;
 use tabled::Tabled;
@@ -230,14 +230,14 @@ impl ExecutionEngine {
 #[cfg(test)]
 mod test {
     use super::*;
-    use alloy::primitives::Address;
-    use eql_common::{
+    use crate::common::{
         chain::Chain,
         types::{
             AccountField, BlockField, BlockQueryRes, Entity, EntityId, Expression, Field,
             GetExpression,
         },
     };
+    use alloy::primitives::Address;
     use std::str::FromStr;
 
     #[tokio::test]
