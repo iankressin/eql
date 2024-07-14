@@ -50,10 +50,10 @@ impl Chain {
     pub fn rpc_url(&self) -> &str {
         match self {
             Chain::Ethereum => "https://eth.llamarpc.com",
-            Chain::Arbitrum => "https://arbitrum.infura.io/v3",
-            Chain::Base => "https://base.infura.io/v3",
-            Chain::Blast => "https://blast.infura.io/v3",
-            Chain::Optimism => "https://optimism.infura.io/v3",
+            Chain::Arbitrum => "https://rpc.ankr.com/arbitrum",
+            Chain::Base => "https://rpc.ankr.com/base",
+            Chain::Blast => "https://rpc.ankr.com/blast",
+            Chain::Optimism => "https://rpc.ankr.com/optimism",
             Chain::Polygon => "https://polygon.llamarpc.com",
             Chain::Anvil => "http://localhost:8545",
         }
