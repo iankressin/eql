@@ -1253,12 +1253,13 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "alloy",
  "pest",
  "pest_derive",
  "serde",
+ "serde_json",
  "tabled",
  "tokio",
 ]

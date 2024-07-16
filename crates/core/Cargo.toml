@@ -15,4 +15,5 @@ pest = "2.7.10"
 pest_derive = "2.6"
 tabled = "0.15.0"
 tokio = { version = "1", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1" }
+serde_json = { version = "1" }

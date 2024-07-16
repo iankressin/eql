@@ -1,10 +1,8 @@
 use super::chain::Chain;
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Address, Bytes, FixedBytes, B256, U256},
+    primitives::{Address, FixedBytes},
 };
-use serde::{Deserialize, Serialize};
-use tabled::Tabled;
 
 use std::{error::Error, fmt::Display, str::FromStr};
 
@@ -329,91 +327,5 @@ impl EntityId {
             EntityId::Account(address) => Ok(*address),
             _ => Err(EntityIdError::InvalidAddress),
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
-pub struct BlockQueryRes {
-    #[tabled(display_with = "display_option")]
-    pub number: Option<u64>,
-    #[tabled(display_with = "display_option")]
-    pub timestamp: Option<u64>,
-    #[tabled(display_with = "display_option")]
-    pub hash: Option<B256>,
-    #[tabled(display_with = "display_option")]
-    pub size: Option<U256>,
-    #[tabled(display_with = "display_option")]
-    pub parent_hash: Option<B256>,
-}
-
-impl Default for BlockQueryRes {
-    fn default() -> Self {
-        Self {
-            number: None,
-            timestamp: None,
-            hash: None,
-            size: None,
-            parent_hash: None,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
-pub struct AccountQueryRes {
-    #[tabled(display_with = "display_option")]
-    pub nonce: Option<u64>,
-    #[tabled(display_with = "display_option")]
-    pub balance: Option<U256>,
-    #[tabled(display_with = "display_option")]
-    pub address: Option<Address>,
-}
-
-impl Default for AccountQueryRes {
-    fn default() -> Self {
-        Self {
-            nonce: None,
-            balance: None,
-            address: None,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
-pub struct TransactionQueryRes {
-    #[tabled(display_with = "display_option")]
-    pub hash: Option<FixedBytes<32>>,
-    #[tabled(display_with = "display_option")]
-    pub from: Option<Address>,
-    #[tabled(display_with = "display_option")]
-    pub to: Option<Address>,
-    #[tabled(display_with = "display_option")]
-    pub data: Option<Bytes>,
-    #[tabled(display_with = "display_option")]
-    pub value: Option<U256>,
-    #[tabled(display_with = "display_option")]
-    pub gas_price: Option<u128>,
-    #[tabled(display_with = "display_option")]
-    pub status: Option<bool>,
-}
-
-impl Default for TransactionQueryRes {
-    fn default() -> Self {
-        Self {
-            hash: None,
-            from: None,
-            to: None,
-            data: None,
-            value: None,
-            gas_price: None,
-            status: None,
-        }
-    }
-}
-
-// TODO: move to another file
-fn display_option<T: std::fmt::Display>(value: &Option<T>) -> String {
-    match value {
-        Some(value) => value.to_string(),
-        None => "-".to_string(),
     }
 }
