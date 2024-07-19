@@ -1,13 +1,10 @@
-use std::{error::Error, fmt::Display, str::FromStr};
-
+use super::{chain::Chain, ens::NameOrAddress};
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, FixedBytes},
     providers::ProviderBuilder,
 };
-use foundry_common::ens::NameOrAddress;
-
-use super::chain::Chain;
+use std::{error::Error, fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum EntityId {

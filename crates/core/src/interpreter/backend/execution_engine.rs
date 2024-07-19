@@ -234,12 +234,12 @@ mod test {
     use super::*;
     use crate::common::{
         chain::Chain,
+        ens::NameOrAddress,
         entity_id::EntityId,
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Entity, Expression, Field, GetExpression},
     };
     use alloy::primitives::Address;
-    use foundry_common::ens::NameOrAddress;
     use std::str::FromStr;
 
     #[tokio::test]
