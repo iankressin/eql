@@ -17,6 +17,5 @@ tabled = "0.15.0"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1" }
 serde_json = { version = "1" }
-# TODO: remove dependency and implement ENS resolution locally.
-# This adds a lot of unnecessary dependencies
-foundry_common = { git = "https://github.com/foundry-rs/foundry.git", package = "foundry-common" }
+thiserror = { version = "1" }
+async-trait = { version = "0.1" }
