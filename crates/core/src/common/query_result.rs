@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, Bytes, FixedBytes, Uint, B256, U256};
+use alloy::primitives::{Address, Bytes, FixedBytes, B256, U256};
 use serde::{Deserialize, Serialize, Serializer};
 use tabled::Tabled;
 
@@ -12,6 +12,7 @@ where
     }
 }
 
+// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
 #[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub struct BlockQueryRes {
     #[tabled(display_with = "display_option")]
@@ -39,6 +40,7 @@ impl Default for BlockQueryRes {
     }
 }
 
+// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
 #[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub struct AccountQueryRes {
     #[tabled(display_with = "display_option")]
@@ -60,6 +62,7 @@ impl Default for AccountQueryRes {
     }
 }
 
+// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
 #[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
 pub struct TransactionQueryRes {
     #[tabled(display_with = "display_option")]

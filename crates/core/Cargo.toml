@@ -10,10 +10,13 @@ repository = "https://github.com/iankressin/eql"
 readme = "README.md"
 
 [dependencies]
-alloy = { version = "0.1.2", features = ["full"] }
+alloy = { version = "0.2", features = ["full"] }
 pest = "2.7.10"
 pest_derive = "2.6"
 tabled = "0.15.0"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1" }
 serde_json = { version = "1" }
+# TODO: remove dependency and implement ENS resolution locally.
+# This adds a lot of unnecessary dependencies
+foundry_common = { git = "https://github.com/foundry-rs/foundry.git", package = "foundry-common" }

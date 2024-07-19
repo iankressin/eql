@@ -105,8 +105,9 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{chain::Chain, types::*};
+    use crate::common::{chain::Chain, entity_id::EntityId, types::*};
     use alloy::primitives::Address;
+    use foundry_common::ens::NameOrAddress;
     use std::str::FromStr;
 
     #[test]
@@ -116,7 +117,27 @@ mod tests {
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: EntityId::Account(address),
+            entity_id: EntityId::Account(NameOrAddress::Address(address)),
+            fields: vec![
+                Field::Account(AccountField::Nonce),
+                Field::Account(AccountField::Balance),
+            ],
+            chain: Chain::Ethereum,
+            query: source.to_string(),
+        })];
+        let parser = Parser::new(source);
+        let result = parser.parse_expressions().unwrap();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_build_get_ast_using_ens() {
+        let source = "GET nonce, balance FROM account vitalik.eth ON eth";
+        let name = String::from("vitalik.eth");
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Account,
+            entity_id: EntityId::Account(NameOrAddress::Name(name)),
             fields: vec![
                 Field::Account(AccountField::Nonce),
                 Field::Account(AccountField::Balance),

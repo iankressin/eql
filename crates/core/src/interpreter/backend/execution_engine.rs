@@ -33,6 +33,7 @@ pub enum ExpressionResult {
 
 pub struct ExecutionEngine;
 
+// TODO: create ExecutionEngineErrors instead of throwing static strings
 impl ExecutionEngine {
     pub fn new() -> ExecutionEngine {
         ExecutionEngine
@@ -77,11 +78,11 @@ impl ExecutionEngine {
 
                     Ok(ExpressionResult::Block(result))
                 } else {
-                    panic!("2. Invalid block number");
+                    panic!("Invalid block number");
                 }
             }
             Entity::Account => {
-                let address = expr.entity_id.to_address();
+                let address = expr.entity_id.to_address().await;
                 let fields = expr
                     .fields
                     .iter()
@@ -233,10 +234,12 @@ mod test {
     use super::*;
     use crate::common::{
         chain::Chain,
+        entity_id::EntityId,
         query_result::BlockQueryRes,
-        types::{AccountField, BlockField, Entity, EntityId, Expression, Field, GetExpression},
+        types::{AccountField, BlockField, Entity, Expression, Field, GetExpression},
     };
     use alloy::primitives::Address;
+    use foundry_common::ens::NameOrAddress;
     use std::str::FromStr;
 
     #[tokio::test]
@@ -274,9 +277,37 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Account,
-            entity_id: EntityId::Account(
+            entity_id: EntityId::Account(NameOrAddress::Address(
                 Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap(),
-            ),
+            )),
+            fields: vec![Field::Account(AccountField::Balance)],
+            query: String::from(""),
+        })];
+
+        let execution_result = execution_engine.run(expressions).await;
+
+        assert!(execution_result.is_ok());
+
+        match &execution_result.unwrap()[0] {
+            QueryResult { query, result } => {
+                assert_eq!(query, "");
+                match result {
+                    ExpressionResult::Account(account) => {
+                        assert!(account.balance.is_some());
+                    }
+                    _ => panic!("Invalid result"),
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_account_fields_using_ens() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Account,
+            entity_id: EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth"))),
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
         })];
