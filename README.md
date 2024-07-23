@@ -31,7 +31,7 @@ Using the language REPL:
 eql repl
 ```
 
-Or incorporating the interpreter directly in your app:
+Or incorporating the interpreter directly in your app. [See](https://github.com/iankressin/eql/blob/main/crates/core/README.md):
 ```sh
 [dependencies]
 eql_core = "0.1"
