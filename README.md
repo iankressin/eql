@@ -57,15 +57,21 @@ eqlup
 
 ### GET
 _Description:_ Read one or more fields from an entity, given an entity and an id.
+
 _Production:_ `GET <[fields, ]> FROM <entity> <entity_id> ON <chain>`
+
 _Example:_ `GET nonce, balance FROM account vitalik.eth ON base`
 ### SEND (Soon)
 _Description:_ Sends a transaction to the network.
+
 _Production:_ `SEND <type> to=<address>, value=<ether>, data=<bytes> ON <chain>`
+
 _Example:_ `SEND TX to=vitalik.eth, value=1, data=0x0...000 ON arbitrum`
 ### MATH (Soon)
 _Description:_ Supports basic math operations like SUM, SUB, DIV, TIMES.
+
 _Production:_ `<operator>(<[expr, ]>)`
+
 _Example:_ `SUM(GET balance FROM vitalik.eth ON base, GET balance FROM vitalik.eth ON ethereum)`
 ## Entities
 These are the entities that can be queried using the EQL language, each addressed by its name and an id:
