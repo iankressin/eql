@@ -13,8 +13,9 @@ eql_core = "0.1"
 use eql_core::interpreter::Interpreter;
 
 #[tokio::main]
-async fn main() {
-    let mut interpreter = Interpreter::run("GET balance FROM account vitalik.eth ON eth");
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut interpreter = Interpreter::run("GET balance FROM account vitalik.eth ON eth").await?;
     println!("{:?}", result);
+    Ok(())
 }
 ```
