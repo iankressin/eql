@@ -1,4 +1,5 @@
 # EVM Query Language
+![cover image](./preview.png)
 
 EVM Query Language (EQL) is a SQL-like language designed to query EVM chains, aiming to support complex relational queries on EVM chain first-class citizens (blocks, accounts, and transactions). It provides an ergonomic syntax for developers and researchers to compose custom datasets without boilerplate code.
 ## Goals
