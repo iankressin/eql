@@ -8,14 +8,6 @@ Additionally, EQL aims to extend its syntax beyond simple read operations, empow
 ## The Problem
 Ethereum clients store blocks, transactions, and accounts using a key-value model, making complex blockchain data analysis non-trivial. For instance, fetching all transaction values from a given block using TypeScript requires a disproportionate amount of code. Developers and researchers face productivity hindrances due to boilerplate code and public RPC rate limits.
 
-## Current Landscape
-### JSON-RPCs
-Nodes expose APIs to read blockchain state and logs, but accessing large amounts of data can show limitations due to rate limiters.
-### The Graph
-Allows querying and indexing data from EVM and non-EVM chains but relies on smart-contract events, making it unsuitable for queries dependent on EOAs, blocks, and transactions.
-### Dune
-A SQL-like platform for blockchain data analysis, but it lacks native access to basic on-chain data like account nonce and requires managing another platform and API key.
-
 ## How EQL Wants to Solve It
 EQL aims to bridge the gap between data exploration and developer/researcher experience by focusing on two main areas:
 ### Query Performance
