@@ -15,7 +15,7 @@ use eql_core::interpreter::eql;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut interpreter = eql("GET balance FROM account vitalik.eth ON eth").await?;
+    let mut result = eql("GET balance FROM account vitalik.eth ON eth").await?;
     println!("{:?}", result);
     Ok(())
 }
