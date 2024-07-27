@@ -1,12 +1,26 @@
 pub mod backend;
 pub mod frontend;
 
-use crate::common::types::Expression;
+use crate::common::{
+    chain::Chain,
+    ens::NameOrAddress,
+    entity_id::EntityId,
+    types::{AccountField, Entity, Expression, Field, GetExpression},
+};
+use alloy::{eips::BlockNumberOrTag, primitives::address};
 use backend::execution_engine::{ExecutionEngine, QueryResult};
 use frontend::{parser::Parser, sementic_analyzer::SemanticAnalyzer};
 use std::error::Error;
 
 pub struct Interpreter;
+
+#[derive(Debug, thiserror::Error)]
+pub enum InterpreterError {
+    #[error(
+        "eql() should receive a single query. For multiple queries use Interpreter::run_program"
+    )]
+    SingleQueryError,
+}
 
 impl Interpreter {
     pub async fn run_program(source: &str) -> Result<Vec<QueryResult>, Box<dyn Error>> {
@@ -27,5 +41,14 @@ impl Interpreter {
         let result = ExecutionEngine::new().run(expressions).await?;
 
         Ok(result)
+    }
+}
+
+pub async fn eql(source: &str) -> Result<QueryResult, Box<dyn Error>> {
+    let result = Interpreter::run_program(source).await?;
+
+    match result.first() {
+        Some(result) => Ok(result.clone()),
+        None => Err(Box::new(InterpreterError::SingleQueryError)),
     }
 }

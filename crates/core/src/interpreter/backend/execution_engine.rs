@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tabled::Tabled;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
     pub query: String,
     pub result: ExpressionResult,
@@ -24,10 +24,13 @@ impl QueryResult {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
 pub enum ExpressionResult {
+    #[serde(rename = "account")]
     Account(AccountQueryRes),
+    #[serde(rename = "block")]
     Block(BlockQueryRes),
+    #[serde(rename = "transaction")]
     Transaction(TransactionQueryRes),
 }
 
