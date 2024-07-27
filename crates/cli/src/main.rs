@@ -12,7 +12,7 @@ use tabled::{settings::Style, Table};
 #[derive(Parser)]
 #[clap(
     name = "EQL",
-    version = "0.1.0-beta",
+    version = "0.1.0-alpha",
     author = "Ian K. Guimaraes <ianguimaraes31@gmail.com>"
 )]
 struct Arguments {

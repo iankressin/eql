@@ -1,11 +1,10 @@
-/// Forked from foundry-common at d5fb75006c668935398f26516400b9f193a7caae
+/// Based on foundry-common implementation
+/// https://github.com/foundry-rs/foundry/blob/master/crates/common/src/ens.rs
 use self::EnsResolver::EnsResolverInstance;
-use alloy::network::Network;
 use alloy::primitives::{address, Address, Keccak256, B256};
-use alloy::providers::Provider;
+use alloy::providers::RootProvider;
 use alloy::sol;
-use alloy::transports::Transport;
-use async_trait::async_trait;
+use alloy::transports::http::{Client, Http};
 use std::{borrow::Cow, str::FromStr};
 
 // ENS Registry and Resolver contracts.
@@ -61,14 +60,46 @@ pub enum NameOrAddress {
 
 impl NameOrAddress {
     /// Resolves the name to an Ethereum Address.
-    pub async fn resolve<N: Network, T: Transport + Clone, P: Provider<T, N>>(
+    pub async fn resolve(
         &self,
-        provider: &P,
+        provider: &RootProvider<Http<Client>>,
     ) -> Result<Address, EnsError> {
         match self {
-            Self::Name(name) => provider.resolve_name(name).await,
+            Self::Name(name) => self.resolve_name(name, provider).await,
             Self::Address(addr) => Ok(*addr),
         }
+    }
+
+    async fn resolve_name(
+        &self,
+        name: &str,
+        provider: &RootProvider<Http<Client>>,
+    ) -> Result<Address, EnsError> {
+        let node = namehash(name);
+        let registry = EnsRegistry::new(ENS_ADDRESS, provider.clone());
+
+        let address = registry
+            .resolver(node)
+            .call()
+            .await
+            .map_err(EnsError::Resolver)?
+            ._0;
+        if address == Address::ZERO {
+            return Err(EnsError::ResolverNotFound(String::from(
+                "Resolved to zero address",
+            )));
+        }
+
+        let resolver = EnsResolverInstance::new(address, provider);
+        let addr = resolver
+            .addr(node)
+            .call()
+            .await
+            .map_err(EnsError::Resolve)
+            .inspect_err(|e| eprintln!("{e:?}"))?
+            ._0;
+
+        Ok(addr)
     }
 }
 
@@ -99,71 +130,6 @@ impl FromStr for NameOrAddress {
         } else {
             Ok(Self::Name(s.to_string()))
         }
-    }
-}
-
-/// Extension trait for ENS contract calls.
-#[async_trait]
-pub trait ProviderEnsExt<T: Transport + Clone, N: Network, P: Provider<T, N>> {
-    /// Returns the resolver for the specified node. The `&str` is only used for error messages.
-    async fn get_resolver(
-        &self,
-        node: B256,
-        error_name: &str,
-    ) -> Result<EnsResolverInstance<T, &P, N>, EnsError>;
-
-    /// Performs a forward lookup of an ENS name to an address.
-    async fn resolve_name(&self, name: &str) -> Result<Address, EnsError> {
-        let node = namehash(name);
-        let resolver = self.get_resolver(node, name).await?;
-        let addr = resolver
-            .addr(node)
-            .call()
-            .await
-            .map_err(EnsError::Resolve)
-            .inspect_err(|e| eprintln!("{e:?}"))?
-            ._0;
-        Ok(addr)
-    }
-
-    /// Performs a reverse lookup of an address to an ENS name.
-    async fn lookup_address(&self, address: &Address) -> Result<String, EnsError> {
-        let name = reverse_address(address);
-        let node = namehash(&name);
-        let resolver = self.get_resolver(node, &name).await?;
-        let name = resolver
-            .name(node)
-            .call()
-            .await
-            .map_err(EnsError::Lookup)?
-            ._0;
-        Ok(name)
-    }
-}
-
-#[async_trait]
-impl<T, N, P> ProviderEnsExt<T, N, P> for P
-where
-    P: Provider<T, N>,
-    N: Network,
-    T: Transport + Clone,
-{
-    async fn get_resolver(
-        &self,
-        node: B256,
-        error_name: &str,
-    ) -> Result<EnsResolverInstance<T, &P, N>, EnsError> {
-        let registry = EnsRegistry::new(ENS_ADDRESS, self);
-        let address = registry
-            .resolver(node)
-            .call()
-            .await
-            .map_err(EnsError::Resolver)?
-            ._0;
-        if address == Address::ZERO {
-            return Err(EnsError::ResolverNotFound(error_name.to_string()));
-        }
-        Ok(EnsResolverInstance::new(address, self))
     }
 }
 

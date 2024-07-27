@@ -13,7 +13,7 @@ where
 }
 
 // TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
 pub struct BlockQueryRes {
     #[tabled(display_with = "display_option")]
     pub number: Option<u64>,
@@ -41,7 +41,7 @@ impl Default for BlockQueryRes {
 }
 
 // TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
 pub struct AccountQueryRes {
     #[tabled(display_with = "display_option")]
     pub nonce: Option<u64>,
@@ -63,7 +63,7 @@ impl Default for AccountQueryRes {
 }
 
 // TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
 pub struct TransactionQueryRes {
     #[tabled(display_with = "display_option")]
     pub hash: Option<FixedBytes<32>>,

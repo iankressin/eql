@@ -6,7 +6,7 @@ use alloy::{
 };
 use std::{error::Error, fmt::Display, str::FromStr};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityId {
     Block(BlockNumberOrTag),
     Transaction(FixedBytes<32>),

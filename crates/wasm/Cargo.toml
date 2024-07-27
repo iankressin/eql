@@ -1,0 +1,26 @@
+[package]
+name = "eql_wasm"
+version = "0.1.0"
+rust-version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "EVM Query Language wasm bindings for the web"
+# license = "MIT"
+repository = "https://github.com/iankressin/eql"
+readme = "README.md"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mio = "0.8.8"
+eql_core = { workspace = true }
+tokio = { version = "1", features = ["macros"] }
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen = "0.2.92"
+wasm-bindgen-futures = "0.4.42"
+getrandom = { version = "0.2", features = ["js"] }
+thiserror = { version = "1" }
+
+[build]
+rustflags = ["--cfg", "tokio_unstable"]

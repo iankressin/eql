@@ -1,14 +1,15 @@
 [workspace]
-members = ["crates/cli", "crates/core"]
+members = ["crates/cli", "crates/core", "crates/wasm"]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-rust-version = "1.78"
+rust-version = "1.79"
 authors = ["Ian K. Guimaraes <ianguimaraes31@gmail.com>"]
 
 [workspace.dependencies]
 eql_core = { path = "crates/core" }
 eql_cli = { path = "crates/cli" }
+eql_wasm = { path = "crates/wasm" }
