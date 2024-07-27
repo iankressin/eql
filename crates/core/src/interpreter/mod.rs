@@ -1,13 +1,7 @@
 pub mod backend;
 pub mod frontend;
 
-use crate::common::{
-    chain::Chain,
-    ens::NameOrAddress,
-    entity_id::EntityId,
-    types::{AccountField, Entity, Expression, Field, GetExpression},
-};
-use alloy::{eips::BlockNumberOrTag, primitives::address};
+use crate::common::types::Expression;
 use backend::execution_engine::{ExecutionEngine, QueryResult};
 use frontend::{parser::Parser, sementic_analyzer::SemanticAnalyzer};
 use std::error::Error;
