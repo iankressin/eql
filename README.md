@@ -2,6 +2,10 @@
 ![cover image](./preview.png)
 
 EVM Query Language (EQL) is a SQL-like language designed to query EVM chains, aiming to support complex relational queries on EVM chain first-class citizens (blocks, accounts, and transactions). It provides an ergonomic syntax for developers and researchers to compose custom datasets without boilerplate code.
+
+
+[Try it here](https://eql-app.vercel.app/)
+
 ## Goals
 EQL's primary goal is to support relational queries for Ethereum entities such as blocks, accounts, and transactions. The challenge lies in Ethereum's storage model, which stores these entities under key-value databases, indexing values by a single key. Linear searches over RPCs can be extremely slow, so research is being done to find the best way to distribute Ethereum state data and allow performant relational queries.
 
