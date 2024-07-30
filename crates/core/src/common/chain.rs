@@ -1,6 +1,7 @@
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Chain {
     Ethereum,
+    Sepolia,
     Arbitrum,
     Base,
     Blast,
@@ -21,6 +22,7 @@ impl TryFrom<&str> for Chain {
     fn try_from(chain: &str) -> Result<Self, Self::Error> {
         match chain {
             "eth" => Ok(Chain::Ethereum),
+            "sepolia" => Ok(Chain::Sepolia),
             "arb" => Ok(Chain::Arbitrum),
             "base" => Ok(Chain::Base),
             "blast" => Ok(Chain::Blast),
@@ -36,6 +38,7 @@ impl From<&Chain> for u64 {
     fn from(value: &Chain) -> Self {
         match value {
             Chain::Ethereum => 1,
+            Chain::Sepolia => 11155111,
             Chain::Arbitrum => 42161,
             Chain::Base => 8453,
             Chain::Blast => 238,
@@ -50,6 +53,7 @@ impl Chain {
     pub fn rpc_url(&self) -> &str {
         match self {
             Chain::Ethereum => "https://eth.llamarpc.com",
+            Chain::Sepolia => "https://rpc.ankr.com/eth_sepolia",
             Chain::Arbitrum => "https://rpc.ankr.com/arbitrum",
             Chain::Base => "https://rpc.ankr.com/base",
             Chain::Blast => "https://rpc.ankr.com/blast",
