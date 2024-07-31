@@ -1,4 +1,4 @@
-use super::{chain::Chain, entity_id::EntityId};
+use super::{chain::Chain, entity::Entity, entity_id::EntityId};
 use alloy::eips::BlockNumberOrTag;
 use std::{error::Error, fmt::Display};
 
@@ -191,57 +191,6 @@ impl Display for TransactionField {
             TransactionField::Value => write!(f, "value"),
             TransactionField::GasPrice => write!(f, "gas_price"),
             TransactionField::Status => write!(f, "status"),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Entity {
-    Block,
-    Transaction,
-    Account,
-}
-
-impl Display for Entity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Entity::Block => write!(f, "block"),
-            Entity::Transaction => write!(f, "transaction"),
-            Entity::Account => write!(f, "account"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum EntityError {
-    InvalidEntity(String),
-}
-
-impl Display for EntityError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EntityError::InvalidEntity(entity) => write!(f, "Invalid entity: {}", entity),
-        }
-    }
-}
-
-impl Error for EntityError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
-impl TryFrom<&str> for Entity {
-    type Error = Box<dyn Error>;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s {
-            "block" => Ok(Entity::Block),
-            "tx" => Ok(Entity::Transaction),
-            "account" => Ok(Entity::Account),
-            invalid_entity => Err(Box::new(EntityError::InvalidEntity(
-                invalid_entity.to_string(),
-            ))),
         }
     }
 }

@@ -1,4 +1,7 @@
-use crate::common::types::{Entity, Expression, Field, GetExpression};
+use crate::common::{
+    entity::Entity,
+    types::{Expression, Field, GetExpression},
+};
 use std::error::Error;
 
 #[derive(Debug)]
@@ -81,7 +84,8 @@ impl<'a> SemanticAnalyzer<'a> {
 mod test {
     use crate::common::{
         chain::Chain,
-        types::{BlockField, Entity, Expression, Field, GetExpression},
+        entity::Entity,
+        types::{BlockField, Expression, Field, GetExpression},
     };
 
     #[test]

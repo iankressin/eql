@@ -1,12 +1,11 @@
-use std::error::Error;
-
-use crate::interpreter::backend::execution_engine::{ExecutionEngine, QueryResult};
-
 use super::{
     chain::Chain,
+    entity::Entity,
     entity_id::EntityId,
-    types::{Entity, Expression, Field, GetExpression},
+    types::{Expression, Field, GetExpression},
 };
+use crate::interpreter::backend::execution_engine::{ExecutionEngine, QueryResult};
+use std::error::Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EQLBuilderError {
