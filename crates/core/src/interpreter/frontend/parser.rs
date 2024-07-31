@@ -108,7 +108,7 @@ mod tests {
     use crate::common::{
         chain::Chain, ens::NameOrAddress, entity::Entity, entity_id::EntityId, types::*,
     };
-    use alloy::primitives::Address;
+    use alloy::{eips::BlockNumberOrTag, primitives::Address};
     use std::str::FromStr;
 
     #[test]
@@ -150,5 +150,40 @@ mod tests {
         let result = parser.parse_expressions().unwrap();
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_build_get_ast_with_block_fields() {
+        let source = "GET parent_hash, state_root, transactions_root, receipts_root, logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, size FROM block 1 ON eth";
+
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Block,
+            entity_id: EntityId::Block(BlockNumberOrTag::Number(1)),
+            fields: vec![
+                Field::Block(BlockField::ParentHash),
+                Field::Block(BlockField::StateRoot),
+                Field::Block(BlockField::TransactionsRoot),
+                Field::Block(BlockField::ReceiptsRoot),
+                Field::Block(BlockField::LogsBloom),
+                Field::Block(BlockField::ExtraData),
+                Field::Block(BlockField::MixHash),
+                Field::Block(BlockField::TotalDifficulty),
+                Field::Block(BlockField::BaseFeePerGas),
+                Field::Block(BlockField::WithdrawalsRoot),
+                Field::Block(BlockField::BlobGasUsed),
+                Field::Block(BlockField::ExcessBlobGas),
+                Field::Block(BlockField::ParentBeaconBlockRoot),
+                Field::Block(BlockField::Size),
+            ],
+            chain: Chain::Ethereum,
+            query: source.to_string(),
+        })];
+
+        let parser = Parser::new(source);
+
+        match parser.parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
     }
 }

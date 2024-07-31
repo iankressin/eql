@@ -14,7 +14,27 @@ account_id         = { address | ens }
 
 // Block
 block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
-block_field      =  { "number" | "timestamp" | "size" | "hash" | "parent_hash" | "reward" }
+// TODO: Check if we need uncles
+block_field      =  { 
+    "hash" |
+    "parent_hash" |
+    "state_root" |
+    "transactions_root" |
+    "receipts_root" |
+    "logs_bloom" |
+    "extra_data" |
+    "mix_hash" |
+    "total_difficulty" |
+    "base_fee_per_gas" |
+    "withdrawals_root" |
+    "blob_gas_used" |
+    "excess_blob_gas" |
+    "parent_beacon_block_root" |
+    "size"
+    // "nonce" |
+    // "transactions" |
+    // "withdrawals"
+}
 
 // Transaction
 tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }

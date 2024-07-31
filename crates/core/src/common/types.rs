@@ -67,6 +67,7 @@ impl Error for FieldError {
 impl TryFrom<&str> for Field {
     type Error = Box<dyn Error>;
 
+    // TODO: check if we're talking about nonce from the account or the block
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
             "address" => Ok(Field::Account(AccountField::Address)),
@@ -83,6 +84,18 @@ impl TryFrom<&str> for Field {
             "value" => Ok(Field::Transaction(TransactionField::Value)),
             "gas_price" => Ok(Field::Transaction(TransactionField::GasPrice)),
             "status" => Ok(Field::Transaction(TransactionField::Status)),
+            "state_root" => Ok(Field::Block(BlockField::StateRoot)),
+            "transactions_root" => Ok(Field::Block(BlockField::TransactionsRoot)),
+            "receipts_root" => Ok(Field::Block(BlockField::ReceiptsRoot)),
+            "logs_bloom" => Ok(Field::Block(BlockField::LogsBloom)),
+            "extra_data" => Ok(Field::Block(BlockField::ExtraData)),
+            "mix_hash" => Ok(Field::Block(BlockField::MixHash)),
+            "total_difficulty" => Ok(Field::Block(BlockField::TotalDifficulty)),
+            "base_fee_per_gas" => Ok(Field::Block(BlockField::BaseFeePerGas)),
+            "withdrawals_root" => Ok(Field::Block(BlockField::WithdrawalsRoot)),
+            "blob_gas_used" => Ok(Field::Block(BlockField::BlobGasUsed)),
+            "excess_blob_gas" => Ok(Field::Block(BlockField::ExcessBlobGas)),
+            "parent_beacon_block_root" => Ok(Field::Block(BlockField::ParentBeaconBlockRoot)),
             invalid_field => Err(Box::new(FieldError::InvalidField(
                 invalid_field.to_string(),
             ))),
@@ -149,6 +162,7 @@ impl Display for AccountField {
     }
 }
 
+// TODO: should include nonce, transactions and withdrawals
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum BlockField {
     Number,
@@ -156,6 +170,18 @@ pub enum BlockField {
     Size,
     Hash,
     ParentHash,
+    StateRoot,
+    TransactionsRoot,
+    ReceiptsRoot,
+    LogsBloom,
+    ExtraData,
+    MixHash,
+    TotalDifficulty,
+    BaseFeePerGas,
+    WithdrawalsRoot,
+    BlobGasUsed,
+    ExcessBlobGas,
+    ParentBeaconBlockRoot,
 }
 
 impl Display for BlockField {
@@ -166,6 +192,18 @@ impl Display for BlockField {
             BlockField::Size => write!(f, "size"),
             BlockField::Hash => write!(f, "hash"),
             BlockField::ParentHash => write!(f, "parent_hash"),
+            BlockField::StateRoot => write!(f, "state_root"),
+            BlockField::TransactionsRoot => write!(f, "transactions_root"),
+            BlockField::ReceiptsRoot => write!(f, "receipts_root"),
+            BlockField::LogsBloom => write!(f, "logs_bloom"),
+            BlockField::ExtraData => write!(f, "extra_data"),
+            BlockField::MixHash => write!(f, "mix_hash"),
+            BlockField::TotalDifficulty => write!(f, "total_difficulty"),
+            BlockField::BaseFeePerGas => write!(f, "base_fee_per_gas"),
+            BlockField::WithdrawalsRoot => write!(f, "withdrawals_root"),
+            BlockField::BlobGasUsed => write!(f, "blob_gas_used"),
+            BlockField::ExcessBlobGas => write!(f, "excess_blob_gas"),
+            BlockField::ParentBeaconBlockRoot => write!(f, "parent_beacon_block_root"),
         }
     }
 }
