@@ -222,6 +222,42 @@ impl ExecutionEngine {
                         BlockField::Size => {
                             result.size = block.size;
                         }
+                        BlockField::StateRoot => {
+                            result.state_root = Some(block.header.state_root);
+                        }
+                        BlockField::TransactionsRoot => {
+                            result.transactions_root = Some(block.header.transactions_root);
+                        }
+                        BlockField::ReceiptsRoot => {
+                            result.receipts_root = Some(block.header.receipts_root);
+                        }
+                        BlockField::LogsBloom => {
+                            result.logs_bloom = Some(block.header.logs_bloom);
+                        }
+                        BlockField::ExtraData => {
+                            result.extra_data = Some(block.header.extra_data.clone());
+                        }
+                        BlockField::MixHash => {
+                            result.mix_hash = block.header.mix_hash;
+                        }
+                        BlockField::TotalDifficulty => {
+                            result.total_difficulty = block.header.total_difficulty;
+                        }
+                        BlockField::BaseFeePerGas => {
+                            result.base_fee_per_gas = block.header.base_fee_per_gas;
+                        }
+                        BlockField::WithdrawalsRoot => {
+                            result.withdrawals_root = block.header.withdrawals_root;
+                        }
+                        BlockField::BlobGasUsed => {
+                            result.blob_gas_used = block.header.blob_gas_used;
+                        }
+                        BlockField::ExcessBlobGas => {
+                            result.excess_blob_gas = block.header.excess_blob_gas;
+                        }
+                        BlockField::ParentBeaconBlockRoot => {
+                            result.parent_beacon_block_root = block.header.parent_beacon_block_root;
+                        }
                     }
                 }
             }
@@ -243,7 +279,7 @@ mod test {
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
-    use alloy::primitives::Address;
+    use alloy::primitives::{b256, bloom, bytes, Address, U256};
     use std::str::FromStr;
 
     #[tokio::test]
@@ -253,15 +289,55 @@ mod test {
             chain: Chain::Ethereum,
             entity: Entity::Block,
             entity_id: EntityId::Block(1.into()),
-            fields: vec![Field::Block(BlockField::Timestamp)],
+            fields: vec![
+                Field::Block(BlockField::Timestamp),
+                Field::Block(BlockField::Hash),
+                Field::Block(BlockField::ParentHash),
+                Field::Block(BlockField::Size),
+                Field::Block(BlockField::StateRoot),
+                Field::Block(BlockField::TransactionsRoot),
+                Field::Block(BlockField::ReceiptsRoot),
+                Field::Block(BlockField::LogsBloom),
+                Field::Block(BlockField::ExtraData),
+                Field::Block(BlockField::MixHash),
+                Field::Block(BlockField::TotalDifficulty),
+                Field::Block(BlockField::BaseFeePerGas),
+                Field::Block(BlockField::WithdrawalsRoot),
+                Field::Block(BlockField::BlobGasUsed),
+                Field::Block(BlockField::ExcessBlobGas),
+                Field::Block(BlockField::ParentBeaconBlockRoot),
+            ],
             query: String::from(""),
         })];
         let expected = vec![ExpressionResult::Block(BlockQueryRes {
             timestamp: Some(1438269988),
             number: None,
-            hash: None,
-            parent_hash: None,
-            size: None,
+            hash: Some(b256!(
+                "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
+            )),
+            parent_hash: Some(b256!(
+                "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+            )),
+            size: Some(U256::from(537)),
+            state_root: Some(b256!(
+                "d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3"
+            )),
+            transactions_root: Some(b256!(
+                "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+            )),
+            receipts_root: Some(b256!(
+                "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+            )),
+            logs_bloom: Some(bloom!("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+            extra_data: Some(bytes!("476574682f76312e302e302f6c696e75782f676f312e342e32")),
+            mix_hash: Some(b256!("969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f59")),
+            total_difficulty: Some(U256::from(34351349760_u128)),
+            // The fields below were implemented by EIPs, 1st block doesn't have these
+            base_fee_per_gas: None,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            parent_beacon_block_root: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
 
@@ -339,12 +415,9 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Transaction,
-            entity_id: EntityId::Transaction(
-                FixedBytes::from_str(
-                    "0x72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890",
-                )
-                .unwrap(),
-            ),
+            entity_id: EntityId::Transaction(b256!(
+                "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+            )),
             fields: vec![Field::Transaction(TransactionField::To)],
             query: String::from(""),
         })];

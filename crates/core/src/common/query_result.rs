@@ -1,4 +1,4 @@
-use alloy::primitives::{Address, Bytes, FixedBytes, B256, U256};
+use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, B256, U256};
 use serde::{Deserialize, Serialize, Serializer};
 use tabled::Tabled;
 
@@ -13,6 +13,7 @@ where
 }
 
 // TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
+// TODO: should this be replaced with Alloy's Block?
 #[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
 pub struct BlockQueryRes {
     #[tabled(display_with = "display_option")]
@@ -26,6 +27,30 @@ pub struct BlockQueryRes {
     pub size: Option<U256>,
     #[tabled(display_with = "display_option")]
     pub parent_hash: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub state_root: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub transactions_root: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub receipts_root: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub logs_bloom: Option<Bloom>,
+    #[tabled(display_with = "display_option")]
+    pub extra_data: Option<Bytes>,
+    #[tabled(display_with = "display_option")]
+    pub mix_hash: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub total_difficulty: Option<U256>,
+    #[tabled(display_with = "display_option")]
+    pub base_fee_per_gas: Option<u128>,
+    #[tabled(display_with = "display_option")]
+    pub withdrawals_root: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub blob_gas_used: Option<u128>,
+    #[tabled(display_with = "display_option")]
+    pub excess_blob_gas: Option<u128>,
+    #[tabled(display_with = "display_option")]
+    pub parent_beacon_block_root: Option<B256>,
 }
 
 impl Default for BlockQueryRes {
@@ -36,6 +61,18 @@ impl Default for BlockQueryRes {
             hash: None,
             size: None,
             parent_hash: None,
+            state_root: None,
+            transactions_root: None,
+            receipts_root: None,
+            logs_bloom: None,
+            extra_data: None,
+            mix_hash: None,
+            total_difficulty: None,
+            base_fee_per_gas: None,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
+            parent_beacon_block_root: None,
         }
     }
 }
