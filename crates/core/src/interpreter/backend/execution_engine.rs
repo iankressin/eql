@@ -1,6 +1,7 @@
 use crate::common::{
+    entity::Entity,
     query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
-    types::{AccountField, BlockField, Entity, Expression, GetExpression, TransactionField},
+    types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
 };
 use alloy::{
     eips::BlockNumberOrTag,
@@ -240,7 +241,7 @@ mod test {
         ens::NameOrAddress,
         entity_id::EntityId,
         query_result::BlockQueryRes,
-        types::{AccountField, BlockField, Entity, Expression, Field, GetExpression},
+        types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
     use alloy::primitives::Address;
     use std::str::FromStr;

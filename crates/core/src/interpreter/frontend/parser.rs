@@ -105,7 +105,9 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{chain::Chain, ens::NameOrAddress, entity_id::EntityId, types::*};
+    use crate::common::{
+        chain::Chain, ens::NameOrAddress, entity::Entity, entity_id::EntityId, types::*,
+    };
     use alloy::primitives::Address;
     use std::str::FromStr;
 
