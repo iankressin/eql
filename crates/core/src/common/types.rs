@@ -161,7 +161,6 @@ impl TryFrom<&str> for TransactionField {
             "to" => Ok(TransactionField::To),
             "data" => Ok(TransactionField::Data),
             "value" => Ok(TransactionField::Value),
-            "fee" => Ok(TransactionField::Fee),
             "gas_price" => Ok(TransactionField::GasPrice),
             "gas" => Ok(TransactionField::Gas),
             "status" => Ok(TransactionField::Status),
