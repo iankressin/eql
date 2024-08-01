@@ -103,6 +103,8 @@ impl Default for AccountQueryRes {
 #[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
 pub struct TransactionQueryRes {
     #[tabled(display_with = "display_option")]
+    pub transaction_type: Option<u8>,
+    #[tabled(display_with = "display_option")]
     pub hash: Option<FixedBytes<32>>,
     #[tabled(display_with = "display_option")]
     pub from: Option<Address>,
@@ -114,21 +116,56 @@ pub struct TransactionQueryRes {
     #[serde(serialize_with = "serialize_option_u256")]
     pub value: Option<U256>,
     #[tabled(display_with = "display_option")]
+    pub fee: Option<U256>,
+    #[tabled(display_with = "display_option")]
     pub gas_price: Option<u128>,
     #[tabled(display_with = "display_option")]
+    pub gas: Option<u128>,
+    #[tabled(display_with = "display_option")]
     pub status: Option<bool>,
+    #[tabled(display_with = "display_option")]
+    pub chain_id: Option<u64>,
+    #[tabled(display_with = "display_option")]
+    pub v: Option<U256>,
+    #[tabled(display_with = "display_option")]
+    pub r: Option<U256>,
+    #[tabled(display_with = "display_option")]
+    pub s: Option<U256>,
+    #[tabled(display_with = "display_option")]
+    pub max_fee_per_blob_gas: Option<u128>,
+    #[tabled(display_with = "display_option")]
+    #[tabled(display_with = "display_option")]
+    pub max_fee_per_gas: Option<u128>,
+    #[tabled(display_with = "display_option")]
+    pub max_priority_fee_per_gas: Option<u128>,
+    #[tabled(display_with = "display_option")]
+    #[tabled(display_with = "display_option")]
+    pub y_parity: Option<bool>,
+    // pub blob_versioned_hashes: Option<Vec<FixedBytes<32>>>,
+    // pub access_list: Option<Vec<Address>>,
 }
 
 impl Default for TransactionQueryRes {
     fn default() -> Self {
         Self {
+            transaction_type: None,
             hash: None,
             from: None,
             to: None,
             data: None,
             value: None,
+            fee: None,
             gas_price: None,
+            gas: None,
             status: None,
+            chain_id: None,
+            v: None,
+            r: None,
+            s: None,
+            max_fee_per_blob_gas: None,
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            y_parity: None,
         }
     }
 }

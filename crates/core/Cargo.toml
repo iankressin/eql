@@ -20,3 +20,6 @@ serde_json = { version = "1" }
 thiserror = { version = "1" }
 async-trait = { version = "0.1" }
 getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+pretty_assertions = "1"

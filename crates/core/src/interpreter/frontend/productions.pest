@@ -18,6 +18,7 @@ block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
 block_field      =  { 
     "hash" |
     "parent_hash" |
+    "timestamp" | 
     "state_root" |
     "transactions_root" |
     "receipts_root" |
@@ -30,6 +31,7 @@ block_field      =  {
     "blob_gas_used" |
     "excess_blob_gas" |
     "parent_beacon_block_root" |
+    "parent_beacon_block_root" |
     "size"
     // "nonce" |
     // "transactions" |
@@ -38,7 +40,34 @@ block_field      =  {
 
 // Transaction
 tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }
-tx_field      =  { "hash" | "from" | "to" | "data" | "value" | "fee" | "gas_price" | "timestamp" | "status" }
+tx_field      =  {
+    "transaction_type" |
+    "hash" |
+    "from" | 
+    "to" | 
+    "data" | 
+    "value" | 
+    "fee" |
+    "gas_price" |
+    "gas" |
+    "status" |
+    "chain_id" |
+    "v" |
+    "r" |
+    "s" |
+
+    // EIP-4844
+    "max_fee_per_blob_gas" |
+    "blob_versioned_hashes" |
+
+    // EIP-1559
+    "max_fee_per_gas" |
+    "max_priority_fee_per_gas" |
+
+    // EIP-2930
+    "access_list" |
+    "y_parity"
+}
 
 // Terminals
 unit    = { "ether" | "gwei" | "wei" }
