@@ -149,9 +149,6 @@ impl ExecutionEngine {
                         TransactionField::Value => {
                             result.value = Some(tx.value);
                         }
-                        TransactionField::Fee => {
-                            // result.fee = Some(tx.);
-                        }
                         TransactionField::GasPrice => {
                             result.gas_price = tx.gas_price;
                         }
@@ -190,7 +187,10 @@ impl ExecutionEngine {
                             result.max_priority_fee_per_gas = tx.max_priority_fee_per_gas;
                         }
                         TransactionField::YParity => {
-                            // result.y_parity = Some(tx.y_parity);
+                            result.y_parity = tx
+                                .signature
+                                .map_or(None, |s| s.y_parity)
+                                .map_or(None, |y| Some(y.0));
                         }
                     }
                 }
@@ -460,7 +460,6 @@ mod test {
                 Field::Transaction(TransactionField::To),
                 Field::Transaction(TransactionField::Data),
                 Field::Transaction(TransactionField::Value),
-                Field::Transaction(TransactionField::Fee),
                 Field::Transaction(TransactionField::GasPrice),
                 Field::Transaction(TransactionField::Gas),
                 Field::Transaction(TransactionField::Status),
