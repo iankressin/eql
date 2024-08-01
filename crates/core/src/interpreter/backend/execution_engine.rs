@@ -212,15 +212,16 @@ impl ExecutionEngine {
         for field in &fields {
             match field {
                 AccountField::Balance => {
-                    let balance = provider.get_balance(address).await?;
-                    account.balance = Some(balance);
+                    account.balance = Some(provider.get_balance(address).await?);
                 }
                 AccountField::Nonce => {
-                    let nonce = provider.get_transaction_count(address).await?;
-                    account.nonce = Some(nonce);
+                    account.nonce = Some(provider.get_transaction_count(address).await?);
                 }
                 AccountField::Address => {
                     account.address = Some(address);
+                }
+                AccountField::Code => {
+                    account.code_hash = Some(provider.get_code_at(address).await?);
                 }
             }
         }
@@ -401,18 +402,19 @@ mod test {
 
         let execution_result = execution_engine.run(expressions).await;
 
-        assert!(execution_result.is_ok());
-
-        match &execution_result.unwrap()[0] {
-            QueryResult { query, result } => {
-                assert_eq!(query, "");
-                match result {
-                    ExpressionResult::Account(account) => {
-                        assert!(account.balance.is_some());
+        match execution_result {
+            Ok(results) => match &results[0] {
+                QueryResult { query, result } => {
+                    assert_eq!(query, "");
+                    match result {
+                        ExpressionResult::Account(account) => {
+                            assert!(account.balance.is_some());
+                        }
+                        _ => panic!("Invalid result"),
                     }
-                    _ => panic!("Invalid result"),
                 }
-            }
+            },
+            Err(e) => panic!("Error: {}", e),
         }
     }
 

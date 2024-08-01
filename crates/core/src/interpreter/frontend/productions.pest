@@ -9,7 +9,11 @@ entity_id = { hash | account_id | integer }
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
-account_field      =  { "nonce" | "balance" }
+account_field      =  {
+    "nonce" |
+    "balance" |
+    "code"
+}
 account_id         = { address | ens }
 
 // Block

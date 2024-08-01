@@ -114,9 +114,9 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_build_get_ast() {
+    fn test_build_ast_with_account_fields() {
         let source =
-            "GET nonce, balance FROM account 0x1234567890123456789012345678901234567890 ON eth";
+            "GET nonce, balance, code FROM account 0x1234567890123456789012345678901234567890 ON eth";
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -124,14 +124,17 @@ mod tests {
             fields: vec![
                 Field::Account(AccountField::Nonce),
                 Field::Account(AccountField::Balance),
+                Field::Account(AccountField::Code),
             ],
             chain: Chain::Ethereum,
             query: source.to_string(),
         })];
         let parser = Parser::new(source);
-        let result = parser.parse_expressions().unwrap();
 
-        assert_eq!(result, expected);
+        match parser.parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
     }
 
     #[test]
