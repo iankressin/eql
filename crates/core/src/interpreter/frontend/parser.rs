@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_transaction_fields() {
-        let source = "GET transaction_type, hash, from, to, data, value, fee, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
+        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction,
@@ -204,7 +204,6 @@ mod tests {
                 Field::Transaction(TransactionField::To),
                 Field::Transaction(TransactionField::Data),
                 Field::Transaction(TransactionField::Value),
-                Field::Transaction(TransactionField::Fee),
                 Field::Transaction(TransactionField::GasPrice),
                 Field::Transaction(TransactionField::Gas),
                 Field::Transaction(TransactionField::Status),

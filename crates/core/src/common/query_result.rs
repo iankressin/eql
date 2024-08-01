@@ -116,8 +116,6 @@ pub struct TransactionQueryRes {
     #[serde(serialize_with = "serialize_option_u256")]
     pub value: Option<U256>,
     #[tabled(display_with = "display_option")]
-    pub fee: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub gas_price: Option<u128>,
     #[tabled(display_with = "display_option")]
     pub gas: Option<u128>,
@@ -151,7 +149,6 @@ impl Default for TransactionQueryRes {
             to: None,
             data: None,
             value: None,
-            fee: None,
             gas_price: None,
             gas: None,
             status: None,

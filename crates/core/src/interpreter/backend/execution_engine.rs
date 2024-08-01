@@ -484,7 +484,6 @@ mod test {
             to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
             data: Some(bytes!("")),
             value: Some(U256::from(234808500010631948_u128)),
-            fee: None,
             gas_price: Some(10209184711_u128),
             gas: Some(21000),
             status: Some(true),
@@ -495,7 +494,7 @@ mod test {
             max_fee_per_blob_gas: None,
             max_fee_per_gas: Some(10209184711),
             max_priority_fee_per_gas: Some(0),
-            y_parity: None,
+            y_parity: Some(false),
         })];
 
         match result {
