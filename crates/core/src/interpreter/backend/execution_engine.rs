@@ -221,7 +221,7 @@ impl ExecutionEngine {
                     account.address = Some(address);
                 }
                 AccountField::Code => {
-                    account.code_hash = Some(provider.get_code_at(address).await?);
+                    account.code = Some(provider.get_code_at(address).await?);
                 }
             }
         }
