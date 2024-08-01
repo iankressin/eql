@@ -140,8 +140,6 @@ pub struct TransactionQueryRes {
     pub max_priority_fee_per_gas: Option<u128>,
     #[tabled(display_with = "display_option")]
     pub y_parity: Option<bool>,
-    // pub blob_versioned_hashes: Option<Vec<FixedBytes<32>>>,
-    // pub access_list: Option<Vec<Address>>,
 }
 
 impl Default for TransactionQueryRes {
