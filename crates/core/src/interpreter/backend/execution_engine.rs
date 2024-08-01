@@ -131,11 +131,20 @@ impl ExecutionEngine {
             Some(tx) => {
                 for field in fields {
                     match field {
+                        TransactionField::TransactionType => {
+                            result.transaction_type = tx.transaction_type;
+                        }
+                        TransactionField::Hash => {
+                            result.hash = Some(tx.hash);
+                        }
                         TransactionField::From => {
                             result.from = Some(tx.from);
                         }
                         TransactionField::To => {
                             result.to = tx.to;
+                        }
+                        TransactionField::Data => {
+                            result.data = Some(tx.input.clone());
                         }
                         TransactionField::Value => {
                             result.value = Some(tx.value);
@@ -143,11 +152,8 @@ impl ExecutionEngine {
                         TransactionField::GasPrice => {
                             result.gas_price = tx.gas_price;
                         }
-                        TransactionField::Data => {
-                            result.data = Some(tx.input.clone());
-                        }
-                        TransactionField::Hash => {
-                            result.hash = Some(tx.hash);
+                        TransactionField::Gas => {
+                            result.gas = Some(tx.gas);
                         }
                         TransactionField::Status => {
                             match provider.get_transaction_receipt(hash).await? {
@@ -158,6 +164,33 @@ impl ExecutionEngine {
                                     result.status = None;
                                 }
                             }
+                        }
+                        TransactionField::ChainId => {
+                            result.chain_id = tx.chain_id;
+                        }
+                        TransactionField::V => {
+                            result.v = tx.signature.map_or(None, |s| Some(s.v));
+                        }
+                        TransactionField::R => {
+                            result.r = tx.signature.map_or(None, |s| Some(s.r));
+                        }
+                        TransactionField::S => {
+                            result.s = tx.signature.map_or(None, |s| Some(s.s));
+                        }
+                        TransactionField::MaxFeePerBlobGas => {
+                            result.max_fee_per_blob_gas = tx.max_fee_per_blob_gas;
+                        }
+                        TransactionField::MaxFeePerGas => {
+                            result.max_fee_per_gas = tx.max_fee_per_gas;
+                        }
+                        TransactionField::MaxPriorityFeePerGas => {
+                            result.max_priority_fee_per_gas = tx.max_priority_fee_per_gas;
+                        }
+                        TransactionField::YParity => {
+                            result.y_parity = tx
+                                .signature
+                                .map_or(None, |s| s.y_parity)
+                                .map_or(None, |y| Some(y.0));
                         }
                     }
                 }
@@ -279,7 +312,9 @@ mod test {
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
-    use alloy::primitives::{b256, bloom, bytes, Address, U256};
+    use alloy::primitives::{address, b256, bloom, bytes, Address, U256};
+    #[cfg(test)]
+    use pretty_assertions::assert_eq;
     use std::str::FromStr;
 
     #[tokio::test]
@@ -418,24 +453,56 @@ mod test {
             entity_id: EntityId::Transaction(b256!(
                 "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
             )),
-            fields: vec![Field::Transaction(TransactionField::To)],
+            fields: vec![
+                Field::Transaction(TransactionField::TransactionType),
+                Field::Transaction(TransactionField::Hash),
+                Field::Transaction(TransactionField::From),
+                Field::Transaction(TransactionField::To),
+                Field::Transaction(TransactionField::Data),
+                Field::Transaction(TransactionField::Value),
+                Field::Transaction(TransactionField::GasPrice),
+                Field::Transaction(TransactionField::Gas),
+                Field::Transaction(TransactionField::Status),
+                Field::Transaction(TransactionField::ChainId),
+                Field::Transaction(TransactionField::V),
+                Field::Transaction(TransactionField::R),
+                Field::Transaction(TransactionField::S),
+                Field::Transaction(TransactionField::MaxFeePerBlobGas),
+                Field::Transaction(TransactionField::MaxFeePerGas),
+                Field::Transaction(TransactionField::MaxPriorityFeePerGas),
+                Field::Transaction(TransactionField::YParity),
+            ],
             query: String::from(""),
         })];
+        let result = execution_engine.run(expressions).await;
+        let expected = vec![ExpressionResult::Transaction(TransactionQueryRes {
+            transaction_type: Some(2),
+            hash: Some(b256!(
+                "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+            )),
+            from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
+            to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
+            data: Some(bytes!("")),
+            value: Some(U256::from(234808500010631948_u128)),
+            fee: None,
+            gas_price: Some(10209184711_u128),
+            gas: Some(21000),
+            status: Some(true),
+            chain_id: Some(1),
+            v: Some(U256::from(0)),
+            r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
+            s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
+            max_fee_per_blob_gas: None,
+            max_fee_per_gas: Some(10209184711),
+            max_priority_fee_per_gas: Some(0),
+            y_parity: None,
+        })];
 
-        let execution_result = execution_engine.run(expressions).await;
-
-        assert!(execution_result.is_ok());
-
-        match &execution_result.unwrap()[0] {
-            QueryResult { query, result } => {
-                assert_eq!(query, "");
-                match result {
-                    ExpressionResult::Transaction(tx) => {
-                        assert!(tx.to.is_some());
-                    }
-                    _ => panic!("Invalid result"),
-                }
+        match result {
+            Ok(results) => {
+                assert_eq!(results[0].result, expected[0]);
             }
+            Err(_) => panic!("Error"),
         }
     }
 }

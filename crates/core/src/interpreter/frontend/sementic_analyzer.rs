@@ -34,6 +34,7 @@ impl<'a> SemanticAnalyzer<'a> {
         SemanticAnalyzer { expressions }
     }
 
+    // TODO: fields should only contain fields that are valid for the entity
     pub fn analyze(&self) -> Result<(), Box<dyn Error>> {
         for expression in self.expressions {
             match expression {
