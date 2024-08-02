@@ -84,19 +84,40 @@ These are the entities that can be queried using the EQL language, each addresse
 - address [id]
 - nonce
 - balance
+- code
 ### Block
 - number [id]
 - timestamp
 - size
 - hash
-- parent hash
+- parent_hash
+- state_root
+- transactions_root
+- receipts_root
+- logs_bloom
+- extra_data
+- mix_hash
+- total_difficulty
+- base_fee_per_gas
+- withdrawals_root
+- blob_gas_used
+- excess_blob_gas
+- parent_beacon_block_root
 ### Transaction
 - hash [id]
-- from
-- to
-- data
-- value
-- fee
-- gas price
-- timestamp
-- status
+- transaction_type 
+- from 
+- to 
+- data 
+- value 
+- gas_price 
+- gas 
+- status 
+- chain_id 
+- v 
+- r 
+- s 
+- max_fee_per_blob_gas 
+- max_fee_per_gas 
+- max_priority_fee_per_gas 
+- y_parity
