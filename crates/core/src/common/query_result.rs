@@ -87,6 +87,8 @@ pub struct AccountQueryRes {
     pub balance: Option<U256>,
     #[tabled(display_with = "display_option")]
     pub address: Option<Address>,
+    #[tabled(display_with = "display_option")]
+    pub code: Option<Bytes>,
 }
 
 impl Default for AccountQueryRes {
@@ -95,6 +97,7 @@ impl Default for AccountQueryRes {
             nonce: None,
             balance: None,
             address: None,
+            code: None,
         }
     }
 }

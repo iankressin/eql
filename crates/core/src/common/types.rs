@@ -86,6 +86,7 @@ impl TryFrom<&str> for AccountField {
             "address" => Ok(AccountField::Address),
             "nonce" => Ok(AccountField::Nonce),
             "balance" => Ok(AccountField::Balance),
+            "code" => Ok(AccountField::Code),
             invalid_field => Err(Box::new(FieldError::InvalidField(
                 invalid_field.to_string(),
             ))),
@@ -184,6 +185,7 @@ pub enum AccountField {
     Address,
     Nonce,
     Balance,
+    Code,
 }
 
 impl Display for AccountField {
@@ -192,6 +194,7 @@ impl Display for AccountField {
             AccountField::Address => write!(f, "address"),
             AccountField::Nonce => write!(f, "nonce"),
             AccountField::Balance => write!(f, "balance"),
+            AccountField::Code => write!(f, "code"),
         }
     }
 }
