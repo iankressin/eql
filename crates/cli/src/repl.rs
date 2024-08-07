@@ -33,33 +33,43 @@ impl Repl {
         }
     }
 
+    // The main loop for the REPL session
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Clear the screen and enable raw mode for the terminal
         self.clear_screen()?;
         enable_raw_mode()?;
 
         loop {
+            // Read an event from the terminal
             let event = read()?;
 
             match event {
                 Event::Key(key_event) => match key_event.code {
+                    // Handle character input
                     KeyCode::Char(ch) => {
+                        // Exit on Ctrl+C
                         if key_event.modifiers == KeyModifiers::CONTROL && ch == 'c' {
                             break;
+                        // Clear screen on Ctrl+L
                         } else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'l' {
                             self.cursor_pos = 1;
                             self.clear_screen()?;
                             continue;
+                        // Clear current expression on Ctrl+U
                         } else if key_event.modifiers == KeyModifiers::CONTROL && ch == 'u' {
                             self.cursor_pos = 1;
                             self.expression.clear();
                             self.redraw_line()?;
+                        // Insert character into the current expression
                         } else {
                             self.expression.insert(self.cursor_pos - 1, ch);
                             self.cursor_pos += 1;
                             self.redraw_line()?;
                         }
                     }
+                    // Handle backspace
                     KeyCode::Backspace => {
+                        // Delete word on Alt+Backspace
                         if key_event.modifiers == KeyModifiers::ALT {
                             let mut temp = self.expression.split(" ").collect::<Vec<&str>>();
 
@@ -72,8 +82,11 @@ impl Repl {
                                     self.expression = temp.join(" ");
                                 }
                             }
+                        // Delete character on Backspace
                         } else {
-                            self.expression.pop();
+                            if self.cursor_pos > 1 {
+                                self.expression.remove(self.cursor_pos -2); // -2 because it's the previous index and cursor start at 1 while string indexes at 0.
+                            }
 
                             if self.cursor_pos > 1 {
                                 self.cursor_pos -= 1;
@@ -82,18 +95,29 @@ impl Repl {
 
                         self.redraw_line()?;
                     }
+                    // Delete character on Delete
+                    KeyCode::Delete => {
+                        if self.cursor_pos -1 < self.expression.len() { 
+                            self.expression.remove(self.cursor_pos -1); // -1 because cursor start at 1 while string indexes at 0.
+                            self.redraw_line()?;
+                        }
+                    }
+                    // Handle Enter key to execute the current expression
                     KeyCode::Enter => {
+                        // Run the current expression and handle any errors
                         let _ = self.run_expression().await.map_err(|e| {
                             for line in e.to_string().split("\n") {
                                 queue!(self.stdout, MoveToNextLine(1), Print(line.red()),).unwrap();
                             }
                         });
 
+                        // Add the current expression to history and reset the state
                         self.history.push(self.expression.trim().to_string());
                         self.expression.clear();
                         self.cursor_pos = 1;
                         self.history_offset = 0;
 
+                        // Display the REPL prompt
                         queue!(
                             self.stdout,
                             MoveToNextLine(1),
@@ -102,6 +126,7 @@ impl Repl {
                             Print(&self.expression),
                         )?;
                     }
+                    // Handle Up arrow key to navigate history
                     KeyCode::Up => {
                         if self.history.len() == 0 || self.history_offset >= self.history.len() {
                             continue;
@@ -113,6 +138,7 @@ impl Repl {
                         self.cursor_pos = self.expression.len() + 1;
                         self.redraw_line()?;
                     }
+                    // Handle Down arrow key to navigate history
                     KeyCode::Down => {
                         if self.history_offset == 0 {
                             continue;
@@ -131,27 +157,32 @@ impl Repl {
 
                         self.redraw_line()?;
                     }
+                    // Handle Left arrow key to move cursor left
                     KeyCode::Left => {
                         if self.cursor_pos > 0 {
                             self.cursor_pos -= 1;
                         }
                         queue!(self.stdout, MoveLeft(1))?;
                     }
+                    // Handle Right arrow key to move cursor right
                     KeyCode::Right => {
-                        if self.cursor_pos < self.expression.len() {
+                        if self.cursor_pos -1 < self.expression.len() {
                             self.cursor_pos += 1;
                         }
                         queue!(self.stdout, MoveRight(1))?;
                     }
+                    // Exit on Esc key
                     KeyCode::Esc => break,
                     _ => {}
                 },
                 _ => {}
             }
 
+            // Flush the stdout buffer to apply changes
             self.stdout.flush()?;
         }
 
+        // Disable raw mode before exiting
         disable_raw_mode()?;
 
         Ok(())
