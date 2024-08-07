@@ -103,7 +103,6 @@ impl Repl {
                             self.redraw_line()?;
                         }
                     }
-
                     // Handle Enter key to execute the current expression
                     KeyCode::Enter => {
                         // Run the current expression and handle any errors
