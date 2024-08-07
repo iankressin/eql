@@ -95,7 +95,6 @@ impl Repl {
 
                         self.redraw_line()?;
                     }
-                    
                     // Delete character on Delete
                     KeyCode::Delete => {
                         if self.cursor_pos -1 < self.expression.len() { 
