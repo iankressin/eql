@@ -167,7 +167,7 @@ impl Repl {
                     }
                     // Handle Right arrow key to move cursor right
                     KeyCode::Right => {
-                        if self.cursor_pos -1 < self.expression.len() { 
+                        if self.cursor_pos -1 < self.expression.len() {
                             self.cursor_pos += 1;
                         }
                         queue!(self.stdout, MoveRight(1))?;
