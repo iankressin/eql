@@ -1,11 +1,12 @@
-program = _{ (get){1, } }
+program = _{SOI ~ (get){1, } ~ EOI}
 
 get       = {
-    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain
+    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
 }
 fields    = { (account_field_list | block_field_list | tx_field_list) }
 entity    = { "account" | "block" | "tx" }
 entity_id = { hash | account_id | integer }
+exp_separator = _{"," | ";"}
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
@@ -84,5 +85,5 @@ hash    = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens     = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 
 // Helpers
-WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+WHITESPACE = _{ " " | "\t" | NEWLINE}
 
