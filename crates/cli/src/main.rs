@@ -75,9 +75,15 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         SubCommand::Run(run_args) => {
             let source = std::fs::read_to_string(run_args.file)?;
             let result_handler = ResultHandler::new();
-            let result = Interpreter::run_program(&source).await?;
-
-            result_handler.handle_result(result);
+            let result = Interpreter::run_program(&source).await;
+            match result {
+                Ok(query_results) => {
+                    result_handler.handle_result(query_results);
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                }
+            }
         }
         SubCommand::Repl => {
             Repl::new().run().await?;
