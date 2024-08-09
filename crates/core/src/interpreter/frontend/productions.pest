@@ -1,20 +1,20 @@
 program = _{ (get){1, } }
 
-get       = {
+get = {
     "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain
 }
-fields    = { (account_field_list | block_field_list | tx_field_list) }
-entity    = { "account" | "block" | "tx" }
-entity_id = { hash | account_id | integer }
+fields = { (account_field_list | block_field_list | tx_field_list) }
+entity = { "account" | "block" | "tx" }
+entity_id = { hash | account_id | integer | block_id }
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
-account_field      =  {
+account_field = {
     "nonce" |
     "balance" |
     "code"
 }
-account_id         = { address | ens }
+account_id = { address | ens }
 
 // Block
 block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
@@ -41,10 +41,12 @@ block_field      =  {
     // "transactions" |
     // "withdrawals"
 }
+block_id = { block_tag |  block_tag ~ ":" ~  block_tag }
+block_tag = { "latest" | "earliest" | "pending" | "finalized" | "safe" | integer }
 
 // Transaction
 tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }
-tx_field      =  {
+tx_field = {
     "transaction_type" |
     "hash" |
     "from" | 
@@ -74,14 +76,14 @@ tx_field      =  {
 }
 
 // Terminals
-unit    = { "ether" | "gwei" | "wei" }
-number  = { float | integer }
+unit = { "ether" | "gwei" | "wei" }
+number = { float | integer }
 integer = { (ASCII_DIGIT)+ }
-float   = { integer ~ "." ~ integer }
-chain   = { "eth" | "arb" | "op" | "base" | "blast" | "polygon" | "sepolia" }
+float = { integer ~ "." ~ integer }
+chain = { "eth" | "arb" | "op" | "base" | "blast" | "polygon" | "sepolia" }
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
-hash    = { "0x" ~ (ASCII_HEX_DIGIT){64} }
-ens     = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
+hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
+ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 
 // Helpers
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }

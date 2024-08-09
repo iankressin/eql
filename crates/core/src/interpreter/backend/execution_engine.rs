@@ -35,6 +35,12 @@ pub enum ExpressionResult {
     Transaction(TransactionQueryRes),
 }
 
+#[derive(Debug, Serialize, Deserialize, thiserror::Error)]
+pub enum ExecutionEngineErrors {
+    #[error("Unable to fetch block number for tag {0}")]
+    UnableToFetchBlockNumber(BlockNumberOrTag)
+}
+
 pub struct ExecutionEngine;
 
 // TODO: create ExecutionEngineErrors instead of throwing static strings
@@ -70,12 +76,20 @@ impl ExecutionEngine {
 
         match expr.entity {
             Entity::Block => {
-                let block_number = expr.entity_id.to_block_number();
+                let (start, end) = expr.entity_id.to_block_range()?;
                 let fields = expr
                     .fields
                     .iter()
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<BlockField>, _>>()?;
+
+                let star_block_number = match start {
+                    BlockNumberOrTag::Number(number) => number
+                    block_tag => 
+                }
+
+                // If `end` and `end` is tag should fetch block number
+                // Else, simply run get blocks
 
                 if let Ok(block_number) = block_number {
                     let result = self.get_block(block_number, fields, &provider).await?;
@@ -300,6 +314,15 @@ impl ExecutionEngine {
         }
 
         Ok(result)
+    }
+
+    async fn get_block_number_from_tag(provider: &RootProvider<Http<Client>>, tag: BlockNumberOrTag) -> Result<u64, Box<dyn Error>> {
+        let x = provider.get_block_by_number(tag, false).await?.map(|block| block.header.number);
+
+        // match  {
+        //     Some(block) => block.header.number.or(ExecutionEngineErrors::UnableToFetchBlockNumber(tag)),
+        //     None => ExecutionEngineErrors::UnableToFetchBlockNumber(tag)
+        // }
     }
 }
 

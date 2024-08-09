@@ -16,6 +16,8 @@ pub enum ParserError {
     UnexpectedToken(String),
     #[error("Missing entity")]
     MissingEntity,
+    #[error("Missing entity_id {0}")]
+    PestCustomError(String),
 }
 
 impl<'a> Parser<'a> {
@@ -25,7 +27,10 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expressions(&self) -> Result<Vec<Expression>, Box<dyn Error>> {
         let mut expressions: Vec<Expression> = vec![];
-        let pairs = Parser::parse(Rule::program, self.source)?;
+        let pairs = Parser::parse(Rule::program, self.source).map_err(|e| {
+            let message = format!("{}", e);
+            let pest_error = e;
+        })?;
 
         for pair in pairs {
             match pair.as_rule() {
