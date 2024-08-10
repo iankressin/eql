@@ -86,5 +86,5 @@ hash    = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens     = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 
 // Helpers
-WHITESPACE = _{ " " | "\t" | NEWLINE}
+WHITESPACE = _{ " " | "\t" | NEWLINE }
 
