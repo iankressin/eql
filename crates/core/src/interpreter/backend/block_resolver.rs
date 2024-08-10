@@ -30,7 +30,7 @@ pub async fn resolve_block_query(
         _ => None,
     };
 
-    // if start block <= end block, return error
+    // This check is being done here, because it's the first time that we have the block numbers
     if let Some(end) = end_block_number {
         if start_block_number > end {
             return Err(BlockResolverErrors::StartBlockMustBeGreaterThanEndBlock.into());
