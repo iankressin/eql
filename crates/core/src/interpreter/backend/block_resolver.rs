@@ -24,12 +24,18 @@ pub async fn resolve_block_query(
     fields: Vec<BlockField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
-    // TODO: if start block <= end block, return error
     let start_block_number = get_block_number_from_tag(&provider, start_block).await?;
     let end_block_number = match end_block {
         Some(end) => Some(get_block_number_from_tag(&provider, end).await?),
         _ => None,
     };
+
+    // if start block <= end block, return error
+    if let Some(end) = end_block_number {
+        if start_block_number > end {
+            return Err(BlockResolverErrors::StartBlockMustBeGreaterThanEndBlock.into());
+        }
+    }
 
     match end_block_number {
         Some(number) => batch_get_block(start_block_number, number, fields, &provider).await,
@@ -151,5 +157,34 @@ async fn get_block_number_from_tag(
                 number_or_tag,
             ))),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::providers::ProviderBuilder;
+
+    use crate::common::chain::Chain;
+
+    use super::resolve_block_query;
+
+    #[tokio::test]
+    async fn test_resolve_block_query_when_start_is_greater_than_end() {
+        let start_block = 10;
+        let end_block = 5;
+        let fields = vec![];
+        let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().parse().unwrap());
+
+        let result = resolve_block_query(
+            start_block.into(),
+            Some(end_block.into()),
+            fields,
+            &provider,
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert_eq!(result, "Start block must be greater than end block");
     }
 }
