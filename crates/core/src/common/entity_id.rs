@@ -4,18 +4,30 @@ use alloy::{
     primitives::{Address, FixedBytes},
     providers::ProviderBuilder,
 };
-use std::{error::Error, fmt::Display, str::FromStr};
+use std::{error::Error, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityId {
-    Block(BlockNumberOrTag),
+    Block(BlockRange),
     Transaction(FixedBytes<32>),
     Account(NameOrAddress),
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct BlockRange {
+    start: BlockNumberOrTag,
+    end: Option<BlockNumberOrTag>,
+}
+
+impl BlockRange {
+    pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
+        Self { start, end }
+    }
+}
+
 // TODO: return instance of Error trait instead of &'static str
 impl TryFrom<&str> for EntityId {
-    type Error = &'static str;
+    type Error = Box<dyn Error>;
 
     fn try_from(id: &str) -> Result<Self, Self::Error> {
         if id.starts_with("0x") {
@@ -28,51 +40,53 @@ impl TryFrom<&str> for EntityId {
                 Ok(EntityId::Transaction(tx_hash))
             } else {
                 // Return error: type not supported
-                Err("Type not supported")
+                Err(EntityIdError::InvalidAddress.into())
             }
         } else if id.ends_with(".eth") {
             let ens = NameOrAddress::Name(id.to_string());
             Ok(EntityId::Account(ens))
         } else {
-            let block_number = id
-                .parse::<u64>()
-                .map_err(|_| "Invalid block number")?
-                .into();
+            let (start, end) = match id.split_once(":") {
+                Some((start, end)) => {
+                    let start = parse_block_number_or_tag(start)?;
+                    let end = parse_block_number_or_tag(end)?;
+                    (start, Some(end))
+                }
+                None => parse_block_number_or_tag(id).map(|start| (start, None))?,
+            };
 
-            Ok(EntityId::Block(block_number))
+            Ok(EntityId::Block(BlockRange { start, end }))
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
+    match id.parse::<u64>() {
+        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
+        Err(_) => id
+            .parse::<BlockNumberOrTag>()
+            .map_err(|_| EntityIdError::InvalidBlockNumber),
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EntityIdError {
+    #[error("Invalid address")]
     InvalidAddress,
+    #[error("Invalid tx hash")]
     InvalidTxHash,
+    #[error("Invalid block number")]
     InvalidBlockNumber,
+    #[error("Unable resolve ENS name")]
     EnsResolution,
 }
 
-impl Display for EntityIdError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EntityIdError::InvalidAddress => write!(f, "Invalid address"),
-            EntityIdError::InvalidTxHash => write!(f, "Invalid tx hash"),
-            EntityIdError::InvalidBlockNumber => write!(f, "Invalid block number"),
-            EntityIdError::EnsResolution => write!(f, "Unable resolve ENS name"),
-        }
-    }
-}
-
-impl Error for EntityIdError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
 impl EntityId {
-    pub fn to_block_number(&self) -> Result<BlockNumberOrTag, EntityIdError> {
+    pub fn to_block_range(
+        &self,
+    ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityIdError> {
         match self {
-            EntityId::Block(block_id) => Ok(*block_id),
+            EntityId::Block(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
             _ => Err(EntityIdError::InvalidBlockNumber),
         }
     }

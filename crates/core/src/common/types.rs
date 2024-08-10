@@ -1,4 +1,8 @@
-use super::{chain::Chain, entity::Entity, entity_id::EntityId};
+use super::{
+    chain::Chain,
+    entity::Entity,
+    entity_id::{BlockRange, EntityId},
+};
 use alloy::eips::BlockNumberOrTag;
 use std::{error::Error, fmt::Display};
 
@@ -20,7 +24,7 @@ impl Default for GetExpression {
     fn default() -> Self {
         Self {
             entity: Entity::Block,
-            entity_id: EntityId::Block(BlockNumberOrTag::Earliest),
+            entity_id: EntityId::Block(BlockRange::new(BlockNumberOrTag::Earliest, None)),
             fields: vec![],
             chain: Chain::Ethereum,
             query: "".to_string(),
