@@ -133,8 +133,7 @@ async fn get_block(
                 }
             }
         }
-        // TODO: handle error
-        None => panic!("Block not found"),
+        None => return Err(BlockResolverErrors::UnableToFetchBlockNumber(block_id).into()),
     }
 
     Ok(result)
