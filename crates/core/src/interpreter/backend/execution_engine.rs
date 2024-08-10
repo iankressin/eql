@@ -447,4 +447,38 @@ mod test {
             Err(_) => panic!("Error"),
         }
     }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_get_transaction_fields_does_not_exist() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Transaction,
+            entity_id: EntityId::Transaction(b256!(
+                "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
+            )),
+            fields: vec![
+                Field::Transaction(TransactionField::TransactionType),
+                Field::Transaction(TransactionField::Hash),
+                Field::Transaction(TransactionField::From),
+                Field::Transaction(TransactionField::To),
+                Field::Transaction(TransactionField::Data),
+                Field::Transaction(TransactionField::Value),
+                Field::Transaction(TransactionField::GasPrice),
+                Field::Transaction(TransactionField::Gas),
+                Field::Transaction(TransactionField::Status),
+                Field::Transaction(TransactionField::ChainId),
+                Field::Transaction(TransactionField::V),
+                Field::Transaction(TransactionField::R),
+                Field::Transaction(TransactionField::S),
+                Field::Transaction(TransactionField::MaxFeePerBlobGas),
+                Field::Transaction(TransactionField::MaxFeePerGas),
+                Field::Transaction(TransactionField::MaxPriorityFeePerGas),
+                Field::Transaction(TransactionField::YParity),
+            ],
+            query: String::from(""),
+        })];
+        let _result = execution_engine.run(expressions).await;
+    }
 }
