@@ -4,7 +4,6 @@ use crate::common::{
     types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
 };
 use alloy::{
-    eips::BlockNumberOrTag,
     primitives::{Address, FixedBytes},
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
@@ -12,6 +11,8 @@ use alloy::{
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use tabled::Tabled;
+
+use super::block_resolver::resolve_block_query;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
@@ -30,15 +31,9 @@ pub enum ExpressionResult {
     #[serde(rename = "account")]
     Account(AccountQueryRes),
     #[serde(rename = "block")]
-    Block(BlockQueryRes),
+    Block(Vec<BlockQueryRes>),
     #[serde(rename = "transaction")]
     Transaction(TransactionQueryRes),
-}
-
-#[derive(Debug, Serialize, Deserialize, thiserror::Error)]
-pub enum ExecutionEngineErrors {
-    #[error("Unable to fetch block number for tag {0}")]
-    UnableToFetchBlockNumber(BlockNumberOrTag)
 }
 
 pub struct ExecutionEngine;
@@ -76,28 +71,17 @@ impl ExecutionEngine {
 
         match expr.entity {
             Entity::Block => {
-                let (start, end) = expr.entity_id.to_block_range()?;
+                let (start_block, end_block) = expr.entity_id.to_block_range()?;
                 let fields = expr
                     .fields
                     .iter()
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<BlockField>, _>>()?;
 
-                let star_block_number = match start {
-                    BlockNumberOrTag::Number(number) => number
-                    block_tag => 
-                }
+                let block_query_res =
+                    resolve_block_query(start_block, end_block, fields, &provider).await?;
 
-                // If `end` and `end` is tag should fetch block number
-                // Else, simply run get blocks
-
-                if let Ok(block_number) = block_number {
-                    let result = self.get_block(block_number, fields, &provider).await?;
-
-                    Ok(ExpressionResult::Block(result))
-                } else {
-                    panic!("Invalid block number");
-                }
+                Ok(ExpressionResult::Block(block_query_res))
             }
             Entity::Account => {
                 let address = expr.entity_id.to_address().await;
@@ -109,7 +93,6 @@ impl ExecutionEngine {
 
                 if let Ok(address) = address {
                     let account = self.get_account(address, fields, &provider).await?;
-
                     Ok(ExpressionResult::Account(account))
                 } else {
                     panic!("Invalid address");
@@ -125,7 +108,6 @@ impl ExecutionEngine {
 
                 if let Ok(hash) = hash {
                     let tx = self.get_transaction(hash, fields, &provider).await?;
-
                     Ok(ExpressionResult::Transaction(tx))
                 } else {
                     panic!("Invalid transaction hash");
@@ -242,88 +224,6 @@ impl ExecutionEngine {
 
         Ok(account)
     }
-
-    async fn get_block(
-        &self,
-        block_id: BlockNumberOrTag,
-        fields: Vec<BlockField>,
-        provider: &RootProvider<Http<Client>>,
-    ) -> Result<BlockQueryRes, Box<dyn Error>> {
-        let mut result = BlockQueryRes::default();
-
-        match provider.get_block_by_number(block_id, false).await? {
-            Some(block) => {
-                for field in &fields {
-                    match field {
-                        BlockField::Timestamp => {
-                            result.timestamp = Some(block.header.timestamp);
-                        }
-                        BlockField::Number => {
-                            result.number = block.header.number;
-                        }
-                        BlockField::Hash => {
-                            result.hash = block.header.hash;
-                        }
-                        BlockField::ParentHash => {
-                            result.parent_hash = Some(block.header.parent_hash);
-                        }
-                        BlockField::Size => {
-                            result.size = block.size;
-                        }
-                        BlockField::StateRoot => {
-                            result.state_root = Some(block.header.state_root);
-                        }
-                        BlockField::TransactionsRoot => {
-                            result.transactions_root = Some(block.header.transactions_root);
-                        }
-                        BlockField::ReceiptsRoot => {
-                            result.receipts_root = Some(block.header.receipts_root);
-                        }
-                        BlockField::LogsBloom => {
-                            result.logs_bloom = Some(block.header.logs_bloom);
-                        }
-                        BlockField::ExtraData => {
-                            result.extra_data = Some(block.header.extra_data.clone());
-                        }
-                        BlockField::MixHash => {
-                            result.mix_hash = block.header.mix_hash;
-                        }
-                        BlockField::TotalDifficulty => {
-                            result.total_difficulty = block.header.total_difficulty;
-                        }
-                        BlockField::BaseFeePerGas => {
-                            result.base_fee_per_gas = block.header.base_fee_per_gas;
-                        }
-                        BlockField::WithdrawalsRoot => {
-                            result.withdrawals_root = block.header.withdrawals_root;
-                        }
-                        BlockField::BlobGasUsed => {
-                            result.blob_gas_used = block.header.blob_gas_used;
-                        }
-                        BlockField::ExcessBlobGas => {
-                            result.excess_blob_gas = block.header.excess_blob_gas;
-                        }
-                        BlockField::ParentBeaconBlockRoot => {
-                            result.parent_beacon_block_root = block.header.parent_beacon_block_root;
-                        }
-                    }
-                }
-            }
-            // TODO: handle error
-            None => panic!("Block not found"),
-        }
-
-        Ok(result)
-    }
-
-    async fn get_block_number_from_tag(provider: &RootProvider<Http<Client>>, tag: BlockNumberOrTag) -> Result<u64, Box<dyn Error>> {
-        let x = provider.get_block_by_number(tag, false).await?.map(|block| block.header.number);
-
-        // match  {
-        //     Some(block) => block.header.number.or(ExecutionEngineErrors::UnableToFetchBlockNumber(tag)),
-        //     None => ExecutionEngineErrors::UnableToFetchBlockNumber(tag)
-        // }
-    }
 }
 
 #[cfg(test)]
@@ -332,11 +232,14 @@ mod test {
     use crate::common::{
         chain::Chain,
         ens::NameOrAddress,
-        entity_id::EntityId,
+        entity_id::{BlockRange, EntityId},
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
-    use alloy::primitives::{address, b256, bloom, bytes, Address, U256};
+    use alloy::{
+        eips::BlockNumberOrTag,
+        primitives::{address, b256, bloom, bytes, Address, U256},
+    };
     #[cfg(test)]
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
@@ -347,7 +250,7 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Block,
-            entity_id: EntityId::Block(1.into()),
+            entity_id: EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
             fields: vec![
                 Field::Block(BlockField::Timestamp),
                 Field::Block(BlockField::Hash),
@@ -368,7 +271,7 @@ mod test {
             ],
             query: String::from(""),
         })];
-        let expected = vec![ExpressionResult::Block(BlockQueryRes {
+        let expected = ExpressionResult::Block(vec![BlockQueryRes {
             timestamp: Some(1438269988),
             number: None,
             hash: Some(b256!(
@@ -397,14 +300,12 @@ mod test {
             blob_gas_used: None,
             excess_blob_gas: None,
             parent_beacon_block_root: None,
-        })];
+        }]);
         let execution_result = execution_engine.run(expressions).await;
-
-        assert!(execution_result.is_ok());
 
         match execution_result {
             Ok(results) => {
-                assert_eq!(results[0].result, expected[0]);
+                assert_eq!(results[0].result, expected);
             }
             Err(_) => panic!("Error"),
         }
@@ -422,7 +323,6 @@ mod test {
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
         })];
-
         let execution_result = execution_engine.run(expressions).await;
 
         match execution_result {
@@ -451,10 +351,7 @@ mod test {
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
         })];
-
         let execution_result = execution_engine.run(expressions).await;
-
-        assert!(execution_result.is_ok());
 
         match &execution_result.unwrap()[0] {
             QueryResult { query, result } => {

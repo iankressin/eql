@@ -27,10 +27,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expressions(&self) -> Result<Vec<Expression>, Box<dyn Error>> {
         let mut expressions: Vec<Expression> = vec![];
-        let pairs = Parser::parse(Rule::program, self.source).map_err(|e| {
-            let message = format!("{}", e);
-            let pest_error = e;
-        })?;
+        let pairs = Parser::parse(Rule::program, self.source)?;
 
         for pair in pairs {
             match pair.as_rule() {
@@ -110,7 +107,11 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
     use crate::common::{
-        chain::Chain, ens::NameOrAddress, entity::Entity, entity_id::EntityId, types::*,
+        chain::Chain,
+        ens::NameOrAddress,
+        entity::Entity,
+        entity_id::{BlockRange, EntityId},
+        types::*,
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -167,7 +168,7 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: EntityId::Block(BlockNumberOrTag::Number(1)),
+            entity_id: EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
             fields: vec![
                 Field::Block(BlockField::ParentHash),
                 Field::Block(BlockField::StateRoot),
@@ -191,6 +192,27 @@ mod tests {
         let parser = Parser::new(source);
 
         match parser.parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_get_ast_using_block_ranges() {
+        let source = "GET timestamp FROM block 1:2 ON eth";
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Block,
+            entity_id: EntityId::Block(BlockRange::new(
+                BlockNumberOrTag::Number(1),
+                Some(BlockNumberOrTag::Number(2)),
+            )),
+            fields: vec![Field::Block(BlockField::Timestamp)],
+            chain: Chain::Ethereum,
+            query: source.to_string(),
+        })];
+        let result = Parser::new(source).parse_expressions();
+
+        match result {
             Ok(result) => assert_eq!(result, expected),
             Err(e) => panic!("Error: {}", e),
         }

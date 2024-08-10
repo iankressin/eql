@@ -5,7 +5,7 @@ get = {
 }
 fields = { (account_field_list | block_field_list | tx_field_list) }
 entity = { "account" | "block" | "tx" }
-entity_id = { hash | account_id | integer | block_id }
+entity_id = { hash | account_id | block_id }
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
@@ -37,11 +37,8 @@ block_field      =  {
     "parent_beacon_block_root" |
     "parent_beacon_block_root" |
     "size"
-    // "nonce" |
-    // "transactions" |
-    // "withdrawals"
 }
-block_id = { block_tag |  block_tag ~ ":" ~  block_tag }
+block_id    = { block_tag ~ ":" ~ block_tag | block_tag }
 block_tag = { "latest" | "earliest" | "pending" | "finalized" | "safe" | integer }
 
 // Transaction

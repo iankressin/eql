@@ -4,7 +4,7 @@ use alloy::{
     primitives::{Address, FixedBytes},
     providers::ProviderBuilder,
 };
-use std::{error::Error, fmt::Display, str::FromStr};
+use std::{error::Error, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityId {
@@ -19,9 +19,15 @@ pub struct BlockRange {
     end: Option<BlockNumberOrTag>,
 }
 
+impl BlockRange {
+    pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
+        Self { start, end }
+    }
+}
+
 // TODO: return instance of Error trait instead of &'static str
 impl TryFrom<&str> for EntityId {
-    type Error = &'static str;
+    type Error = Box<dyn Error>;
 
     fn try_from(id: &str) -> Result<Self, Self::Error> {
         if id.starts_with("0x") {
@@ -34,7 +40,7 @@ impl TryFrom<&str> for EntityId {
                 Ok(EntityId::Transaction(tx_hash))
             } else {
                 // Return error: type not supported
-                Err("Type not supported")
+                Err(EntityIdError::InvalidAddress.into())
             }
         } else if id.ends_with(".eth") {
             let ens = NameOrAddress::Name(id.to_string());
@@ -42,23 +48,24 @@ impl TryFrom<&str> for EntityId {
         } else {
             let (start, end) = match id.split_once(":") {
                 Some((start, end)) => {
-                    let start = start
-                        .parse::<BlockNumberOrTag>()
-                        .map_err(|_| "Invalid block number")?;
-                    let end = end
-                        .parse::<BlockNumberOrTag>()
-                        .map_err(|_| "Invalid block number")?;
+                    let start = parse_block_number_or_tag(start)?;
+                    let end = parse_block_number_or_tag(end)?;
                     (start, Some(end))
                 }
-                None => (
-                    id.parse::<BlockNumberOrTag>()
-                        .map_err(|_| "Invalid block number")?,
-                    None,
-                ),
+                None => parse_block_number_or_tag(id).map(|start| (start, None))?,
             };
 
             Ok(EntityId::Block(BlockRange { start, end }))
         }
+    }
+}
+
+fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
+    match id.parse::<u64>() {
+        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
+        Err(_) => id
+            .parse::<BlockNumberOrTag>()
+            .map_err(|_| EntityIdError::InvalidBlockNumber),
     }
 }
 
