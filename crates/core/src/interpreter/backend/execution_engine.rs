@@ -1,16 +1,18 @@
-use crate::common::{
-    entity::Entity,
-    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
-    types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
-};
+use std::error::Error;
+
 use alloy::{
     primitives::{Address, FixedBytes},
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
 };
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use tabled::Tabled;
+
+use crate::common::{
+    entity::{Entity, EntityError},
+    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
+    types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
+};
 
 use super::block_resolver::resolve_block_query;
 
@@ -90,12 +92,12 @@ impl ExecutionEngine {
                     .iter()
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<AccountField>, _>>()?;
-
-                if let Ok(address) = address {
-                    let account = self.get_account(address, fields, &provider).await?;
-                    Ok(ExpressionResult::Account(account))
-                } else {
-                    panic!("Invalid address");
+                match address {
+                    Ok(address) => {
+                        let account = self.get_account(address, fields, &provider).await?;
+                        Ok(ExpressionResult::Account(account))
+                    }
+                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
             }
             Entity::Transaction => {
@@ -106,11 +108,12 @@ impl ExecutionEngine {
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<TransactionField>, _>>()?;
 
-                if let Ok(hash) = hash {
-                    let tx = self.get_transaction(hash, fields, &provider).await?;
-                    Ok(ExpressionResult::Transaction(tx))
-                } else {
-                    panic!("Invalid transaction hash");
+                match hash {
+                    Ok(hash) => {
+                        let tx = self.get_transaction(hash, fields, &provider).await?;
+                        Ok(ExpressionResult::Transaction(tx))
+                    }
+                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
             }
         }
@@ -228,7 +231,15 @@ impl ExecutionEngine {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::str::FromStr;
+
+    use alloy::{
+        eips::BlockNumberOrTag,
+        primitives::{address, Address, b256, bloom, bytes, U256},
+    };
+    #[cfg(test)]
+    use pretty_assertions::assert_eq;
+
     use crate::common::{
         chain::Chain,
         ens::NameOrAddress,
@@ -236,13 +247,8 @@ mod test {
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
-    use alloy::{
-        eips::BlockNumberOrTag,
-        primitives::{address, b256, bloom, bytes, Address, U256},
-    };
-    #[cfg(test)]
-    use pretty_assertions::assert_eq;
-    use std::str::FromStr;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_get_block_fields() {
@@ -364,6 +370,21 @@ mod test {
                 }
             }
         }
+    }
+    #[tokio::test]
+    async fn test_get_account_fields_using_invalid_ens() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Account,
+            entity_id: EntityId::Account(NameOrAddress::Name(String::from(
+                "thisisinvalid235790123801.eth",
+            ))),
+            fields: vec![Field::Account(AccountField::Balance)],
+            query: String::from(""),
+        })];
+        let execution_result = execution_engine.run(expressions).await;
+        assert!(execution_result.is_err())
     }
 
     #[tokio::test]
