@@ -1,4 +1,4 @@
-program = _{SOI ~ (get){1, } ~ eoi}
+program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
     "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
@@ -6,8 +6,6 @@ get       = {
 fields    = { (account_field_list | block_field_list | tx_field_list) }
 entity    = { "account" | "block" | "tx" }
 entity_id = { hash | account_id | integer }
-exp_separator = _{"," | ";"}
-eoi = _{ !ANY } //silent EOI
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
@@ -86,4 +84,6 @@ ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 
 // Helpers
 WHITESPACE = _{ " " | "\t" | NEWLINE }
+exp_separator = _{"," | ";"}
+silent_eoi = _{ !ANY }
 
