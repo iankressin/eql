@@ -222,7 +222,7 @@ impl Repl {
                     });
                 }
                 ExpressionResult::Block(query_res) => {
-                    let mut table = Table::new(vec![query_res]);
+                    let mut table = Table::new(query_res);
                     table.with(Style::rounded());
                     table.to_string().split("\n").for_each(|line| {
                         queue!(stdout(), MoveToNextLine(1), Print(line.cyan())).unwrap();
