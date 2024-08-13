@@ -13,18 +13,6 @@ pub enum EntityId {
     Account(NameOrAddress),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct BlockRange {
-    start: BlockNumberOrTag,
-    end: Option<BlockNumberOrTag>,
-}
-
-impl BlockRange {
-    pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
-        Self { start, end }
-    }
-}
-
 // TODO: return instance of Error trait instead of &'static str
 impl TryFrom<&str> for EntityId {
     type Error = Box<dyn Error>;
@@ -58,27 +46,6 @@ impl TryFrom<&str> for EntityId {
             Ok(EntityId::Block(BlockRange { start, end }))
         }
     }
-}
-
-fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
-    match id.parse::<u64>() {
-        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
-        Err(_) => id
-            .parse::<BlockNumberOrTag>()
-            .map_err(|_| EntityIdError::InvalidBlockNumber),
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum EntityIdError {
-    #[error("Invalid address")]
-    InvalidAddress,
-    #[error("Invalid tx hash")]
-    InvalidTxHash,
-    #[error("Invalid block number")]
-    InvalidBlockNumber,
-    #[error("Unable resolve ENS name")]
-    EnsResolution,
 }
 
 impl EntityId {
@@ -120,5 +87,39 @@ impl EntityId {
             },
             _ => Err(EntityIdError::InvalidAddress),
         }
+    }
+}
+
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct BlockRange {
+    start: BlockNumberOrTag,
+    end: Option<BlockNumberOrTag>,
+}
+
+impl BlockRange {
+    pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
+        Self { start, end }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum EntityIdError {
+    #[error("Invalid address")]
+    InvalidAddress,
+    #[error("Invalid tx hash")]
+    InvalidTxHash,
+    #[error("Invalid block number")]
+    InvalidBlockNumber,
+    #[error("Unable resolve ENS name")]
+    EnsResolution,
+}
+
+fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
+    match id.parse::<u64>() {
+        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
+        Err(_) => id
+            .parse::<BlockNumberOrTag>()
+            .map_err(|_| EntityIdError::InvalidBlockNumber),
     }
 }

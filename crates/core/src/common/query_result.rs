@@ -135,7 +135,6 @@ pub struct TransactionQueryRes {
     #[tabled(display_with = "display_option")]
     pub max_fee_per_blob_gas: Option<u128>,
     #[tabled(display_with = "display_option")]
-    #[tabled(display_with = "display_option")]
     pub max_fee_per_gas: Option<u128>,
     #[tabled(display_with = "display_option")]
     pub max_priority_fee_per_gas: Option<u128>,
@@ -163,6 +162,57 @@ impl Default for TransactionQueryRes {
             max_fee_per_gas: None,
             max_priority_fee_per_gas: None,
             y_parity: None,
+        }
+    }
+}
+
+// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
+#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
+pub struct LogQueryRes {
+    #[tabled(display_with = "display_option")]
+    pub address: Option<Address>,
+    #[tabled(display_with = "display_option")]
+    pub topic0: Option<FixedBytes<32>>,
+    #[tabled(display_with = "display_option")]
+    pub topic1: Option<FixedBytes<32>>,
+    #[tabled(display_with = "display_option")]
+    pub topic2: Option<FixedBytes<32>>,
+    #[tabled(display_with = "display_option")]
+    pub topic3: Option<FixedBytes<32>>,
+    #[tabled(display_with = "display_option")]
+    pub data: Option<Bytes>,
+    #[tabled(display_with = "display_option")]
+    pub block_hash: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub block_number: Option<u64>,
+    #[tabled(display_with = "display_option")]
+    pub block_timestamp: Option<u64>,
+    #[tabled(display_with = "display_option")]
+    pub transaction_hash: Option<B256>,
+    #[tabled(display_with = "display_option")]
+    pub transaction_index: Option<u64>,
+    #[tabled(display_with = "display_option")]
+    pub log_index: Option<u64>,
+    #[tabled(display_with = "display_option")]
+    pub removed: Option<bool>,
+}
+
+impl Default for LogQueryRes {
+    fn default() -> Self {
+        Self {
+            address: None,
+            topic0: None,
+            topic1: None,
+            topic2: None,
+            topic3: None,
+            data: None,
+            block_hash: None,
+            block_number: None,
+            block_timestamp: None,
+            transaction_hash: None,
+            transaction_index: None,
+            log_index: None,
+            removed: None,
         }
     }
 }

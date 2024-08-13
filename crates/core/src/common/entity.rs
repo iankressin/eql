@@ -7,6 +7,7 @@ pub enum Entity {
     Block,
     Transaction,
     Account,
+    Log,
 }
 
 impl Display for Entity {
@@ -15,6 +16,7 @@ impl Display for Entity {
             Entity::Block => write!(f, "block"),
             Entity::Transaction => write!(f, "transaction"),
             Entity::Account => write!(f, "account"),
+            Entity::Log => write!(f, "log"),
         }
     }
 }
@@ -33,6 +35,7 @@ impl TryFrom<&str> for Entity {
             "block" => Ok(Entity::Block),
             "tx" => Ok(Entity::Transaction),
             "account" => Ok(Entity::Account),
+            "log" => Ok(Entity::Log),
             invalid_entity => Err(EntityError::InvalidEntity(invalid_entity.to_string())),
         }
     }

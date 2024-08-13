@@ -1,12 +1,13 @@
 use crate::common::{
     entity::Entity,
-    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
-    types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
+    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes, LogQueryRes},
+    types::{AccountField, BlockField, TransactionField, LogField, Expression, GetExpression},
 };
 use alloy::{
     primitives::{Address, FixedBytes},
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
+    rpc::types::Filter
 };
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -34,6 +35,8 @@ pub enum ExpressionResult {
     Block(Vec<BlockQueryRes>),
     #[serde(rename = "transaction")]
     Transaction(TransactionQueryRes),
+    #[serde(rename = "log")]
+    Log(LogQueryRes),
 }
 
 pub struct ExecutionEngine;
@@ -112,6 +115,17 @@ impl ExecutionEngine {
                 } else {
                     panic!("Invalid transaction hash");
                 }
+            }
+            Entity::Log => {
+                let filter = expr.entity_id.to_filter();
+                let fields = expr
+                    .fields
+                    .iter()
+                    .map(|field| field.try_into())
+                    .collect::<Result<Vec<LogField>, _>>()?;
+
+                let log = self.get_logs(filter, fields, &provider).await?;
+                Ok(ExpressionResult::Log(log))
             }
         }
     }
@@ -224,6 +238,69 @@ impl ExecutionEngine {
 
         Ok(account)
     }
+
+    async fn get_logs(
+        &self,
+        filter: Filter,
+        fields: Vec<LogField>,
+        provider: &RootProvider<Http<Client>>,
+    ) -> Result<LogQueryRes, Box<dyn Error>> {
+
+        let mut result = LogQueryRes::default();
+        let log = provider.get_logs(&filter).await?;
+        if log.is_empty() {
+            return Err("No logs found".into()); // Check if this is the best approach for no logs return. I understand it shouldn't panic.
+        }
+        else{
+            let log = log[0].clone(); //Fix to return a range
+            println!("{:#?}", log);
+            for field in &fields {
+                match field {
+                    LogField::Address => {
+                        result.address = Some(log.inner.address);
+                    }
+                    LogField::Topic0 => {
+                        result.topic0 = log.topic0().copied();
+                    }
+                    LogField::Topic1 => {
+                        result.topic1 = log.inner.data.topics().get(1).copied();
+                    }
+                    LogField::Topic2 => {
+                        result.topic2 = log.inner.data.topics().get(2).copied();
+                    }
+                    LogField::Topic3 => {
+                        result.topic3 = log.inner.data.topics().get(3).copied();
+                    }
+                    LogField::Data => {
+                        result.data = Some(log.data().data.clone());
+                    }
+                    LogField::BlockHash => {
+                        result.block_hash = log.block_hash;
+                    }
+                    LogField::BlockNumber => {
+                        result.block_number = log.block_number;
+                    }
+                    LogField::BlockTimestamp => {
+                        result.block_timestamp = log.block_timestamp;
+                    }
+                    LogField::TransactionHash => {
+                        result.transaction_hash = log.transaction_hash;
+                    }
+                    LogField::TransactionIndex => {
+                        result.transaction_index = log.transaction_index;
+                    }
+                    LogField::LogIndex => {
+                        result.log_index = log.log_index;
+                    }
+                    LogField::Removed => {
+                        result.removed = Some(log.removed); //Check this return is ok
+                    }
+                }
+            }
+            Ok(result)
+        }
+        
+    }
 }
 
 #[cfg(test)]
@@ -240,9 +317,53 @@ mod test {
         eips::BlockNumberOrTag,
         primitives::{address, b256, bloom, bytes, Address, U256},
     };
-    #[cfg(test)]
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
+
+    #[tokio::test]
+    async fn test_get_logs() {
+        let contract_address = Address::from_str("0x3c11f6265ddec22f4d049dde480615735f451646").unwrap();
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Log,
+            entity_filter: EntityFilter::Log(Filter::new().address(contract_address).select(20515003)),
+            fields: vec![
+                Field::Log(LogField::Address),
+                Field::Log(LogField::Topic0),
+                Field::Log(LogField::Topic1),
+                Field::Log(LogField::Topic2),
+                Field::Log(LogField::Topic3),
+                Field::Log(LogField::Data),
+                Field::Log(LogField::BlockHash),
+                Field::Log(LogField::BlockNumber),
+                Field::Log(LogField::BlockTimestamp),
+                Field::Log(LogField::TransactionHash),
+                Field::Log(LogField::TransactionIndex),
+                Field::Log(LogField::LogIndex),
+            ],
+            query: String::from(""),
+        })];
+        
+        let fields = vec![
+            Field::Log(LogField::Address),
+            Field::Log(LogField::Topic0),
+            Field::Log(LogField::Topic1),
+            Field::Log(LogField::Topic2),
+            Field::Log(LogField::Topic3),
+            Field::Log(LogField::Data),
+            Field::Log(LogField::BlockHash),
+            Field::Log(LogField::BlockNumber),
+            Field::Log(LogField::BlockTimestamp),
+            Field::Log(LogField::TransactionHash),
+            Field::Log(LogField::TransactionIndex),
+            Field::Log(LogField::LogIndex),
+        ];
+        let execution_result = execution_engine.run(expressions).await; 
+
+        println!("{:#?}", execution_result);
+    }
+
 
     #[tokio::test]
     async fn test_get_block_fields() {
@@ -309,6 +430,7 @@ mod test {
             }
             Err(_) => panic!("Error"),
         }
+
     }
 
     #[tokio::test]

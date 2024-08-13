@@ -37,6 +37,7 @@ pub enum Field {
     Account(AccountField),
     Block(BlockField),
     Transaction(TransactionField),
+    Log(LogField),
 }
 
 impl Display for Field {
@@ -45,6 +46,7 @@ impl Display for Field {
             Field::Account(account_field) => write!(f, "{}", account_field),
             Field::Block(block_field) => write!(f, "{}", block_field),
             Field::Transaction(transaction_field) => write!(f, "{}", transaction_field),
+            Field::Log(log_field) => write!(f, "{}", log_field),
         }
     }
 }
@@ -184,6 +186,45 @@ impl TryFrom<&str> for TransactionField {
     }
 }
 
+impl TryFrom<&Field> for LogField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(field: &Field) -> Result<Self, Self::Error> {
+        match field {
+            Field::Log(log_field) => Ok(*log_field),
+            invalid_field => Err(Box::new(FieldError::InvalidField(format!(
+                "Invalid field {:?} for entity log",
+                invalid_field
+            )))),
+        }
+    }
+}
+
+impl TryFrom<&str> for LogField{
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "address" => Ok(LogField::Address),
+            "topic0" => Ok(LogField::Topic0),
+            "topic1" => Ok(LogField::Topic1),
+            "topic2" => Ok(LogField::Topic2),
+            "topic3" => Ok(LogField::Topic3),
+            "data" => Ok(LogField::Data),
+            "block_hash" => Ok(LogField::BlockHash),
+            "block_number" => Ok(LogField::BlockNumber),
+            "block_timestamp" => Ok(LogField::BlockTimestamp),
+            "transaction_hash" => Ok(LogField::TransactionHash),
+            "transaction_index" => Ok(LogField::TransactionIndex),
+            "log_index" => Ok(LogField::LogIndex),
+            "removed" => Ok(LogField::Removed),
+            invalid_field => Err(Box::new(FieldError::InvalidField(
+                invalid_field.to_string(),
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AccountField {
     Address,
@@ -291,6 +332,43 @@ impl std::fmt::Display for TransactionField {
             TransactionField::MaxFeePerGas => write!(f, "max_fee_per_gas"),
             TransactionField::MaxPriorityFeePerGas => write!(f, "max_priority_fee_per_gas"),
             TransactionField::YParity => write!(f, "y_parity"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum LogField {
+    Address,
+    Topic0,
+    Topic1,
+    Topic2,
+    Topic3,
+    Data,
+    BlockHash,
+    BlockNumber,
+    BlockTimestamp,
+    TransactionHash,
+    TransactionIndex,
+    LogIndex,
+    Removed,
+}
+
+impl std::fmt::Display for LogField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogField::Address => write!(f, "address"),
+            LogField::Topic0 => write!(f, "topic0"),
+            LogField::Topic1 => write!(f, "topic1"),
+            LogField::Topic2 => write!(f, "topic2"),
+            LogField::Topic3 => write!(f, "topic3"),
+            LogField::Data => write!(f, "data"),
+            LogField::BlockHash => write!(f, "block_hash"),
+            LogField::BlockNumber => write!(f, "block_number"),
+            LogField::BlockTimestamp => write!(f, "block_timestamp"),
+            LogField::TransactionHash => write!(f, "transaction_hash"),
+            LogField::TransactionIndex => write!(f, "transaction_index"),
+            LogField::LogIndex => write!(f, "log_index"),
+            LogField::Removed => write!(f, "removed"),
         }
     }
 }
