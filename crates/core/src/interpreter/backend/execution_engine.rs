@@ -1,18 +1,16 @@
-use std::error::Error;
-
+use crate::common::{
+    entity::{Entity, EntityError},
+    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
+    types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
+};
 use alloy::{
     primitives::{Address, FixedBytes},
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
 };
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 use tabled::Tabled;
-
-use crate::common::{
-    entity::{Entity, EntityError},
-    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
-    types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
-};
 
 use super::block_resolver::resolve_block_query;
 
@@ -231,15 +229,7 @@ impl ExecutionEngine {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
-
-    use alloy::{
-        eips::BlockNumberOrTag,
-        primitives::{address, Address, b256, bloom, bytes, U256},
-    };
-    #[cfg(test)]
-    use pretty_assertions::assert_eq;
-
+    use super::*;
     use crate::common::{
         chain::Chain,
         ens::NameOrAddress,
@@ -247,8 +237,13 @@ mod test {
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
-
-    use super::*;
+    use alloy::{
+        eips::BlockNumberOrTag,
+        primitives::{address, b256, bloom, bytes, Address, U256},
+    };
+    #[cfg(test)]
+    use pretty_assertions::assert_eq;
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn test_get_block_fields() {
