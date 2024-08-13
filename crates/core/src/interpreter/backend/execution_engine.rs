@@ -1,5 +1,5 @@
 use crate::common::{
-    entity::Entity,
+    entity::{Entity, EntityError},
     query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
     types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
 };
@@ -90,12 +90,12 @@ impl ExecutionEngine {
                     .iter()
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<AccountField>, _>>()?;
-
-                if let Ok(address) = address {
-                    let account = self.get_account(address, fields, &provider).await?;
-                    Ok(ExpressionResult::Account(account))
-                } else {
-                    panic!("Invalid address");
+                match address {
+                    Ok(address) => {
+                        let account = self.get_account(address, fields, &provider).await?;
+                        Ok(ExpressionResult::Account(account))
+                    }
+                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
             }
             Entity::Transaction => {
@@ -106,11 +106,12 @@ impl ExecutionEngine {
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<TransactionField>, _>>()?;
 
-                if let Ok(hash) = hash {
-                    let tx = self.get_transaction(hash, fields, &provider).await?;
-                    Ok(ExpressionResult::Transaction(tx))
-                } else {
-                    panic!("Invalid transaction hash");
+                match hash {
+                    Ok(hash) => {
+                        let tx = self.get_transaction(hash, fields, &provider).await?;
+                        Ok(ExpressionResult::Transaction(tx))
+                    }
+                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
             }
         }
@@ -365,6 +366,21 @@ mod test {
             }
         }
     }
+    #[tokio::test]
+    async fn test_get_account_fields_using_invalid_ens() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Account,
+            entity_id: EntityId::Account(NameOrAddress::Name(String::from(
+                "thisisinvalid235790123801.eth",
+            ))),
+            fields: vec![Field::Account(AccountField::Balance)],
+            query: String::from(""),
+        })];
+        let execution_result = execution_engine.run(expressions).await;
+        assert!(execution_result.is_err())
+    }
 
     #[tokio::test]
     async fn test_get_transaction_fields() {
@@ -425,5 +441,39 @@ mod test {
             }
             Err(_) => panic!("Error"),
         }
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_get_transaction_fields_does_not_exist() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Transaction,
+            entity_id: EntityId::Transaction(b256!(
+                "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
+            )),
+            fields: vec![
+                Field::Transaction(TransactionField::TransactionType),
+                Field::Transaction(TransactionField::Hash),
+                Field::Transaction(TransactionField::From),
+                Field::Transaction(TransactionField::To),
+                Field::Transaction(TransactionField::Data),
+                Field::Transaction(TransactionField::Value),
+                Field::Transaction(TransactionField::GasPrice),
+                Field::Transaction(TransactionField::Gas),
+                Field::Transaction(TransactionField::Status),
+                Field::Transaction(TransactionField::ChainId),
+                Field::Transaction(TransactionField::V),
+                Field::Transaction(TransactionField::R),
+                Field::Transaction(TransactionField::S),
+                Field::Transaction(TransactionField::MaxFeePerBlobGas),
+                Field::Transaction(TransactionField::MaxFeePerGas),
+                Field::Transaction(TransactionField::MaxPriorityFeePerGas),
+                Field::Transaction(TransactionField::YParity),
+            ],
+            query: String::from(""),
+        })];
+        let _result = execution_engine.run(expressions).await;
     }
 }
