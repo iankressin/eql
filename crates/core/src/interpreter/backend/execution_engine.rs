@@ -1,3 +1,4 @@
+use super::block_resolver::resolve_block_query;
 use crate::common::{
     entity::{Entity, EntityError},
     query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes, LogQueryRes},
@@ -11,9 +12,6 @@ use alloy::{
 };
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use tabled::Tabled;
-
-use super::block_resolver::resolve_block_query;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
@@ -27,7 +25,7 @@ impl QueryResult {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum ExpressionResult {
     #[serde(rename = "account")]
     Account(AccountQueryRes),
@@ -471,7 +469,7 @@ mod test {
 
         match execution_result {
             Ok(results) => match &results[0] {
-                QueryResult { query, result } => {
+                QueryResult { query, result, .. } => {
                     assert_eq!(query, "");
                     match result {
                         ExpressionResult::Account(account) => {
@@ -499,7 +497,7 @@ mod test {
         let execution_result = execution_engine.run(expressions).await;
 
         match &execution_result.unwrap()[0] {
-            QueryResult { query, result } => {
+            QueryResult { query, result, .. } => {
                 assert_eq!(query, "");
                 match result {
                     ExpressionResult::Account(account) => {

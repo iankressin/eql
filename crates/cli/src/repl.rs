@@ -1,3 +1,4 @@
+use crate::to_table;
 use crossterm::{
     cursor::{MoveLeft, MoveRight, MoveTo, MoveToColumn, MoveToNextLine},
     event::{read, Event, KeyCode, KeyModifiers},
@@ -10,7 +11,6 @@ use eql_core::interpreter::{
     Interpreter,
 };
 use std::io::{stdout, Stdout, Write};
-use tabled::{settings::Style, Table};
 
 static REPL_LABEL: &str = "EQL >";
 
@@ -85,7 +85,7 @@ impl Repl {
                         // Delete character on Backspace
                         } else {
                             if self.cursor_pos > 1 {
-                                self.expression.remove(self.cursor_pos -2); // -2 because it's the previous index and cursor start at 1 while string indexes at 0.
+                                self.expression.remove(self.cursor_pos - 2); // -2 because it's the previous index and cursor start at 1 while string indexes at 0.
                             }
 
                             if self.cursor_pos > 1 {
@@ -97,8 +97,8 @@ impl Repl {
                     }
                     // Delete character on Delete
                     KeyCode::Delete => {
-                        if self.cursor_pos -1 < self.expression.len() { 
-                            self.expression.remove(self.cursor_pos -1); // -1 because cursor start at 1 while string indexes at 0.
+                        if self.cursor_pos - 1 < self.expression.len() {
+                            self.expression.remove(self.cursor_pos - 1); // -1 because cursor start at 1 while string indexes at 0.
                             self.redraw_line()?;
                         }
                     }
@@ -166,7 +166,7 @@ impl Repl {
                     }
                     // Handle Right arrow key to move cursor right
                     KeyCode::Right => {
-                        if self.cursor_pos -1 < self.expression.len() {
+                        if self.cursor_pos - 1 < self.expression.len() {
                             self.cursor_pos += 1;
                         }
                         queue!(self.stdout, MoveRight(1))?;
@@ -207,30 +207,34 @@ impl Repl {
 
     async fn run_expression(&self) -> Result<(), Box<dyn std::error::Error>> {
         let result = Interpreter::run_program(&self.expression).await?;
-        self.display_result(result);
+        self.display_result(result)?;
         Ok(())
     }
 
-    fn display_result(&self, query_results: Vec<QueryResult>) {
+    fn display_result(
+        &self,
+        query_results: Vec<QueryResult>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         for query_result in query_results {
             match query_result.result {
                 ExpressionResult::Account(query_res) => {
-                    let mut table = Table::new(vec![query_res]);
-                    table.with(Style::rounded());
+                    // AccountQueryRes only return single result as of now. But in the future
+                    // it'll return multiple results and we should remove the vec![].
+                    let table = to_table(vec![query_res])?;
                     table.to_string().split("\n").for_each(|line| {
                         queue!(stdout(), MoveToNextLine(1), Print(line.magenta())).unwrap();
                     });
                 }
                 ExpressionResult::Block(query_res) => {
-                    let mut table = Table::new(query_res);
-                    table.with(Style::rounded());
+                    let table = to_table(query_res)?;
                     table.to_string().split("\n").for_each(|line| {
                         queue!(stdout(), MoveToNextLine(1), Print(line.cyan())).unwrap();
                     });
                 }
                 ExpressionResult::Transaction(query_res) => {
-                    let mut table = Table::new(vec![query_res]);
-                    table.with(Style::rounded());
+                    // TransactionQueryRes only return single result as of now. But in the future
+                    // it'll return multiple results and we should remove the vec![].
+                    let table = to_table(vec![query_res])?;
                     table.to_string().split("\n").for_each(|line| {
                         queue!(stdout(), MoveToNextLine(1), Print(line.yellow())).unwrap();
                     });
@@ -244,6 +248,8 @@ impl Repl {
                 }
             }
         }
+
+        Ok(())
     }
 
     fn clear_screen(&mut self) -> Result<(), Box<dyn std::error::Error>> {
