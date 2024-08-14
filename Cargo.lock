@@ -990,16 +990,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "csv_to_table"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e7d5dc741fd78885a20898fb16ff888bb7b84ce2a2de63886be107a65eb7e86"
-dependencies = [
- "csv",
- "tabled 0.12.2",
-]
-
-[[package]]
 name = "darling"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1160,10 +1150,9 @@ dependencies = [
  "clap",
  "crossterm",
  "csv",
- "csv_to_table",
  "eql_core",
  "serde",
- "tabled 0.15.0",
+ "tabled",
  "tokio",
 ]
 
@@ -1907,17 +1896,6 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "papergrid"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae7891b22598926e4398790c8fe6447930c72a67d36d983a49d6ce682ce83290"
-dependencies = [
- "bytecount",
- "fnv",
- "unicode-width",
 ]
 
 [[package]]
@@ -2757,21 +2735,11 @@ checksum = "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
 
 [[package]]
 name = "tabled"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ce69a5028cd9576063ec1f48edb2c75339fd835e6094ef3e05b3a079bf594a6"
-dependencies = [
- "papergrid 0.9.1",
- "unicode-width",
-]
-
-[[package]]
-name = "tabled"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c998b0c8b921495196a48aabaf1901ff28be0760136e31604f7967b0792050e"
 dependencies = [
- "papergrid 0.11.0",
+ "papergrid",
  "tabled_derive",
  "unicode-width",
 ]
