@@ -74,25 +74,21 @@ impl ExecutionEngine {
 
         match expr.entity {
             Entity::Block => {
-                // let mut start_block;
-                // let mut end_block;
-
                 //First, check if expr.entity_id is Some(entity_id). If this condition is true, it calls the to_block_id method on entity_id.
                 //If expr.entity_id is None, the code then checks if expr.entity_filter is Some(entity_filter). If this condition is true, it calls the to_block_range method on entity_filter. 
                 //If neither entity_id nor entity_filter is present in expr, the code panics with the message "Invalid block_id".
-            //    let Some(start_block, end_block) = expr.entity_id.map(|entity_id| {
-            //         let start_block = entity_id.to_block_id();
-            //         let end_block = None;
-            //         (start_block, end_block)});
-
-
+     
                 let (start_block, end_block) = if let Some(entity_id) = &expr.entity_id {
                     let start_block = entity_id.to_block_id()?;
                     let end_block= None;
                     (start_block, end_block)
                 } else if let Some(entity_filter) = &expr.entity_filter {
-                    let (start_block, end_block) = entity_filter.to_block_range()?;
-                    (start_block, end_block)
+                    if entity_filter.len() == 1 {
+                        let (start_block, end_block) = entity_filter[0].to_block_range()?;
+                        (start_block, end_block)
+                    } else {
+                        panic!("Block filters don't support multiple filters"); // Check if this is the best approach for multiple filters. I understand it shouldn't panic.
+                    }
                 } else {
                     panic!("Invalid block_id"); 
                 };
@@ -150,23 +146,11 @@ impl ExecutionEngine {
                 }
             }
             Entity::Log => {
-                let filter = if let Some(filter) = &expr.entity_filter{
-                    filter.to_filter()?
-                } else {
-                    panic!("Invalid log filter");
-                };
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<LogField>, _>>()?;
-
-                let log = self.get_logs(filter, fields, &provider).await?;
-                Ok(ExpressionResult::Log(log))
-            }
-            Entity::Log => {
-                let filter = if let Some(filter) = &expr.entity_filter{
-                    filter.to_filter()?
+                let mut filter = Filter::new();
+                if let Some(entity_filter) = &expr.entity_filter{
+                    for entity_filter in entity_filter {
+                        filter = entity_filter.to_filter(filter)?;
+                    };
                 } else {
                     panic!("Invalid log filter");
                 };
@@ -305,7 +289,6 @@ impl ExecutionEngine {
         }
         else{
             let log = log[0].clone(); //Fix to return a range
-            println!("{:#?}", log);
             for field in &fields {
                 match field {
                     LogField::Address => {
@@ -376,7 +359,10 @@ mod test {
             chain: Chain::Ethereum,
             entity: Entity::Log,
             entity_id: None,
-            entity_filter: Some(EntityFilter::Log(BlockRange::new(BlockNumberOrTag::Number(20526954), None))),
+            entity_filter: Some(vec![
+                EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(20526954), Some(BlockNumberOrTag::Number(20526970)))),
+                // EntityFilter::LogEmitterAddress(Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap()),
+            ]),
             fields: vec![
                 Field::Log(LogField::Address),
                 Field::Log(LogField::Topic0),

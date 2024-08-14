@@ -26,7 +26,7 @@ pub struct EQLBuilder {
     fields: Option<Vec<Field>>,
     entity: Option<Entity>,
     entity_id: Option<EntityId>,
-    entity_filter: Option<EntityFilter>,
+    entity_filter: Option<Vec<EntityFilter>>,
     chain: Option<Chain>,
 }
 

@@ -207,10 +207,10 @@ mod tests {
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
             entity_id: None,
-            entity_filter: Some(EntityFilter::Block(BlockRange::new(
+            entity_filter: Some(vec![EntityFilter::BlockRange(BlockRange::new(
                 BlockNumberOrTag::Number(1),
                 Some(BlockNumberOrTag::Number(2)),
-            ))),
+            ))]),
             fields: vec![Field::Block(BlockField::Timestamp)],
             chain: Chain::Ethereum,
             query: source.to_string(),

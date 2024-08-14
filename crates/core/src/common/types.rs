@@ -16,7 +16,7 @@ pub enum Expression {
 pub struct GetExpression {
     pub entity: Entity,
     pub entity_id: Option<EntityId>,
-    pub entity_filter: Option<EntityFilter>,
+    pub entity_filter: Option<Vec<EntityFilter>>,
     pub fields: Vec<Field>,
     pub chain: Chain,
     pub query: String,

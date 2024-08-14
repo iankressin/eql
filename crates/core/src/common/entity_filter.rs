@@ -1,13 +1,15 @@
 use alloy::{
     eips::BlockNumberOrTag,
     rpc::types::Filter,
+    primitives::Address,
 };
 use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityFilter {
-    Block(BlockRange),
-    Log(BlockRange),
+    BlockRange(BlockRange),
+    LogBlockRange(BlockRange),
+    LogEmitterAddress(Address),
     Transaction(),
     Account(),
 
@@ -27,7 +29,7 @@ impl TryFrom<&str> for EntityFilter {
             None => parse_block_number_or_tag(id).map(|start| (start, None))?,
         };
 
-        Ok(EntityFilter::Block(BlockRange { start, end }))
+        Ok(EntityFilter::BlockRange(BlockRange { start, end }))
     }
 }
 
@@ -36,18 +38,22 @@ impl EntityFilter {
         &self,
     ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityFilterError> {
         match self {
-            EntityFilter::Block(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
+            EntityFilter::BlockRange(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
             _ => Err(EntityFilterError::InvalidBlockNumber),
         }
     }
 
-    pub fn to_filter(&self) -> Result<Filter, EntityFilterError> {
+    pub fn to_filter(&self, mut filter:Filter) -> Result<Filter, EntityFilterError> {
         match self {
-            EntityFilter::Log(block_id) => {
-                let mut filter = Filter::new().from_block(block_id.start);
+            EntityFilter::LogBlockRange(block_id) => {
+                filter = filter.from_block(block_id.start);
                 if let Some(end) = block_id.end {
                     filter = filter.to_block(end);
                 }
+                Ok(filter)
+            }
+            EntityFilter::LogEmitterAddress(address) => {
+                filter = filter.address(*address);
                 Ok(filter)
             }
             _ => Err(EntityFilterError::InvalidBlockNumber),
