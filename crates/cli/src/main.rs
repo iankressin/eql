@@ -60,10 +60,7 @@ impl ResultHandler {
                     println!("{}", to_table(vec![query_res])?);
                 }
                 ExpressionResult::Log(query_res) => {
-                    println!("> {}", query_result.query);
-                    let mut table = Table::new(vec![query_res]);
-                    table.with(Style::rounded());
-                    println!("{}\n", table.to_string());
+                    println!("{}", to_table(query_res)?);
                 }
             }
         }

@@ -340,7 +340,7 @@ impl std::fmt::Display for TransactionField {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum LogField {
     Address,
     Topic0,

@@ -128,7 +128,7 @@ impl Default for TransactionQueryRes {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct LogQueryRes {
     pub address: Option<Address>,
     pub topic0: Option<FixedBytes<32>>,
@@ -136,7 +136,6 @@ pub struct LogQueryRes {
     pub topic2: Option<FixedBytes<32>>,
     pub topic3: Option<FixedBytes<32>>,
     pub data: Option<Bytes>,
-    #[serde(serialize_with = "serialize_option_u256")]
     pub block_hash: Option<B256>,
     pub block_number: Option<u64>,
     pub block_timestamp: Option<u64>,

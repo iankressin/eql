@@ -240,10 +240,9 @@ impl Repl {
                     });
                 }
                 ExpressionResult::Log(query_res) => {
-                    let mut table = Table::new(vec![query_res]);
-                    table.with(Style::rounded());
+                    let table = to_table(query_res)?;
                     table.to_string().split("\n").for_each(|line| {
-                        queue!(stdout(), MoveToNextLine(1), Print(line.green())).unwrap();
+                        queue!(stdout(), MoveToNextLine(1), Print(line.cyan())).unwrap();
                     });
                 }
             }

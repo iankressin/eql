@@ -34,7 +34,7 @@ pub enum ExpressionResult {
     #[serde(rename = "transaction")]
     Transaction(TransactionQueryRes),
     #[serde(rename = "log")]
-    Log(LogQueryRes),
+    Log(Vec<LogQueryRes>),
 }
 
 pub struct ExecutionEngine;
@@ -159,7 +159,11 @@ impl ExecutionEngine {
                     .collect::<Result<Vec<LogField>, _>>()?;
 
                 let log = self.get_logs(filter, fields, &provider).await?;
-                Ok(ExpressionResult::Log(log))
+                let mut log_query_res = vec![];
+                log_query_res.push(log);
+
+                Ok(ExpressionResult::Log(log_query_res))
+                
             }
         }
     }
