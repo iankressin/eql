@@ -8,7 +8,7 @@ use std::{error::Error, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityId {
-    Block(BlockRange),
+    Block(BlockNumberOrTag),
     Transaction(FixedBytes<32>),
     Account(NameOrAddress),
 }
@@ -34,26 +34,18 @@ impl TryFrom<&str> for EntityId {
             let ens = NameOrAddress::Name(id.to_string());
             Ok(EntityId::Account(ens))
         } else {
-            let (start, end) = match id.split_once(":") {
-                Some((start, end)) => {
-                    let start = parse_block_number_or_tag(start)?;
-                    let end = parse_block_number_or_tag(end)?;
-                    (start, Some(end))
-                }
-                None => parse_block_number_or_tag(id).map(|start| (start, None))?,
-            };
-
-            Ok(EntityId::Block(BlockRange { start, end }))
+            let block_number = parse_block_number_or_tag(id)?;
+            Ok(EntityId::Block(block_number))
         }
     }
 }
 
 impl EntityId {
-    pub fn to_block_range(
+    pub fn to_block_id(
         &self,
-    ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityIdError> {
+    ) -> Result<BlockNumberOrTag, EntityIdError> {
         match self {
-            EntityId::Block(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
+            EntityId::Block(block_id) => Ok(*block_id),
             _ => Err(EntityIdError::InvalidBlockNumber),
         }
     }
@@ -91,17 +83,17 @@ impl EntityId {
 }
 
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct BlockRange {
-    start: BlockNumberOrTag,
-    end: Option<BlockNumberOrTag>,
-}
+// #[derive(Debug, PartialEq, Eq, Clone)]
+// pub struct BlockRange {
+//     start: BlockNumberOrTag,
+//     end: Option<BlockNumberOrTag>,
+// }
 
-impl BlockRange {
-    pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
-        Self { start, end }
-    }
-}
+// impl BlockRange {
+//     pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
+//         Self { start, end }
+//     }
+// }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EntityIdError {
@@ -114,6 +106,8 @@ pub enum EntityIdError {
     #[error("Unable resolve ENS name")]
     EnsResolution,
 }
+
+//Do I need to repeat this here as well?
 
 fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
     match id.parse::<u64>() {

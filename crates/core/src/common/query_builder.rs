@@ -2,6 +2,7 @@ use super::{
     chain::Chain,
     entity::Entity,
     entity_id::EntityId,
+    entity_filter::EntityFilter,
     types::{Expression, Field, GetExpression},
 };
 use crate::interpreter::backend::execution_engine::{ExecutionEngine, QueryResult};
@@ -25,6 +26,7 @@ pub struct EQLBuilder {
     fields: Option<Vec<Field>>,
     entity: Option<Entity>,
     entity_id: Option<EntityId>,
+    entity_filter: Option<EntityFilter>,
     chain: Option<Chain>,
 }
 
@@ -34,6 +36,7 @@ impl EQLBuilder {
             fields: None,
             entity: None,
             entity_id: None,
+            entity_filter: None,
             chain: None,
         }
     }
@@ -43,11 +46,13 @@ impl EQLBuilder {
         self
     }
 
+    // I think this function will fail if I don't provide an entity_id, will need to come back here to fix it.
     pub fn from(&mut self, entity: Entity, entity_id: EntityId) -> &mut Self {
         self.entity = Some(entity);
         self.entity_id = Some(entity_id);
         self
     }
+    
 
     pub fn on(&mut self, chain: Chain) -> &mut Self {
         self.chain = Some(chain);
@@ -75,17 +80,21 @@ impl EQLBuilder {
             .ok_or(EQLBuilderError::MissingEntityError)?;
         let entity_id = self
             .entity_id
-            .clone()
-            .ok_or(EQLBuilderError::MissingEntityIdError)?;
+            .clone();
+            // .ok_or(EQLBuilderError::MissingEntityIdError)?;
         let chain = self
             .chain
             .clone()
             .ok_or(EQLBuilderError::MissingChainError)?;
+        let entity_filter = self
+            .entity_filter
+            .clone();
 
         Ok(Expression::Get(GetExpression {
             fields,
             entity,
             entity_id,
+            entity_filter,
             chain,
             query: "".to_string(),
         }))

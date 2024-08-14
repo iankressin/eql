@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
                 // TODO: We shouldn't need to call `trim()` here, but the parser is
                 // adding an extra whitespace when entity_id is block number.
                 // The grammar and productions should be double checked.
-                Rule::entity_id => get_expr.entity_id = pair.as_str().trim().try_into()?,
+                Rule::entity_id => get_expr.entity_id = Some(pair.as_str().trim().try_into()?),
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(
@@ -110,8 +110,8 @@ mod tests {
         chain::Chain,
         ens::NameOrAddress,
         entity::Entity,
-        entity_id::{BlockRange, EntityId},
-        types::*,
+        entity_filter::{EntityFilter, BlockRange},
+        entity_id::EntityId, types::*
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -126,7 +126,8 @@ mod tests {
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: EntityId::Account(NameOrAddress::Address(address)),
+            entity_id: Some(EntityId::Account(NameOrAddress::Address(address))),
+            entity_filter: None,
             fields: vec![
                 Field::Account(AccountField::Nonce),
                 Field::Account(AccountField::Balance),
@@ -149,7 +150,8 @@ mod tests {
         let name = String::from("vitalik.eth");
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: EntityId::Account(NameOrAddress::Name(name)),
+            entity_id: Some(EntityId::Account(NameOrAddress::Name(name))),
+            entity_filter: None,
             fields: vec![
                 Field::Account(AccountField::Nonce),
                 Field::Account(AccountField::Balance),
@@ -168,7 +170,8 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
+            entity_id: Some(EntityId::Block(BlockNumberOrTag::Number(1))),
+            entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::ParentHash),
                 Field::Block(BlockField::StateRoot),
@@ -197,15 +200,17 @@ mod tests {
         }
     }
 
+    //Need to run this test, because I think it will fail.
     #[test]
     fn test_build_get_ast_using_block_ranges() {
         let source = "GET timestamp FROM block 1:2 ON eth";
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: EntityId::Block(BlockRange::new(
+            entity_id: None,
+            entity_filter: Some(EntityFilter::Block(BlockRange::new(
                 BlockNumberOrTag::Number(1),
                 Some(BlockNumberOrTag::Number(2)),
-            )),
+            ))),
             fields: vec![Field::Block(BlockField::Timestamp)],
             chain: Chain::Ethereum,
             query: source.to_string(),
@@ -224,9 +229,10 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction,
-            entity_id: EntityId::Transaction(b256!(
+            entity_id: Some(EntityId::Transaction(b256!(
                 "8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81"
-            )),
+            ))),
+            entity_filter: None,
             fields: vec![
                 Field::Transaction(TransactionField::TransactionType),
                 Field::Transaction(TransactionField::Hash),

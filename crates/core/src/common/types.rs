@@ -1,7 +1,8 @@
 use super::{
     chain::Chain,
     entity::Entity,
-    entity_id::{BlockRange, EntityId},
+    entity_id::EntityId,
+    entity_filter::EntityFilter,
 };
 use alloy::eips::BlockNumberOrTag;
 use std::{error::Error, fmt::Display};
@@ -14,7 +15,8 @@ pub enum Expression {
 #[derive(Debug, PartialEq, Eq)]
 pub struct GetExpression {
     pub entity: Entity,
-    pub entity_id: EntityId,
+    pub entity_id: Option<EntityId>,
+    pub entity_filter: Option<EntityFilter>,
     pub fields: Vec<Field>,
     pub chain: Chain,
     pub query: String,
@@ -24,7 +26,8 @@ impl Default for GetExpression {
     fn default() -> Self {
         Self {
             entity: Entity::Block,
-            entity_id: EntityId::Block(BlockRange::new(BlockNumberOrTag::Earliest, None)),
+            entity_id: Some(EntityId::Block(BlockNumberOrTag::Latest)),
+            entity_filter: None,
             fields: vec![],
             chain: Chain::Ethereum,
             query: "".to_string(),

@@ -101,9 +101,10 @@ mod test {
     fn test_analyze_get_expression_with_wrong_fields() {
         let expressions = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: "0x1234567890123456789012345678901234567890"
+            entity_id: Some("0x1234567890123456789012345678901234567890"
                 .try_into()
-                .unwrap(),
+                .unwrap()),
+            entity_filter: None,
             chain: Chain::Ethereum,
             fields: vec![Field::Block(BlockField::Number)],
             // The query doesn't matter for this test
