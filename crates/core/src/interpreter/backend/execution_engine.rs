@@ -1,5 +1,5 @@
 use crate::common::{
-    entity::Entity,
+    entity::{Entity, EntityError},
     query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes, LogQueryRes},
     types::{AccountField, BlockField, TransactionField, LogField, Expression, GetExpression},
 };
@@ -104,13 +104,13 @@ impl ExecutionEngine {
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<BlockField>, _>>()?;
 
-                let block_query_res = resolve_block_query(start_block, end_block, fields, &provider).await?; //Forcing end_block = none here
+                let block_query_res = resolve_block_query(start_block, end_block, fields, &provider).await?;
 
                 Ok(ExpressionResult::Block(block_query_res))
             }
             Entity::Account => {
                 let address = if let Some(address_id) = &expr.entity_id {
-                    address_id.to_address().await?
+                    address_id.to_address().await
                 } else {
                     panic!("Invalid address");
                 };
@@ -120,9 +120,13 @@ impl ExecutionEngine {
                     .iter()
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<AccountField>, _>>()?;
-
-                let account = self.get_account(address, fields, &provider).await?;
-                Ok(ExpressionResult::Account(account))
+                match address {
+                    Ok(address) => {
+                        let account = self.get_account(address, fields, &provider).await?;
+                        Ok(ExpressionResult::Account(account))
+                    }
+                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
+                }
             }
             Entity::Transaction => {
                 let hash = if let Some(tx_id) = &expr.entity_id {
@@ -137,12 +141,28 @@ impl ExecutionEngine {
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<TransactionField>, _>>()?;
 
-                if let Ok(hash) = hash {
-                    let tx = self.get_transaction(hash, fields, &provider).await?;
-                    Ok(ExpressionResult::Transaction(tx))
-                } else {
-                    panic!("Invalid transaction hash");
+                match hash {
+                    Ok(hash) => {
+                        let tx = self.get_transaction(hash, fields, &provider).await?;
+                        Ok(ExpressionResult::Transaction(tx))
+                    }
+                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
+            }
+            Entity::Log => {
+                let filter = if let Some(filter) = &expr.entity_filter{
+                    filter.to_filter()?
+                } else {
+                    panic!("Invalid log filter");
+                };
+                let fields = expr
+                    .fields
+                    .iter()
+                    .map(|field| field.try_into())
+                    .collect::<Result<Vec<LogField>, _>>()?;
+
+                let log = self.get_logs(filter, fields, &provider).await?;
+                Ok(ExpressionResult::Log(log))
             }
             Entity::Log => {
                 let filter = if let Some(filter) = &expr.entity_filter{
@@ -504,6 +524,22 @@ mod test {
             }
         }
     }
+    #[tokio::test]
+    async fn test_get_account_fields_using_invalid_ens() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Account,
+            entity_id: Some(EntityId::Account(NameOrAddress::Name(String::from(
+                "thisisinvalid235790123801.eth",
+            )))),
+            entity_filter: None,
+            fields: vec![Field::Account(AccountField::Balance)],
+            query: String::from(""),
+        })];
+        let execution_result = execution_engine.run(expressions).await;
+        assert!(execution_result.is_err())
+    }
 
     #[tokio::test]
     async fn test_get_transaction_fields() {
@@ -563,5 +599,40 @@ mod test {
             }
             Err(_) => panic!("Error"),
         }
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_get_transaction_fields_does_not_exist() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Transaction,
+            entity_id: Some(EntityId::Transaction(b256!(
+                "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
+            ))),
+            entity_filter: None,
+            fields: vec![
+                Field::Transaction(TransactionField::TransactionType),
+                Field::Transaction(TransactionField::Hash),
+                Field::Transaction(TransactionField::From),
+                Field::Transaction(TransactionField::To),
+                Field::Transaction(TransactionField::Data),
+                Field::Transaction(TransactionField::Value),
+                Field::Transaction(TransactionField::GasPrice),
+                Field::Transaction(TransactionField::Gas),
+                Field::Transaction(TransactionField::Status),
+                Field::Transaction(TransactionField::ChainId),
+                Field::Transaction(TransactionField::V),
+                Field::Transaction(TransactionField::R),
+                Field::Transaction(TransactionField::S),
+                Field::Transaction(TransactionField::MaxFeePerBlobGas),
+                Field::Transaction(TransactionField::MaxFeePerGas),
+                Field::Transaction(TransactionField::MaxPriorityFeePerGas),
+                Field::Transaction(TransactionField::YParity),
+            ],
+            query: String::from(""),
+        })];
+        let _result = execution_engine.run(expressions).await;
     }
 }
