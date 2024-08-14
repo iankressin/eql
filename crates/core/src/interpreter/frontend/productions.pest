@@ -1,11 +1,13 @@
 program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
-    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
+    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ (entity_id | filter) ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
 }
-fields    = { (account_field_list | block_field_list | tx_field_list) }
-entity    = { "account" | "block" | "tx" }
-entity_id = { hash | account_id | integer }
+fields    = { (account_field_list | block_field_list | tx_field_list | log_field_list) }
+entity    = { "account" | "block" | "tx" | "log" }
+entity_id = { hash | account_id | block_id }
+filter = { "WHERE" ~ WHITESPACE* ~ entity_filter}
+entity_filter = { log_filter_list }
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
@@ -70,6 +72,31 @@ tx_field = {
     // EIP-2930
     "access_list" |
     "y_parity"
+}
+
+// Log
+log_field_list = _{ log_field ~ (", " ~ log_field)* }
+log_field      =  {
+    "address"
+   |"topic0"
+   |"topic1"
+   |"topic2"
+   |"topic3"
+   |"data"
+   |"blockhash"
+   |"blocknumber"
+   |"blocktimestamp"
+   |"transactionhash"
+   |"transactionindex"
+   |"logindex"
+   |"removed"
+}
+log_filter_list = _{ log_filter ~ (", " ~ log_filter)* }
+log_filter = {
+    ("address" ~ address)
+   |("topic0" ~ hash)
+   |("blockhash" ~ hash)
+   |("block" ~ block_id)
 }
 
 // Terminals

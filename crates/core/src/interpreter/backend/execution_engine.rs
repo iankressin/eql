@@ -159,9 +159,10 @@ impl ExecutionEngine {
                     .collect::<Result<Vec<LogField>, _>>()?;
 
                 let log = self.get_logs(filter, fields, &provider).await?;
+
+                //need to return a range of logs
                 let mut log_query_res = vec![];
                 log_query_res.push(log);
-
                 Ok(ExpressionResult::Log(log_query_res))
                 
             }
