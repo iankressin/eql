@@ -10,7 +10,7 @@ use alloy::{
     transports::http::{Client, Http},
 };
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Display};
+use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
