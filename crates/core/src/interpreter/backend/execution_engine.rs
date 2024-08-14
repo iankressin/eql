@@ -18,18 +18,6 @@ pub struct QueryResult {
     pub result: ExpressionResult,
 }
 
-impl Into<Vec<String>> for QueryResult {
-    fn into(self) -> Vec<String> {
-        match self.result {
-            ExpressionResult::Account(account) => vec![format!("{:?}", account)],
-            ExpressionResult::Block(block) => {
-                block.into_iter().map(|b| format!("{:?}", b)).collect()
-            }
-            ExpressionResult::Transaction(tx) => vec![format!("{:?}", tx)],
-        }
-    }
-}
-
 impl QueryResult {
     pub fn new(query: String, result: ExpressionResult) -> QueryResult {
         QueryResult { query, result }
@@ -44,16 +32,6 @@ pub enum ExpressionResult {
     Block(Vec<BlockQueryRes>),
     #[serde(rename = "transaction")]
     Transaction(TransactionQueryRes),
-}
-
-impl Display for ExpressionResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExpressionResult::Account(account) => write!(f, "{:?}", account),
-            ExpressionResult::Block(block) => write!(f, "{:?}", block),
-            ExpressionResult::Transaction(tx) => write!(f, "{:?}", tx),
-        }
-    }
 }
 
 pub struct ExecutionEngine;

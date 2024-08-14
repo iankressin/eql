@@ -40,16 +40,6 @@ pub enum Field {
     Transaction(TransactionField),
 }
 
-impl Into<String> for Field {
-    fn into(self) -> String {
-        match self {
-            Field::Account(account_field) => account_field.to_string(),
-            Field::Block(block_field) => block_field.to_string(),
-            Field::Transaction(transaction_field) => transaction_field.to_string(),
-        }
-    }
-}
-
 impl Display for Field {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
