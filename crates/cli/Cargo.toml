@@ -11,6 +11,9 @@ clap = { version = "4.5.7", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tabled = "0.15.0"
 crossterm = "0.27.0"
+csv = "1.1"
+csv_to_table = "0.3"
+serde = "1"
 
 [[bin]]
 name = "eql"
