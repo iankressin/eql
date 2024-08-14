@@ -1,6 +1,5 @@
 use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, B256, U256};
 use serde::{Deserialize, Serialize, Serializer};
-use tabled::Tabled;
 
 fn serialize_option_u256<S>(option: &Option<U256>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -12,44 +11,27 @@ where
     }
 }
 
-// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
 // TODO: should this be replaced with Alloy's Block?
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct BlockQueryRes {
-    #[tabled(display_with = "display_option")]
     pub number: Option<u64>,
-    #[tabled(display_with = "display_option")]
     pub timestamp: Option<u64>,
-    #[tabled(display_with = "display_option")]
     pub hash: Option<B256>,
-    #[tabled(display_with = "display_option")]
     #[serde(serialize_with = "serialize_option_u256")]
     pub size: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub parent_hash: Option<B256>,
-    #[tabled(display_with = "display_option")]
     pub state_root: Option<B256>,
-    #[tabled(display_with = "display_option")]
     pub transactions_root: Option<B256>,
-    #[tabled(display_with = "display_option")]
     pub receipts_root: Option<B256>,
-    #[tabled(display_with = "display_option")]
     pub logs_bloom: Option<Bloom>,
-    #[tabled(display_with = "display_option")]
     pub extra_data: Option<Bytes>,
-    #[tabled(display_with = "display_option")]
     pub mix_hash: Option<B256>,
-    #[tabled(display_with = "display_option")]
     pub total_difficulty: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub base_fee_per_gas: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub withdrawals_root: Option<B256>,
-    #[tabled(display_with = "display_option")]
     pub blob_gas_used: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub excess_blob_gas: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub parent_beacon_block_root: Option<B256>,
 }
 
@@ -77,17 +59,13 @@ impl Default for BlockQueryRes {
     }
 }
 
-// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct AccountQueryRes {
-    #[tabled(display_with = "display_option")]
     pub nonce: Option<u64>,
-    #[tabled(display_with = "display_option")]
     #[serde(serialize_with = "serialize_option_u256")]
     pub balance: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub address: Option<Address>,
-    #[tabled(display_with = "display_option")]
     pub code: Option<Bytes>,
 }
 
@@ -102,44 +80,26 @@ impl Default for AccountQueryRes {
     }
 }
 
-// TODO: core structs shouldn't derive Tabled. It must be implemented on the CLI crate
-#[derive(Debug, PartialEq, Eq, Tabled, Serialize, Deserialize, Clone)]
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct TransactionQueryRes {
-    #[tabled(display_with = "display_option")]
     pub transaction_type: Option<u8>,
-    #[tabled(display_with = "display_option")]
     pub hash: Option<FixedBytes<32>>,
-    #[tabled(display_with = "display_option")]
     pub from: Option<Address>,
-    #[tabled(display_with = "display_option")]
     pub to: Option<Address>,
-    #[tabled(display_with = "display_option")]
     pub data: Option<Bytes>,
-    #[tabled(display_with = "display_option")]
     #[serde(serialize_with = "serialize_option_u256")]
     pub value: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub gas_price: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub gas: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub status: Option<bool>,
-    #[tabled(display_with = "display_option")]
     pub chain_id: Option<u64>,
-    #[tabled(display_with = "display_option")]
     pub v: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub r: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub s: Option<U256>,
-    #[tabled(display_with = "display_option")]
     pub max_fee_per_blob_gas: Option<u128>,
-    #[tabled(display_with = "display_option")]
-    #[tabled(display_with = "display_option")]
     pub max_fee_per_gas: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub max_priority_fee_per_gas: Option<u128>,
-    #[tabled(display_with = "display_option")]
     pub y_parity: Option<bool>,
 }
 
@@ -164,14 +124,6 @@ impl Default for TransactionQueryRes {
             max_priority_fee_per_gas: None,
             y_parity: None,
         }
-    }
-}
-
-// TODO: move to another file
-fn display_option<T: std::fmt::Display>(value: &Option<T>) -> String {
-    match value {
-        Some(value) => value.to_string(),
-        None => "-".to_string(),
     }
 }
 

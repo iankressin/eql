@@ -4,6 +4,7 @@ use super::{
     entity_id::{BlockRange, EntityId},
 };
 use alloy::eips::BlockNumberOrTag;
+use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Display};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -32,7 +33,7 @@ impl Default for GetExpression {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Field {
     Account(AccountField),
     Block(BlockField),
@@ -184,7 +185,7 @@ impl TryFrom<&str> for TransactionField {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum AccountField {
     Address,
     Nonce,
@@ -204,7 +205,7 @@ impl Display for AccountField {
 }
 
 // TODO: should include nonce, transactions and withdrawals
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum BlockField {
     Number,
     Timestamp,
@@ -250,7 +251,7 @@ impl Display for BlockField {
 }
 
 // TODO: implement blob_versioned_hashes and access_list
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum TransactionField {
     TransactionType,
     Hash,

@@ -2,12 +2,14 @@ mod repl;
 
 use crate::repl::Repl;
 use clap::{Parser, Subcommand};
+use csv::{ReaderBuilder, Writer};
 use eql_core::interpreter::{
     backend::execution_engine::{ExpressionResult, QueryResult},
     Interpreter,
 };
+use serde::Serialize;
 use std::error::Error;
-use tabled::{settings::Style, Table};
+use tabled::{builder::Builder, settings::Style, Table};
 
 #[derive(Parser)]
 #[clap(
@@ -41,30 +43,52 @@ impl ResultHandler {
         ResultHandler
     }
 
-    pub fn handle_result(&self, query_results: Vec<QueryResult>) {
+    pub fn handle_result(&self, query_results: Vec<QueryResult>) -> Result<(), Box<dyn Error>> {
         for query_result in query_results {
             match query_result.result {
                 ExpressionResult::Account(query_res) => {
-                    println!("> {}", query_result.query);
-                    let mut table = Table::new(vec![query_res]);
-                    table.with(Style::rounded());
-                    println!("{}\n", table.to_string());
+                    // AccountQueryRes only return single result as of now. But in the future
+                    // it'll return multiple results and we should remove the vec![].
+                    println!("{}", to_table(vec![query_res])?);
                 }
                 ExpressionResult::Block(query_res) => {
-                    println!("> {}", query_result.query);
-                    let mut table = Table::new(query_res);
-                    table.with(Style::rounded());
-                    println!("{}\n", table.to_string());
+                    println!("{}", to_table(query_res)?);
                 }
                 ExpressionResult::Transaction(query_res) => {
-                    println!("> {}", query_result.query);
-                    let mut table = Table::new(vec![query_res]);
-                    table.with(Style::rounded());
-                    println!("{}\n", table.to_string());
+                    // TransactionQueryRes only return single result as of now. But in the future
+                    // it'll return multiple results and we should remove the vec![].
+                    println!("{}", to_table(vec![query_res])?);
                 }
             }
         }
+
+        Ok(())
     }
+}
+
+pub fn to_table<S: Serialize>(data: Vec<S>) -> Result<Table, Box<dyn Error>> {
+    let mut writer = Writer::from_writer(vec![]);
+
+    for entry in data {
+        writer.serialize(entry).unwrap();
+    }
+
+    let data = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+    let mut builder = Builder::default();
+    let reader = ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(data.as_bytes());
+
+    for record in reader.into_records() {
+        let record = record?;
+        let iter = record.iter().map(|s| s.to_owned());
+        builder.push_record(iter);
+    }
+
+    let mut table = builder.build();
+    table.with(Style::rounded());
+
+    Ok(table)
 }
 
 #[tokio::main]
@@ -78,7 +102,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             let result = Interpreter::run_program(&source).await;
             match result {
                 Ok(query_results) => {
-                    result_handler.handle_result(query_results);
+                    result_handler.handle_result(query_results)?;
                 }
                 Err(e) => {
                     eprintln!("{}", e);
