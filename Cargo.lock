@@ -1157,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "eql_cli"
-version = "0.1.0"
+version = "0.1.1-alpha"
 dependencies = [
  "clap",
  "crossterm",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "alloy",
  "async-trait",
@@ -1187,7 +1187,7 @@ dependencies = [
 
 [[package]]
 name = "eql_wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "eql_core",
  "getrandom",
