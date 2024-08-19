@@ -27,11 +27,11 @@ impl QueryResult {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum ExpressionResult {
     #[serde(rename = "account")]
-    Account(AccountQueryRes),
+    Account(Vec<AccountQueryRes>),
     #[serde(rename = "block")]
     Block(Vec<BlockQueryRes>),
     #[serde(rename = "transaction")]
-    Transaction(TransactionQueryRes),
+    Transaction(Vec<TransactionQueryRes>),
 }
 
 pub struct ExecutionEngine;
@@ -91,7 +91,9 @@ impl ExecutionEngine {
                 match address {
                     Ok(address) => {
                         let account = self.get_account(address, fields, &provider).await?;
-                        Ok(ExpressionResult::Account(account))
+                        // TODO: temporary solution, vec![] should be removed when we have multiple
+                        // transactions in the result
+                        Ok(ExpressionResult::Account(vec![account]))
                     }
                     Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
@@ -107,7 +109,9 @@ impl ExecutionEngine {
                 match hash {
                     Ok(hash) => {
                         let tx = self.get_transaction(hash, fields, &provider).await?;
-                        Ok(ExpressionResult::Transaction(tx))
+                        // TODO: temporary solution, vec![] should be removed when we have multiple
+                        // transactions in the result
+                        Ok(ExpressionResult::Transaction(vec![tx]))
                     }
                     Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
@@ -330,7 +334,7 @@ mod test {
                     assert_eq!(query, "");
                     match result {
                         ExpressionResult::Account(account) => {
-                            assert!(account.balance.is_some());
+                            assert!(account[0].balance.is_some());
                         }
                         _ => panic!("Invalid result"),
                     }
@@ -357,7 +361,7 @@ mod test {
                 assert_eq!(query, "");
                 match result {
                     ExpressionResult::Account(account) => {
-                        assert!(account.balance.is_some());
+                        assert!(account[0].balance.is_some());
                     }
                     _ => panic!("Invalid result"),
                 }
@@ -411,7 +415,7 @@ mod test {
             query: String::from(""),
         })];
         let result = execution_engine.run(expressions).await;
-        let expected = vec![ExpressionResult::Transaction(TransactionQueryRes {
+        let expected = vec![ExpressionResult::Transaction(vec![TransactionQueryRes {
             transaction_type: Some(2),
             hash: Some(b256!(
                 "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
@@ -431,7 +435,7 @@ mod test {
             max_fee_per_gas: Some(10209184711),
             max_priority_fee_per_gas: Some(0),
             y_parity: Some(false),
-        })];
+        }])];
 
         match result {
             Ok(results) => {
