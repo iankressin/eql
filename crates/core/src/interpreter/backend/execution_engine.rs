@@ -98,7 +98,8 @@ impl ExecutionEngine {
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<BlockField>, _>>()?;
 
-                let block_query_res = resolve_block_query(start_block, end_block, fields, &provider).await?;
+                let block_query_res = 
+                    resolve_block_query(start_block, end_block, fields, &provider).await?;
 
                 Ok(ExpressionResult::Block(block_query_res))
             }
@@ -345,7 +346,12 @@ impl ExecutionEngine {
 mod test {
     use super::*;
     use crate::common::{
-        chain::Chain, ens::NameOrAddress, entity_filter::{BlockRange, EntityFilter}, entity_id::EntityId, query_result::BlockQueryRes, types::{AccountField, BlockField, Expression, Field, GetExpression}
+        chain::Chain,
+        ens::NameOrAddress,
+        entity_id::EntityId,
+        entity_filter::{BlockRange, EntityFilter},
+        query_result::BlockQueryRes,
+        types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
     use alloy::{
         eips::BlockNumberOrTag,

@@ -165,14 +165,6 @@ impl Default for LogQueryRes {
     }
 }
 
-// TODO: move to another file
-fn display_option<T: std::fmt::Display>(value: &Option<T>) -> String {
-    match value {
-        Some(value) => value.to_string(),
-        None => "-".to_string(),
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::str::FromStr;

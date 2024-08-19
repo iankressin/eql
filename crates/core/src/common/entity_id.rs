@@ -82,19 +82,6 @@ impl EntityId {
     }
 }
 
-
-// #[derive(Debug, PartialEq, Eq, Clone)]
-// pub struct BlockRange {
-//     start: BlockNumberOrTag,
-//     end: Option<BlockNumberOrTag>,
-// }
-
-// impl BlockRange {
-//     pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
-//         Self { start, end }
-//     }
-// }
-
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EntityIdError {
     #[error("Invalid address")]
@@ -108,7 +95,6 @@ pub enum EntityIdError {
 }
 
 //Do I need to repeat this here as well?
-
 fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
     match id.parse::<u64>() {
         Ok(id) => Ok(BlockNumberOrTag::Number(id)),
