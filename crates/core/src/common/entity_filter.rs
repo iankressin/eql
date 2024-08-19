@@ -4,6 +4,8 @@ use alloy::{
     primitives::Address,
 };
 use std::error::Error;
+use pest::iterators::Pair;
+use crate::interpreter::frontend::parser::{ParserError, Rule};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityFilter {
@@ -15,21 +17,35 @@ pub enum EntityFilter {
 
 }
 
-// TODO: return instance of Error trait instead of &'static str
-impl TryFrom<&str> for EntityFilter {
+impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
     type Error = Box<dyn Error>;
 
-    fn try_from(id: &str) -> Result<Self, Self::Error> {
-        let (start, end) = match id.split_once(":") {
-            Some((start, end)) => {
-                let start = parse_block_number_or_tag(start)?;
-                let end = parse_block_number_or_tag(end)?;
-                (start, Some(end))
+    fn try_from(pair:Pair<'a, Rule>) -> Result<Self, Self::Error> {
+        match pair.as_rule() {
+            Rule::address_filter => {
+                let tochecksum = pair.as_str().trim_start_matches("address ");
+                let address = Address::parse_checksummed(tochecksum, None)
+                    .map_err(|e| format!("{}: {}", e, tochecksum))?;
+                Ok(EntityFilter::LogEmitterAddress(address))
+            },
+            Rule::blockrange_filter => {
+                let range = pair.as_str().trim_start_matches("block ");
+                match range.split_once(":") {
+                    //if ":" is present, we have an start and an end.
+                    Some((start, end)) => {
+                        let start = parse_block_number_or_tag(start)?;
+                        let end = Some(parse_block_number_or_tag(end)?);
+                        Ok(EntityFilter::LogBlockRange(BlockRange { start, end }))
+                    }
+                    //else we only have start.
+                    None => {
+                        let start = parse_block_number_or_tag(pair.as_str())?;
+                        Ok(EntityFilter::LogBlockRange(BlockRange { start, end: None }))
+                    }
+                }
             }
-            None => parse_block_number_or_tag(id).map(|start| (start, None))?,
-        };
-
-        Ok(EntityFilter::BlockRange(BlockRange { start, end }))
+            _ => Err(Box::new(ParserError::UnexpectedToken(pair.as_str().to_string()))),
+        }
     }
 }
 
