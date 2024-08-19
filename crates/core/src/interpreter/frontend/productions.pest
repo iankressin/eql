@@ -92,12 +92,12 @@ log_field      =  {
    |"topic2"
    |"topic3"
    |"data"
-   |"blockhash"
-   |"blocknumber"
+   |"block_hash"
+   |"block_number"
    |"block_timestamp"
-   |"transactionhash"
-   |"transactionindex"
-   |"logindex"
+   |"transaction_hash"
+   |"transaction_index"
+   |"log_index"
    |"removed"
 }
 log_filter_list = _{ log_filter ~ (", " ~ log_filter)* }
