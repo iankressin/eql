@@ -28,13 +28,13 @@ initial_message() {
 }
 
 detect_os() {
-    if [ "$OSTYPE" == "linux-gnu" ]; then
+    if [[ "$OSTYPE" == "linux-gnu" ]]; then
         ASSET_NAME=$LINUX_ASSET
         echo "[INFO] Linux detected"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         ASSET_NAME=$MAC_ASSET
         echo "[INFO] MacOS detected"
-    elif [ "$OSTYPE" == "cygwin" ]; then
+    elif [[ "$OSTYPE" == "cygwin" ]]; then
         echo "[INFO] On Windows, download the executable from the link below:"
         echo "{ $REPO_URL }/releases/latest"
         exit 1
