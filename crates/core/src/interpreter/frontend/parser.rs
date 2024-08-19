@@ -1,5 +1,8 @@
+use crate::common::entity_filter::{BlockRange, EntityFilter};
 use crate::common::types::{Expression, Field, GetExpression};
-use pest::iterators::Pairs;
+use alloy::eips::BlockNumberOrTag;
+use alloy::primitives::Address;
+use pest::iterators::{Pair, Pairs};
 use pest::Parser as PestParser;
 use pest_derive::Parser as DeriveParser;
 use std::error::Error;
@@ -65,6 +68,12 @@ impl<'a> Parser<'a> {
                 // adding an extra whitespace when entity_id is block number.
                 // The grammar and productions should be double checked.
                 Rule::entity_id => get_expr.entity_id = Some(pair.as_str().trim().try_into()?),
+                Rule::entity_filter => {
+                    get_expr.entity_filter = Some(pair
+                    .into_inner()
+                    .map(|pair| self.get_filter(pair))
+                    .collect::<Result<Vec<_>, _>>()?);
+                } 
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(
@@ -75,6 +84,25 @@ impl<'a> Parser<'a> {
         }
 
         Ok(get_expr)
+    }
+
+    fn get_filter(&self, pair: Pair<Rule>) -> Result<EntityFilter, Box<dyn Error>> {
+        match pair.as_rule() {
+            Rule::address_filter => {
+                let tochecksum = pair.into_inner().as_str();
+                let address = Address::parse_checksummed(tochecksum, None)
+                .map_err(|e| format!("{}: {}", e, tochecksum))?;
+                Ok(EntityFilter::LogEmitterAddress(address))
+            },
+            Rule::blockrange_filter => {
+                //in the unwraps below, the parser garantee that we won't have an error.
+                let (start, end) = pair.into_inner().as_str().split_once(":").unwrap();
+                let start = BlockNumberOrTag::Number(start.parse::<u64>().unwrap());
+                let end = Some(BlockNumberOrTag::Number(end.parse::<u64>().unwrap()));
+                Ok(EntityFilter::LogBlockRange(BlockRange::new(start, end)))
+            }
+            _ => Err(Box::new(ParserError::UnexpectedToken(pair.as_str().to_string())))
+        }
     }
 
     fn get_fields(&self, pairs: Pairs<Rule>) -> Result<Vec<Field>, Box<dyn Error>> {
@@ -90,6 +118,9 @@ impl<'a> Parser<'a> {
                 }
                 Rule::tx_field => {
                     fields.push(Field::Transaction(pair.as_str().try_into()?));
+                }
+                Rule::log_field => {
+                    fields.push(Field::Log(pair.as_str().try_into()?));
                 }
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(

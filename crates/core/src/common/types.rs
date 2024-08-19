@@ -4,7 +4,6 @@ use super::{
     entity_id::EntityId,
     entity_filter::EntityFilter,
 };
-use alloy::eips::BlockNumberOrTag;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Display};
 
@@ -27,7 +26,7 @@ impl Default for GetExpression {
     fn default() -> Self {
         Self {
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockNumberOrTag::Latest)),
+            entity_id: None,
             entity_filter: None,
             fields: vec![],
             chain: Chain::Ethereum,

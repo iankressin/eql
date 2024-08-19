@@ -75,7 +75,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     }
                 }
                 Field::Log(_) => {
-                    if get_expr.entity != Entity::Transaction {
+                    if get_expr.entity != Entity::Log {
                         return Err(Box::new(SemanticError::InvalidField {
                             field: field.clone(),
                             enetity: get_expr.entity.clone(),
