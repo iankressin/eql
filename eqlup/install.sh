@@ -1,6 +1,6 @@
 USERNAME="iankressin"
 REPO_NAME="eql"
-TXSUP_URL="https://raw.githubusercontent.com/${USERNAME}/${REPO_NAME}/main/eqlup/eqlup.sh"
+EQLUP_URL="https://raw.githubusercontent.com/${USERNAME}/${REPO_NAME}/main/eqlup/eqlup.sh"
 
 initial_message() {
     echo "
@@ -12,7 +12,7 @@ initial_message() {
     ╚══════╝ ╚══▀▀═╝ ╚══════╝
     "
 
-    echo "[INFO] Installing eqlup, the version manager of "
+    echo "[INFO] Installing eqlup, the version manager of EQL"
 }
 
 remove_old_version() {
@@ -22,7 +22,7 @@ remove_old_version() {
 }
 
 download_eqlup() {
-    curl -s -o eqlup.sh $TXSUP_URL
+    curl -s -o eqlup.sh $EQLUP_URL
     chmod +x eqlup.sh
 }
 

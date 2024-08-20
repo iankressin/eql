@@ -49,7 +49,7 @@ impl ResultHandler {
                 ExpressionResult::Account(query_res) => {
                     // AccountQueryRes only return single result as of now. But in the future
                     // it'll return multiple results and we should remove the vec![].
-                    println!("{}", to_table(vec![query_res])?);
+                    println!("{}", to_table(query_res)?);
                 }
                 ExpressionResult::Block(query_res) => {
                     println!("{}", to_table(query_res)?);
@@ -57,7 +57,7 @@ impl ResultHandler {
                 ExpressionResult::Transaction(query_res) => {
                     // TransactionQueryRes only return single result as of now. But in the future
                     // it'll return multiple results and we should remove the vec![].
-                    println!("{}", to_table(vec![query_res])?);
+                    println!("{}", to_table(query_res)?);
                 }
                 ExpressionResult::Log(query_res) => {
                     println!("{}", to_table(query_res)?);

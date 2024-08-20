@@ -9,7 +9,7 @@ LINUX_ASSET="eql"
 MAC_ASSET="eql"
 
 get_latest_release_tag() {
-    LATEST_RELEASE_TAG=$(curl -s "${REPO_API_URL}/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
+    LATEST_RELEASE_TAG=$(curl -s "${REPO_API_URL}/releases/latest" | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p')
 }
 
 initial_message() {
@@ -20,7 +20,6 @@ initial_message() {
     ██╔══╝  ██║▄▄ ██║██║     ██║   ██║██╔═══╝ 
     ███████╗╚██████╔╝███████╗╚██████╔╝██║     
     ╚══════╝ ╚══▀▀═╝ ╚══════╝ ╚═════╝ ╚═╝
-
         ((( The eql version manager )))
     "
 
@@ -28,13 +27,13 @@ initial_message() {
 }
 
 detect_os() {
-    if [ "$OSTYPE" == "linux-gnu" ]; then
+    if [[ "$OSTYPE" == "linux-gnu" ]]; then
         ASSET_NAME=$LINUX_ASSET
         echo "[INFO] Linux detected"
-    elif [ "$OSTYPE" == "darwin"* ]; then
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
         ASSET_NAME=$MAC_ASSET
         echo "[INFO] MacOS detected"
-    elif [ "$OSTYPE" == "cygwin" ]; then
+    elif [[ "$OSTYPE" == "cygwin" ]]; then
         echo "[INFO] On Windows, download the executable from the link below:"
         echo "{ $REPO_URL }/releases/latest"
         exit 1
