@@ -23,13 +23,13 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
     fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
         match pair.as_rule() {
             Rule::address_filter => {
-                let tochecksum = pair.as_str().trim_start_matches("address ");
+                let tochecksum = pair.as_str().trim_start_matches("address ").trim();
                 let address = Address::parse_checksummed(tochecksum, None)
                     .map_err(|e| format!("{}: {}", e, tochecksum))?;
                 Ok(EntityFilter::LogEmitterAddress(address))
             },
             Rule::blockrange_filter => {
-                let range = pair.as_str().trim_start_matches("block ");
+                let range = pair.as_str().trim_start_matches("block ").trim();
                 let (start, end) = match range.split_once(":") {
                     //if ":" is present, we have an start and an end.
                     Some((start, end)) => (
@@ -54,7 +54,7 @@ impl EntityFilter {
         &self,
     ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityFilterError> {
         match self {
-            EntityFilter::BlockRange(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
+            EntityFilter::LogBlockRange(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
             _ => Err(EntityFilterError::InvalidBlockNumber),
         }
     }
