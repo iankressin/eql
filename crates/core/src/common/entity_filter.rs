@@ -63,8 +63,8 @@ impl EntityFilter {
         match self {
             EntityFilter::LogBlockRange(block_id) => {
                 filter = filter.from_block(block_id.start);
-                if let Some(end) = block_id.end {
-                    filter = filter.to_block(end);
+                if block_id.end == None {
+                    filter = filter.to_block(block_id.start);
                 }
                 Ok(filter)
             }
