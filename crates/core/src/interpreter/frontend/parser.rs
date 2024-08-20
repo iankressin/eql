@@ -180,7 +180,7 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockNumberOrTag::Number(1))),
+            entity_id: Some(EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))),
             entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::ParentHash),

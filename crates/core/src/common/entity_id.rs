@@ -1,4 +1,4 @@
-use super::{chain::Chain, ens::NameOrAddress};
+use super::{chain::Chain, ens::NameOrAddress, entity_filter::BlockRange};
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, FixedBytes},
@@ -8,7 +8,7 @@ use std::{error::Error, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityId {
-    Block(BlockNumberOrTag),
+    Block(BlockRange),
     Transaction(FixedBytes<32>),
     Account(NameOrAddress),
 }
@@ -34,8 +34,16 @@ impl TryFrom<&str> for EntityId {
             let ens = NameOrAddress::Name(id.to_string());
             Ok(EntityId::Account(ens))
         } else {
-            let block_number = parse_block_number_or_tag(id)?;
-            Ok(EntityId::Block(block_number))
+            let (start, end) = match id.split_once(":") {
+                Some((start, end)) => {
+                    let start = parse_block_number_or_tag(start)?;
+                    let end = parse_block_number_or_tag(end)?;
+                    (start, Some(end))
+                }
+                None => parse_block_number_or_tag(id).map(|start| (start, None))?,
+            };
+
+            Ok(EntityId::Block(BlockRange { start, end }))
         }
     }
 }
@@ -43,9 +51,9 @@ impl TryFrom<&str> for EntityId {
 impl EntityId {
     pub fn to_block_id(
         &self,
-    ) -> Result<BlockNumberOrTag, EntityIdError> {
+    ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityIdError> {
         match self {
-            EntityId::Block(block_id) => Ok(*block_id),
+            EntityId::Block(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
             _ => Err(EntityIdError::InvalidBlockNumber),
         }
     }

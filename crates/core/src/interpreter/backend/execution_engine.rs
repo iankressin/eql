@@ -77,9 +77,7 @@ impl ExecutionEngine {
                 //If neither entity_id nor entity_filter is present in expr, the code panics with the message "Invalid block_id".
      
                 let (start_block, end_block) = if let Some(entity_id) = &expr.entity_id {
-                    let start_block = entity_id.to_block_id()?;
-                    let end_block= None;
-                    (start_block, end_block)
+                    entity_id.to_block_id()?
                 } else if let Some(entity_filter) = &expr.entity_filter {
                     if entity_filter.len() == 1 {
                         let (start_block, end_block) = entity_filter[0].to_block_range()?;
@@ -404,7 +402,7 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockNumberOrTag::Number(1))),
+            entity_id: Some(EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))),
             entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::Timestamp),

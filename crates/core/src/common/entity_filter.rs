@@ -77,11 +77,11 @@ impl EntityFilter {
     }
 }
 
-
+//I should provide methods to change start and end instead of making the params pub.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct BlockRange {
-    start: BlockNumberOrTag,
-    end: Option<BlockNumberOrTag>,
+    pub start: BlockNumberOrTag,
+    pub end: Option<BlockNumberOrTag>,
 }
 
 impl BlockRange {
