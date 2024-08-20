@@ -104,6 +104,9 @@ log_filter_list = _{ log_filter ~ (", " ~ log_filter)* }
 log_filter = _{
     address_filter
    |topic0_filter
+   |topic1_filter
+   |topic2_filter
+   |topic3_filter
    |blockhash_filter
    |blockrange_filter
 }
@@ -111,7 +114,10 @@ log_filter = _{
 //Filters
 address_filter = {"address" ~ address}
 topic0_filter = {"topic0" ~ hash}
-blockhash_filter = {"blockhash" ~ hash}
+topic1_filter = {"topic1" ~ hash}
+topic2_filter = {"topic2" ~ hash}
+topic3_filter = {"topic3" ~ hash}
+blockhash_filter = {("blockhash" | "block_hash") ~ hash}
 blockrange_filter = {"block" ~ block_id}
    
 // Terminals
