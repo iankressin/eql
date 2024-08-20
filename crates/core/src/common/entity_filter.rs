@@ -20,7 +20,7 @@ pub enum EntityFilter {
 impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
     type Error = Box<dyn Error>;
 
-    fn try_from(pair:Pair<'a, Rule>) -> Result<Self, Self::Error> {
+    fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
         match pair.as_rule() {
             Rule::address_filter => {
                 let tochecksum = pair.as_str().trim_start_matches("address ");
@@ -30,19 +30,19 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
             },
             Rule::blockrange_filter => {
                 let range = pair.as_str().trim_start_matches("block ");
-                match range.split_once(":") {
+                let (start, end) = match range.split_once(":") {
                     //if ":" is present, we have an start and an end.
-                    Some((start, end)) => {
-                        let start = parse_block_number_or_tag(start)?;
-                        let end = Some(parse_block_number_or_tag(end)?);
-                        Ok(EntityFilter::LogBlockRange(BlockRange { start, end }))
-                    }
+                    Some((start, end)) => (
+                        parse_block_number_or_tag(start)?,
+                        Some(parse_block_number_or_tag(end)?),
+                    ),
                     //else we only have start.
-                    None => {
-                        let start = parse_block_number_or_tag(pair.as_str())?;
-                        Ok(EntityFilter::LogBlockRange(BlockRange { start, end: None }))
-                    }
-                }
+                    None => (
+                        parse_block_number_or_tag(range)?,
+                        None,
+                    ),
+                };
+                Ok(EntityFilter::LogBlockRange(BlockRange { start, end }))
             }
             _ => Err(Box::new(ParserError::UnexpectedToken(pair.as_str().to_string()))),
         }
