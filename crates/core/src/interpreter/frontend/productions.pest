@@ -7,7 +7,7 @@ fields    = { (account_field_list | block_field_list | tx_field_list | log_field
 entity    = { "account" | "block" | "tx" | "log" }
 entity_id = { hash | account_id | block_id }
 filter = _{ "WHERE" ~ WHITESPACE* ~ entity_filter}
-entity_filter = { log_filter_list | block_filter_list | tx_filter_list}
+entity_filter = { log_filter_list | block_filter_list}
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }
@@ -76,11 +76,6 @@ tx_field = {
     // EIP-2930
     "access_list" |
     "y_parity"
-}
-
-tx_filter_list = _{ tx_filter ~ (", " ~ tx_filter)* }
-tx_filter = _{
-   blockrange_filter
 }
 
 // Log

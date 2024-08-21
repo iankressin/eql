@@ -6,10 +6,10 @@ use alloy::{
 use std::error::Error;
 use pest::iterators::Pair;
 use crate::interpreter::frontend::parser::{ParserError, Rule};
+use super::entity_id::parse_block_number_or_tag;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityFilter {
-    BlockRange(BlockRange),
     LogBlockRange(BlockRange),
     LogBlockHash(B256),
     LogEmitterAddress(Address),
@@ -18,9 +18,6 @@ pub enum EntityFilter {
     LogTopic1(B256),    
     LogTopic2(B256),
     LogTopic3(B256),
-    Transaction(),
-    Account(),
-
 }
 
 impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
@@ -85,16 +82,16 @@ impl EntityFilter {
         &self,
     ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityFilterError> {
         match self {
-            EntityFilter::LogBlockRange(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
+            EntityFilter::LogBlockRange(block_id) => Ok(block_id.range()),
             _ => Err(EntityFilterError::InvalidBlockNumber),
         }
     }
 
     pub fn to_filter(&self, mut filter: Filter) -> Result<Filter, EntityFilterError> {
         match self {
-            EntityFilter::LogBlockRange(block_id) => {
-                filter = filter.from_block(block_id.start);
-                filter = filter.to_block(block_id.end.unwrap_or(block_id.start)); // Use `unwrap_or` for conditional assignment
+            EntityFilter::LogBlockRange(range) => {
+                filter = filter.from_block(range.start);
+                filter = filter.to_block(range.end.unwrap_or(range.start)); // If end is None, range is actually one block. unwrap_or will reuse start as range end.
             }
             EntityFilter::LogBlockHash(hash) => filter = filter.at_block_hash(*hash),
             EntityFilter::LogEmitterAddress(address) => filter = filter.address(*address),
@@ -103,23 +100,25 @@ impl EntityFilter {
             EntityFilter::LogTopic1(topic_hash) => filter = filter.topic1(*topic_hash),
             EntityFilter::LogTopic2(topic_hash) => filter = filter.topic2(*topic_hash),
             EntityFilter::LogTopic3(topic_hash) => filter = filter.topic3(*topic_hash),
-            _ => return Err(EntityFilterError::InvalidBlockNumber), // Explicit return for error case
         }
     
         Ok(filter)
     }
 }
 
-//I should provide methods to change start and end instead of making the params pub.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct BlockRange {
-    pub start: BlockNumberOrTag,
-    pub end: Option<BlockNumberOrTag>,
+    start: BlockNumberOrTag,
+    end: Option<BlockNumberOrTag>,
 }
 
 impl BlockRange {
     pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
         Self { start, end }
+    }
+
+    pub fn range(&self) -> (BlockNumberOrTag, Option<BlockNumberOrTag>) {
+        (self.start, self.end)
     }
 }
 
@@ -127,13 +126,4 @@ impl BlockRange {
 pub enum EntityFilterError {
     #[error("Invalid block number")]
     InvalidBlockNumber,
-}
-
-fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityFilterError> {
-    match id.parse::<u64>() {
-        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
-        Err(_) => id
-            .parse::<BlockNumberOrTag>()
-            .map_err(|_| EntityFilterError::InvalidBlockNumber),
-    }
 }

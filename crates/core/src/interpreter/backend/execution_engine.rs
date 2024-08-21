@@ -83,7 +83,7 @@ impl ExecutionEngine {
                         let (start_block, end_block) = entity_filter[0].to_block_range()?;
                         (start_block, end_block)
                     } else {
-                        panic!("Block filters don't support multiple filters"); // Check if this is the best approach for multiple filters. I understand it shouldn't panic.
+                        return Err("Block filters don't support multiple filters".into()); // Check if this is the best approach for multiple filters.
                     }
                 } else {
                     panic!("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening."); 
@@ -338,7 +338,6 @@ mod test {
 
     #[tokio::test]
     async fn test_get_logs() {
-        // let contract_address = Address::from_str("0x3c11f6265ddec22f4d049dde480615735f451646").unwrap();
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
@@ -346,7 +345,7 @@ mod test {
             entity_id: None,
             entity_filter: Some(vec![
                 EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(20526954), Some(BlockNumberOrTag::Number(20526970)))),
-                // EntityFilter::LogEmitterAddress(Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap()),
+                EntityFilter::LogEmitterAddress(Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap()),
             ]),
             fields: vec![
                 Field::Log(LogField::Address),

@@ -43,7 +43,7 @@ impl TryFrom<&str> for EntityId {
                 None => parse_block_number_or_tag(id).map(|start| (start, None))?,
             };
 
-            Ok(EntityId::Block(BlockRange { start, end }))
+            Ok(EntityId::Block(BlockRange::new(start, end)))
         }
     }
 }
@@ -53,7 +53,7 @@ impl EntityId {
         &self,
     ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityIdError> {
         match self {
-            EntityId::Block(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
+            EntityId::Block(block_id) => Ok(block_id.range()),
             _ => Err(EntityIdError::InvalidBlockNumber),
         }
     }
@@ -102,8 +102,8 @@ pub enum EntityIdError {
     EnsResolution,
 }
 
-//Do I need to repeat this here as well?
-fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
+//Should it be moved to a separate module?
+pub fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
     match id.parse::<u64>() {
         Ok(id) => Ok(BlockNumberOrTag::Number(id)),
         Err(_) => id
