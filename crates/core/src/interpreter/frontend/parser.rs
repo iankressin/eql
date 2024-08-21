@@ -120,7 +120,7 @@ mod tests {
         chain::Chain,
         ens::NameOrAddress,
         entity::Entity,
-        entity_filter::{EntityFilter, BlockRange},
+        entity_filter::BlockRange,
         entity_id::EntityId, types::*
     };
     use alloy::{
@@ -210,17 +210,17 @@ mod tests {
         }
     }
 
-    //Need to run this test, because I think it will fail.
+    //Need to run this test, because I think it will fail. 
     #[test]
     fn test_build_get_ast_using_block_ranges() {
         let source = "GET timestamp FROM block 1:2 ON eth";
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: None,
-            entity_filter: Some(vec![EntityFilter::BlockRange(BlockRange::new(
+            entity_id: Some(EntityId::Block(BlockRange::new(
                 BlockNumberOrTag::Number(1),
                 Some(BlockNumberOrTag::Number(2)),
-            ))]),
+            ))),
+            entity_filter: None,
             fields: vec![Field::Block(BlockField::Timestamp)],
             chain: Chain::Ethereum,
             query: source.to_string(),

@@ -46,7 +46,6 @@ impl EQLBuilder {
         self
     }
 
-    // I think this function will fail if I don't provide an entity_id, will need to come back here to fix it.
     pub fn from(&mut self, entity: Entity, entity_id: EntityId) -> &mut Self {
         self.entity = Some(entity);
         self.entity_id = Some(entity_id);
@@ -81,7 +80,6 @@ impl EQLBuilder {
         let entity_id = self
             .entity_id
             .clone();
-            // .ok_or(EQLBuilderError::MissingEntityIdError)?;
         let chain = self
             .chain
             .clone()

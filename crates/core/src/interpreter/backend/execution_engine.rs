@@ -86,7 +86,7 @@ impl ExecutionEngine {
                         panic!("Block filters don't support multiple filters"); // Check if this is the best approach for multiple filters. I understand it shouldn't panic.
                     }
                 } else {
-                    panic!("Invalid block_id"); 
+                    panic!("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening."); 
                 };
         
                 
@@ -105,7 +105,7 @@ impl ExecutionEngine {
                 let address = if let Some(address_id) = &expr.entity_id {
                     address_id.to_address().await
                 } else {
-                    panic!("Invalid address");
+                    panic!("An address_id was not provided. Pest rules should have prevented this from happening.");
                 };
 
                 let fields = expr
@@ -127,7 +127,7 @@ impl ExecutionEngine {
                 let hash = if let Some(tx_id) = &expr.entity_id {
                     tx_id.to_tx_hash()
                 } else {
-                    panic!("Invalid transaction hash");
+                    panic!("A tx_id was not provided. Pest rules should have prevented this from happening.");
                 };
 
                 let fields = expr
@@ -153,7 +153,7 @@ impl ExecutionEngine {
                         filter = entity_filter.to_filter(filter)?;
                     };
                 } else {
-                    panic!("Invalid log filter");
+                    panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
                 };
                 let fields = expr
                     .fields
