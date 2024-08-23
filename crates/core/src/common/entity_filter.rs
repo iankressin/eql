@@ -52,6 +52,10 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
                 let hash = hash.parse::<B256>()?;
                 Ok(EntityFilter::LogBlockHash(hash))
             }
+            Rule::event_signature_filter => {
+                let signature = pair.as_str().trim_start_matches("event_signature ").trim();
+                Ok(EntityFilter::LogEventSignature(signature.to_string()))
+            }
             Rule::topic0_filter => {
                 let topic = pair.as_str().trim_start_matches("topic0 ").trim();
                 let topic = topic.parse::<B256>()?;

@@ -104,6 +104,7 @@ log_filter = _{
    |topic3_filter
    |blockhash_filter
    |blockrange_filter
+   |event_signature_filter
 }
 
 //Filters
@@ -114,16 +115,20 @@ topic2_filter = {"topic2" ~ hash}
 topic3_filter = {"topic3" ~ hash}
 blockhash_filter = {("blockhash" | "block_hash") ~ hash}
 blockrange_filter = {"block" ~ block_id}
+event_signature_filter ={"event_signature" ~ function_signature}
    
 // Terminals
 unit = { "ether" | "gwei" | "wei" }
-number = { float | integer }
-integer = { (ASCII_DIGIT)+ }
-float = { integer ~ "." ~ integer }
+number = _{ float | integer }
+integer = _{ (ASCII_DIGIT)+ }
+float = _{ integer ~ "." ~ integer }
 chain = { "eth" | "arb" | "op" | "base" | "blast" | "polygon" | "sepolia" }
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
+function_signature = { ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
+solidity_type = _{ ("uint" ~ size | "uint[]" | "uint" ) | ("bytes" ~ size | "bytes[]" | "bytes" ) | ("int" ~ size | "int[]" | "int" ) | ("address" ~ "[]"*) | "string" | "bool" }
+size = _{integer ~ "[]"*}
 
 // Helpers
 WHITESPACE = _{ " " | "\t" | NEWLINE }
