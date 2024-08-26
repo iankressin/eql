@@ -19,6 +19,76 @@ pub struct GetExpression {
     pub fields: Vec<Field>,
     pub chain: Chain,
     pub query: String,
+    pub dump: Option<Dump>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct Dump {
+    pub name: String,
+    pub format: DumpFormat,
+}
+
+impl Dump {
+    pub fn new(name: String, format: DumpFormat) -> Self {
+        Self { name, format }
+    }
+
+    pub fn path(&self) -> String {
+        format!("{}.{}", self.name, self.format)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DumpError {
+    #[error("Invalid dump: {0}")]
+    InvalidDump(String),
+}
+
+impl TryFrom<&str> for Dump {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let parts: Vec<&str> = value.split('.').collect();
+
+        if parts.len() != 2 {
+            return Err(Box::new(DumpError::InvalidDump(value.to_string())));
+        }
+
+        let name = parts[0].to_string().replace(">", "").trim().to_string();
+        let format = DumpFormat::try_from(parts[1])?;
+
+        Ok(Dump::new(name, format))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub enum DumpFormat {
+    Json,
+    Csv,
+    Parquet,
+}
+
+impl TryFrom<&str> for DumpFormat {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "json" => Ok(DumpFormat::Json),
+            "csv" => Ok(DumpFormat::Csv),
+            "parquet" => Ok(DumpFormat::Parquet),
+            invalid_format => Err(Box::new(DumpError::InvalidDump(invalid_format.to_string()))),
+        }
+    }
+}
+
+impl Display for DumpFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DumpFormat::Json => write!(f, "json"),
+            DumpFormat::Csv => write!(f, "csv"),
+            DumpFormat::Parquet => write!(f, "parquet"),
+        }
+    }
 }
 
 impl Default for GetExpression {
@@ -29,6 +99,7 @@ impl Default for GetExpression {
             fields: vec![],
             chain: Chain::Ethereum,
             query: "".to_string(),
+            dump: None,
         }
     }
 }

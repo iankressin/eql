@@ -1,11 +1,29 @@
 program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
-    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
+    "GET" ~
+    WHITESPACE* ~
+    fields* ~
+    WHITESPACE* ~
+    "FROM" ~
+    WHITESPACE* ~
+    entity ~
+    WHITESPACE* ~
+    entity_id ~
+    WHITESPACE* ~
+    "ON" ~
+    WHITESPACE* ~
+    chain ~
+    (WHITESPACE* ~ dump)* ~
+    exp_separator* ~
+    WHITESPACE*
 }
 fields    = { (account_field_list | block_field_list | tx_field_list) }
 entity    = { "account" | "block" | "tx" }
 entity_id = { hash | account_id | block_id }
+dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
+file_name = { (ASCII_ALPHANUMERIC)+ }
+file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
 
 // Account
 account_field_list = _{ account_field ~ (", " ~ account_field)* }

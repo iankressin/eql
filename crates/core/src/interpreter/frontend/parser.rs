@@ -66,6 +66,8 @@ impl<'a> Parser<'a> {
                 // The grammar and productions should be double checked.
                 Rule::entity_id => get_expr.entity_id = pair.as_str().trim().try_into()?,
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
+                // TODO: the name of the file is being stored along with the operator >
+                Rule::dump => get_expr.dump = Some(pair.as_str().try_into()?),
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(
                         pair.as_str().to_string(),
@@ -246,6 +248,24 @@ mod tests {
                 Field::Transaction(TransactionField::MaxPriorityFeePerGas),
                 Field::Transaction(TransactionField::YParity),
             ],
+            chain: Chain::Ethereum,
+            query: source.to_string(),
+        })];
+
+        match Parser::new(source).parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_with_dump() {
+        let source = "GET balance FROM account vitalik.eth ON eth > dump.csv";
+
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Account,
+            entity_id: EntityId::Account(NameOrAddress::Name("vitalik.eth".to_string())),
+            fields: vec![Field::Account(AccountField::Balance)],
             chain: Chain::Ethereum,
             query: source.to_string(),
         })];

@@ -1158,10 +1158,11 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.8"
+version = "0.1.10"
 dependencies = [
  "alloy",
  "async-trait",
+ "csv",
  "getrandom",
  "pest",
  "pest_derive",

@@ -1,7 +1,9 @@
 use super::block_resolver::resolve_block_query;
 use crate::common::{
     entity::{Entity, EntityError},
-    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes},
+    query_result::{
+        dump_results, AccountQueryRes, ExpressionResult, QueryResult, TransactionQueryRes,
+    },
     types::{AccountField, BlockField, Expression, GetExpression, TransactionField},
 };
 use alloy::{
@@ -9,30 +11,7 @@ use alloy::{
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
 };
-use serde::{Deserialize, Serialize};
 use std::error::Error;
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct QueryResult {
-    pub query: String,
-    pub result: ExpressionResult,
-}
-
-impl QueryResult {
-    pub fn new(query: String, result: ExpressionResult) -> QueryResult {
-        QueryResult { query, result }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub enum ExpressionResult {
-    #[serde(rename = "account")]
-    Account(Vec<AccountQueryRes>),
-    #[serde(rename = "block")]
-    Block(Vec<BlockQueryRes>),
-    #[serde(rename = "transaction")]
-    Transaction(Vec<TransactionQueryRes>),
-}
 
 pub struct ExecutionEngine;
 
@@ -67,7 +46,7 @@ impl ExecutionEngine {
         let rpc_url = expr.chain.rpc_url().parse()?;
         let provider = ProviderBuilder::new().on_http(rpc_url);
 
-        match expr.entity {
+        let result = match expr.entity {
             Entity::Block => {
                 let (start_block, end_block) = expr.entity_id.to_block_range()?;
                 let fields = expr
@@ -116,7 +95,12 @@ impl ExecutionEngine {
                     Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
                 }
             }
-        }
+        };
+
+        result.and_then(|result| {
+            expr.dump.as_ref().map(|dump| dump_results(&result, &dump));
+            Ok(result)
+        })
     }
 
     async fn get_transaction(
@@ -273,6 +257,7 @@ mod test {
                 Field::Block(BlockField::ParentBeaconBlockRoot),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let expected = ExpressionResult::Block(vec![BlockQueryRes {
             timestamp: Some(1438269988),
@@ -325,6 +310,7 @@ mod test {
             )),
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
 
@@ -353,6 +339,7 @@ mod test {
             entity_id: EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth"))),
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
 
@@ -379,6 +366,7 @@ mod test {
             ))),
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
         assert!(execution_result.is_err())
@@ -413,6 +401,7 @@ mod test {
                 Field::Transaction(TransactionField::YParity),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let result = execution_engine.run(expressions).await;
         let expected = vec![ExpressionResult::Transaction(vec![TransactionQueryRes {
@@ -475,6 +464,7 @@ mod test {
                 Field::Transaction(TransactionField::YParity),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let _result = execution_engine.run(expressions).await;
     }

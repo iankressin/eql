@@ -3,9 +3,9 @@ mod repl;
 use crate::repl::Repl;
 use clap::{Parser, Subcommand};
 use csv::{ReaderBuilder, Writer};
-use eql_core::interpreter::{
-    backend::execution_engine::{ExpressionResult, QueryResult},
-    Interpreter,
+use eql_core::{
+    common::query_result::{ExpressionResult, QueryResult},
+    interpreter::Interpreter,
 };
 use serde::Serialize;
 use std::error::Error;

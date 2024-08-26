@@ -2,9 +2,10 @@ use super::{
     chain::Chain,
     entity::Entity,
     entity_id::EntityId,
+    query_result::QueryResult,
     types::{Expression, Field, GetExpression},
 };
-use crate::interpreter::backend::execution_engine::{ExecutionEngine, QueryResult};
+use crate::interpreter::backend::execution_engine::ExecutionEngine;
 use std::error::Error;
 
 #[derive(Debug, thiserror::Error)]
@@ -88,6 +89,7 @@ impl EQLBuilder {
             entity_id,
             chain,
             query: "".to_string(),
+            dump: None,
         }))
     }
 }
