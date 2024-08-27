@@ -125,7 +125,7 @@ mod tests {
     };
     use alloy::{
         eips::BlockNumberOrTag,
-        primitives::{b256, Address},
+        primitives::{b256, address, Address},
     };
     use std::str::FromStr;
 
@@ -264,6 +264,65 @@ mod tests {
             chain: Chain::Ethereum,
             query: source.to_string(),
         })];
+
+        match Parser::new(source).parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_with_log_fields() {
+        let source = "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed FROM log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,
+        GET address FROM log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, topic0 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef, topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth";
+
+        let expected = vec![
+            Expression::Get(GetExpression {
+                entity: Entity::Log,
+                entity_id: None,
+                entity_filter: Some(
+                    vec![
+                        EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(4638757), None)),
+                        EntityFilter::LogEmitterAddress(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
+                        EntityFilter::LogTopic0(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
+                    ],
+                ),
+                fields: vec![
+                    Field::Log(LogField::Address),
+                    Field::Log(LogField::Topic0),
+                    Field::Log(LogField::Topic1),
+                    Field::Log(LogField::Topic2),
+                    Field::Log(LogField::Topic3),
+                    Field::Log(LogField::Data),
+                    Field::Log(LogField::BlockHash),
+                    Field::Log(LogField::BlockNumber),
+                    Field::Log(LogField::BlockTimestamp),
+                    Field::Log(LogField::TransactionHash),
+                    Field::Log(LogField::TransactionIndex),
+                    Field::Log(LogField::LogIndex),
+                    Field::Log(LogField::Removed),
+                ],
+                chain: Chain::Ethereum,
+                query: "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed FROM log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,\n        ".to_string()}),
+                
+            Expression::Get(GetExpression {
+                entity: Entity::Log,
+                entity_id: None,
+                entity_filter: Some(
+                    vec![
+                        EntityFilter::LogBlockHash(b256!("edb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b")),
+                        EntityFilter::LogTopic0(b256!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")),
+                        EntityFilter::LogTopic1(b256!("00000000000000000000000036928500bc1dcd7af6a2b4008875cc336b927d57")),
+                        EntityFilter::LogTopic2(b256!("000000000000000000000000c6cde7c39eb2f0f0095f41570af89efc2c1ea828")),
+                    ],
+                ),
+                fields: vec![
+                    Field::Log(LogField::Address),
+                ],
+                chain: Chain::Ethereum,
+                query: "GET address FROM log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, topic0 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef, topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth".to_string()}),
+                
+                ];
 
         match Parser::new(source).parse_expressions() {
             Ok(result) => assert_eq!(result, expected),

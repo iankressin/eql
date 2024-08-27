@@ -8,6 +8,12 @@ use pest::iterators::Pair;
 use crate::interpreter::frontend::parser::{ParserError, Rule};
 use super::entity_id::parse_block_number_or_tag;
 
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum EntityFilterError {
+    #[error("Invalid block number")]
+    InvalidBlockNumber,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EntityFilter {
     LogBlockRange(BlockRange),
@@ -132,10 +138,4 @@ impl BlockRange {
     pub fn range(&self) -> (BlockNumberOrTag, Option<BlockNumberOrTag>) {
         (self.start, self.end)
     }
-}
-
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum EntityFilterError {
-    #[error("Invalid block number")]
-    InvalidBlockNumber,
 }

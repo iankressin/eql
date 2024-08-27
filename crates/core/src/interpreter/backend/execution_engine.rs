@@ -342,8 +342,9 @@ mod test {
             entity: Entity::Log,
             entity_id: None,
             entity_filter: Some(vec![
-                EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(20526954), Some(BlockNumberOrTag::Number(20526970)))),
-                EntityFilter::LogEmitterAddress(Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap()),
+                EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(4638757), Some(BlockNumberOrTag::Number(4638758)))),
+                EntityFilter::LogEmitterAddress(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
+                EntityFilter::LogTopic0(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
             ]),
             fields: vec![
                 Field::Log(LogField::Address),
@@ -362,8 +363,28 @@ mod test {
             query: String::from(""),
         })];
         let execution_result = execution_engine.run(expressions).await; 
+        let expected = vec![LogQueryRes {
+            address: Some(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
+            topic0: Some(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
+            topic1: None,
+            topic2: None,
+            topic3: None,
+            data: Some(bytes!("00000000000000000000000000000000000000000000000000000002540be400")),
+            block_hash: Some(b256!("d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58")),
+            block_number: Some(4638757),
+            block_timestamp: Some(1511886266),
+            transaction_hash: Some(b256!("8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb")),
+            transaction_index: Some(9),
+            log_index: Some(5),
+            removed: None,
+        }];
 
-        println!("{:#?}", execution_result);
+        match execution_result {
+            Ok(results) => {
+                assert_eq!(results[0].result, ExpressionResult::Log(expected));
+            }
+            Err(_) => panic!("Error"),
+        }
     }
 
 
