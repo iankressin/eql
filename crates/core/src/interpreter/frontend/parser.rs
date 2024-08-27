@@ -67,11 +67,13 @@ impl<'a> Parser<'a> {
                 Rule::entity_id => get_expr.entity_id = pair.as_str().trim().try_into()?,
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
                 // TODO: the name of the file is being stored along with the operator >
-                Rule::dump => get_expr.dump = Some(pair.as_str().try_into()?),
+                Rule::dump => get_expr.dump = Some(pair.try_into()?),
                 _ => {
+                    let x = pair.as_rule();
+
                     return Err(Box::new(ParserError::UnexpectedToken(
                         pair.as_str().to_string(),
-                    )))
+                    )));
                 }
             }
         }
@@ -136,6 +138,7 @@ mod tests {
             ],
             chain: Chain::Ethereum,
             query: source.to_string(),
+            dump: None,
         })];
         let parser = Parser::new(source);
 
@@ -158,6 +161,7 @@ mod tests {
             ],
             chain: Chain::Ethereum,
             query: source.to_string(),
+            dump: None,
         })];
         let result = Parser::new(source).parse_expressions().unwrap();
 
@@ -189,6 +193,7 @@ mod tests {
             ],
             chain: Chain::Ethereum,
             query: source.to_string(),
+            dump: None,
         })];
 
         let parser = Parser::new(source);
@@ -211,6 +216,7 @@ mod tests {
             fields: vec![Field::Block(BlockField::Timestamp)],
             chain: Chain::Ethereum,
             query: source.to_string(),
+            dump: None,
         })];
         let result = Parser::new(source).parse_expressions();
 
@@ -250,6 +256,7 @@ mod tests {
             ],
             chain: Chain::Ethereum,
             query: source.to_string(),
+            dump: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -268,6 +275,7 @@ mod tests {
             fields: vec![Field::Account(AccountField::Balance)],
             chain: Chain::Ethereum,
             query: source.to_string(),
+            dump: Some(Dump::new("dump".to_string(), DumpFormat::Csv)),
         })];
 
         match Parser::new(source).parse_expressions() {

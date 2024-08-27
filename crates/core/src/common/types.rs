@@ -1,9 +1,12 @@
+use crate::interpreter::frontend::parser::Rule;
+
 use super::{
     chain::Chain,
     entity::Entity,
     entity_id::{BlockRange, EntityId},
 };
 use alloy::eips::BlockNumberOrTag;
+use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Display};
 
@@ -42,22 +45,36 @@ impl Dump {
 pub enum DumpError {
     #[error("Invalid dump: {0}")]
     InvalidDump(String),
+    #[error("File name not found")]
+    FileNameNotFound,
+    #[error("File format not found")]
+    FileFormatNotFound,
 }
 
-impl TryFrom<&str> for Dump {
+impl<'a> TryFrom<Pair<'a, Rule>> for Dump {
     type Error = Box<dyn Error>;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let parts: Vec<&str> = value.split('.').collect();
+    fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
+        match pair.as_rule() {
+            Rule::dump => {
+                let mut inner_rules = pair.into_inner();
 
-        if parts.len() != 2 {
-            return Err(Box::new(DumpError::InvalidDump(value.to_string())));
+                let name = inner_rules
+                    .next()
+                    .ok_or(Box::new(DumpError::FileNameNotFound))?
+                    .as_str()
+                    .to_string();
+
+                let format: DumpFormat = inner_rules
+                    .next()
+                    .ok_or(Box::new(DumpError::FileFormatNotFound))?
+                    .as_str()
+                    .try_into()?;
+
+                Ok(Dump::new(name, format))
+            }
+            _ => Err(Box::new(DumpError::InvalidDump(pair.as_str().to_string()))),
         }
-
-        let name = parts[0].to_string().replace(">", "").trim().to_string();
-        let format = DumpFormat::try_from(parts[1])?;
-
-        Ok(Dump::new(name, format))
     }
 }
 
