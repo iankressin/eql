@@ -1,6 +1,7 @@
 use super::block_resolver::resolve_block_query;
 use crate::common::{
     entity::{Entity, EntityError},
+    entity_filter::EntityFilter,
     query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes, LogQueryRes},
     types::{AccountField, BlockField, TransactionField, LogField, Expression, GetExpression},
 };
@@ -147,11 +148,8 @@ impl ExecutionEngine {
                 }
             }
             Entity::Log => {
-                let mut filter = Filter::new();
-                if let Some(entity_filter) = &expr.entity_filter{
-                    for entity_filter in entity_filter {
-                        filter = entity_filter.to_filter(filter)?;
-                    };
+                let filter = if let Some(entity_filter) = &expr.entity_filter {
+                    EntityFilter::build_filter(entity_filter)                
                 } else {
                     panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
                 };

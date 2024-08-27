@@ -81,30 +81,30 @@ tx_field = {
 // Log
 log_field_list = _{ log_field ~ (", " ~ log_field)* }
 log_field      =  {
-    "address"
-   |"topic0"
-   |"topic1"
-   |"topic2"
-   |"topic3"
-   |"data"
-   |"block_hash"
-   |"block_number"
-   |"block_timestamp"
-   |"transaction_hash"
-   |"transaction_index"
-   |"log_index"
-   |"removed"
+    "address" |
+    "topic0" |
+    "topic1" |
+    "topic2" |
+    "topic3" |
+    "data" |
+    "block_hash" |
+    "block_number" |
+    "block_timestamp" |
+    "transaction_hash" |
+    "transaction_index" |
+    "log_index" |
+    "removed"
 }
 log_filter_list = _{ log_filter ~ (", " ~ log_filter)* }
 log_filter = _{
-    address_filter
-   |topic0_filter
-   |topic1_filter
-   |topic2_filter
-   |topic3_filter
-   |blockhash_filter
-   |blockrange_filter
-   |event_signature_filter
+    address_filter |
+    topic0_filter |
+    topic1_filter |
+    topic2_filter |
+    topic3_filter |
+    blockhash_filter |
+    blockrange_filter |
+    event_signature_filter
 }
 
 //Filters
@@ -113,7 +113,7 @@ topic0_filter = {"topic0" ~ hash}
 topic1_filter = {"topic1" ~ hash}
 topic2_filter = {"topic2" ~ hash}
 topic3_filter = {"topic3" ~ hash}
-blockhash_filter = {("blockhash" | "block_hash") ~ hash}
+blockhash_filter = {"block_hash" ~ hash}
 blockrange_filter = {"block" ~ block_id}
 event_signature_filter ={"event_signature" ~ function_signature}
    
@@ -127,7 +127,7 @@ address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 function_signature = { ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
-solidity_type = _{ ("uint" ~ size | "uint[]" | "uint" ) | ("bytes" ~ size | "bytes[]" | "bytes" ) | ("int" ~ size | "int[]" | "int" ) | ("address" ~ "[]"*) | "string" | "bool" }
+solidity_type = _{ ("uint" ~ size | "uint[]" | "uint" ) | ("bytes" ~ size | "bytes[]" | "bytes" ) | ("int" ~ size | "int[]" | "int" ) | ("address" ~ "[]"*) | ("string" ~ "[]"*) | "bool" }
 size = _{integer ~ "[]"*}
 
 // Helpers

@@ -91,22 +91,30 @@ impl EntityFilter {
         }
     }
 
-    pub fn to_filter(&self, mut filter: Filter) -> Result<Filter, EntityFilterError> {
+    fn to_filter(&self, filter: Filter) -> Filter {
         match self {
             EntityFilter::LogBlockRange(range) => {
-                filter = filter.from_block(range.start);
-                filter = filter.to_block(range.end.unwrap_or(range.start)); // If end is None, range is actually one block. unwrap_or will reuse start as range end.
-            }
-            EntityFilter::LogBlockHash(hash) => filter = filter.at_block_hash(*hash),
-            EntityFilter::LogEmitterAddress(address) => filter = filter.address(*address),
-            EntityFilter::LogEventSignature(signature) => filter = filter.event(signature),
-            EntityFilter::LogTopic0(topic_hash) => filter = filter.event_signature(*topic_hash),
-            EntityFilter::LogTopic1(topic_hash) => filter = filter.topic1(*topic_hash),
-            EntityFilter::LogTopic2(topic_hash) => filter = filter.topic2(*topic_hash),
-            EntityFilter::LogTopic3(topic_hash) => filter = filter.topic3(*topic_hash),
+                filter.from_block(range.start)
+                    // If end is None, range is actually one block. unwrap_or will reuse start as range  
+                    .to_block(range.end.unwrap_or(range.start))
+            },
+            EntityFilter::LogBlockHash(hash) => filter.at_block_hash(*hash),
+            EntityFilter::LogEmitterAddress(address) => filter.address(*address),
+            EntityFilter::LogEventSignature(signature) => filter.event(signature),
+            EntityFilter::LogTopic0(topic_hash) => filter.event_signature(*topic_hash),
+            EntityFilter::LogTopic1(topic_hash) => filter.topic1(*topic_hash),
+            EntityFilter::LogTopic2(topic_hash) => filter.topic2(*topic_hash),
+            EntityFilter::LogTopic3(topic_hash) => filter.topic3(*topic_hash),
         }
-    
-        Ok(filter)
+
+    }
+
+    pub fn build_filter(entity_filters: &[EntityFilter]) -> Filter {
+        entity_filters
+            .iter()
+            .fold(Filter::new(), |filter, entity_filter| {
+                entity_filter.to_filter(filter)
+            })
     }
 }
 

@@ -26,7 +26,7 @@ pub struct EQLBuilder {
     fields: Option<Vec<Field>>,
     entity: Option<Entity>,
     entity_id: Option<EntityId>,
-    entity_filter: Option<Vec<EntityFilter>>,
+    entity_filters: Option<Vec<EntityFilter>>,
     chain: Option<Chain>,
 }
 
@@ -36,7 +36,7 @@ impl EQLBuilder {
             fields: None,
             entity: None,
             entity_id: None,
-            entity_filter: None,
+            entity_filters: None,
             chain: None,
         }
     }
@@ -51,7 +51,6 @@ impl EQLBuilder {
         self.entity_id = Some(entity_id);
         self
     }
-    
 
     pub fn on(&mut self, chain: Chain) -> &mut Self {
         self.chain = Some(chain);
@@ -85,7 +84,7 @@ impl EQLBuilder {
             .clone()
             .ok_or(EQLBuilderError::MissingChainError)?;
         let entity_filter = self
-            .entity_filter
+            .entity_filters
             .clone();
 
         Ok(Expression::Get(GetExpression {

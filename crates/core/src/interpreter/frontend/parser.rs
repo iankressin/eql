@@ -210,7 +210,6 @@ mod tests {
         }
     }
 
-    //Need to run this test, because I think it will fail. 
     #[test]
     fn test_build_get_ast_using_block_ranges() {
         let source = "GET timestamp FROM block 1:2 ON eth";
