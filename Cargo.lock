@@ -49,6 +49,7 @@ dependencies = [
  "alloy-network",
  "alloy-provider",
  "alloy-rpc-client",
+ "alloy-rpc-types",
  "alloy-serde",
  "alloy-transport",
  "alloy-transport-http",
@@ -292,6 +293,17 @@ dependencies = [
  "tower",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "alloy-rpc-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e5d76f1e8b22f48b7b8f985782b68e7eb3938780e50e8b646a53e41a598cdf5"
+dependencies = [
+ "alloy-rpc-types-eth",
+ "alloy-serde",
+ "serde",
 ]
 
 [[package]]
@@ -1158,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.8"
+version = "0.1.10"
 dependencies = [
  "alloy",
  "async-trait",
