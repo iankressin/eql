@@ -77,8 +77,6 @@ impl<'a> Parser<'a> {
                 // TODO: the name of the file is being stored along with the operator >
                 Rule::dump => get_expr.dump = Some(pair.try_into()?),
                 _ => {
-                    let x = pair.as_rule();
-
                     return Err(Box::new(ParserError::UnexpectedToken(
                         pair.as_str().to_string(),
                     )));
