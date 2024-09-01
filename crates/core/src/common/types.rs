@@ -1,10 +1,6 @@
 use crate::interpreter::frontend::parser::Rule;
 
-use super::{
-    chain::Chain,
-    entity::Entity,
-    entity_id::{BlockRange, EntityId},
-};
+use super::{chain::Chain, entity::Entity, entity_filter::EntityFilter, entity_id::EntityId};
 use alloy::eips::BlockNumberOrTag;
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
@@ -18,7 +14,8 @@ pub enum Expression {
 #[derive(Debug, PartialEq, Eq)]
 pub struct GetExpression {
     pub entity: Entity,
-    pub entity_id: EntityId,
+    pub entity_id: Option<EntityId>,
+    pub entity_filter: Option<Vec<EntityFilter>>,
     pub fields: Vec<Field>,
     pub chain: Chain,
     pub query: String,
@@ -112,7 +109,8 @@ impl Default for GetExpression {
     fn default() -> Self {
         Self {
             entity: Entity::Block,
-            entity_id: EntityId::Block(BlockRange::new(BlockNumberOrTag::Earliest, None)),
+            entity_id: None,
+            entity_filter: None,
             fields: vec![],
             chain: Chain::Ethereum,
             query: "".to_string(),
@@ -126,6 +124,7 @@ pub enum Field {
     Account(AccountField),
     Block(BlockField),
     Transaction(TransactionField),
+    Log(LogField),
 }
 
 impl Display for Field {
@@ -134,6 +133,7 @@ impl Display for Field {
             Field::Account(account_field) => write!(f, "{}", account_field),
             Field::Block(block_field) => write!(f, "{}", block_field),
             Field::Transaction(transaction_field) => write!(f, "{}", transaction_field),
+            Field::Log(log_field) => write!(f, "{}", log_field),
         }
     }
 }
@@ -154,6 +154,25 @@ impl Display for FieldError {
 impl Error for FieldError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         None
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum AccountField {
+    Address,
+    Nonce,
+    Balance,
+    Code,
+}
+
+impl Display for AccountField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AccountField::Address => write!(f, "address"),
+            AccountField::Nonce => write!(f, "nonce"),
+            AccountField::Balance => write!(f, "balance"),
+            AccountField::Code => write!(f, "code"),
+        }
     }
 }
 
@@ -183,111 +202,6 @@ impl TryFrom<&str> for AccountField {
             invalid_field => Err(Box::new(FieldError::InvalidField(
                 invalid_field.to_string(),
             ))),
-        }
-    }
-}
-
-impl TryFrom<&Field> for BlockField {
-    type Error = Box<dyn Error>;
-
-    fn try_from(field: &Field) -> Result<Self, Self::Error> {
-        match field {
-            Field::Block(block_field) => Ok(*block_field),
-            invalid_field => Err(Box::new(FieldError::InvalidField(format!(
-                "Invalid field {:?} for entity block",
-                invalid_field
-            )))),
-        }
-    }
-}
-
-impl TryFrom<&str> for BlockField {
-    type Error = Box<dyn Error>;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "number" => Ok(BlockField::Number),
-            "timestamp" => Ok(BlockField::Timestamp),
-            "size" => Ok(BlockField::Size),
-            "hash" => Ok(BlockField::Hash),
-            "parent_hash" => Ok(BlockField::ParentHash),
-            "state_root" => Ok(BlockField::StateRoot),
-            "transactions_root" => Ok(BlockField::TransactionsRoot),
-            "receipts_root" => Ok(BlockField::ReceiptsRoot),
-            "logs_bloom" => Ok(BlockField::LogsBloom),
-            "extra_data" => Ok(BlockField::ExtraData),
-            "mix_hash" => Ok(BlockField::MixHash),
-            "total_difficulty" => Ok(BlockField::TotalDifficulty),
-            "base_fee_per_gas" => Ok(BlockField::BaseFeePerGas),
-            "withdrawals_root" => Ok(BlockField::WithdrawalsRoot),
-            "blob_gas_used" => Ok(BlockField::BlobGasUsed),
-            "excess_blob_gas" => Ok(BlockField::ExcessBlobGas),
-            "parent_beacon_block_root" => Ok(BlockField::ParentBeaconBlockRoot),
-            invalid_field => Err(Box::new(FieldError::InvalidField(
-                invalid_field.to_string(),
-            ))),
-        }
-    }
-}
-
-impl TryFrom<&Field> for TransactionField {
-    type Error = Box<dyn Error>;
-
-    fn try_from(field: &Field) -> Result<Self, Self::Error> {
-        match field {
-            Field::Transaction(transaction_field) => Ok(*transaction_field),
-            invalid_field => Err(Box::new(FieldError::InvalidField(format!(
-                "Invalid field {:?} for entity transaction",
-                invalid_field
-            )))),
-        }
-    }
-}
-
-impl TryFrom<&str> for TransactionField {
-    type Error = Box<dyn Error>;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "transaction_type" => Ok(TransactionField::TransactionType),
-            "hash" => Ok(TransactionField::Hash),
-            "from" => Ok(TransactionField::From),
-            "to" => Ok(TransactionField::To),
-            "data" => Ok(TransactionField::Data),
-            "value" => Ok(TransactionField::Value),
-            "gas_price" => Ok(TransactionField::GasPrice),
-            "gas" => Ok(TransactionField::Gas),
-            "status" => Ok(TransactionField::Status),
-            "chain_id" => Ok(TransactionField::ChainId),
-            "v" => Ok(TransactionField::V),
-            "r" => Ok(TransactionField::R),
-            "s" => Ok(TransactionField::S),
-            "max_fee_per_blob_gas" => Ok(TransactionField::MaxFeePerBlobGas),
-            "max_fee_per_gas" => Ok(TransactionField::MaxFeePerGas),
-            "max_priority_fee_per_gas" => Ok(TransactionField::MaxPriorityFeePerGas),
-            "y_parity" => Ok(TransactionField::YParity),
-            invalid_field => Err(Box::new(FieldError::InvalidField(
-                invalid_field.to_string(),
-            ))),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum AccountField {
-    Address,
-    Nonce,
-    Balance,
-    Code,
-}
-
-impl Display for AccountField {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AccountField::Address => write!(f, "address"),
-            AccountField::Nonce => write!(f, "nonce"),
-            AccountField::Balance => write!(f, "balance"),
-            AccountField::Code => write!(f, "code"),
         }
     }
 }
@@ -338,6 +252,49 @@ impl Display for BlockField {
     }
 }
 
+impl TryFrom<&Field> for BlockField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(field: &Field) -> Result<Self, Self::Error> {
+        match field {
+            Field::Block(block_field) => Ok(*block_field),
+            invalid_field => Err(Box::new(FieldError::InvalidField(format!(
+                "Invalid field {:?} for entity block",
+                invalid_field
+            )))),
+        }
+    }
+}
+
+impl TryFrom<&str> for BlockField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "number" => Ok(BlockField::Number),
+            "timestamp" => Ok(BlockField::Timestamp),
+            "size" => Ok(BlockField::Size),
+            "hash" => Ok(BlockField::Hash),
+            "parent_hash" => Ok(BlockField::ParentHash),
+            "state_root" => Ok(BlockField::StateRoot),
+            "transactions_root" => Ok(BlockField::TransactionsRoot),
+            "receipts_root" => Ok(BlockField::ReceiptsRoot),
+            "logs_bloom" => Ok(BlockField::LogsBloom),
+            "extra_data" => Ok(BlockField::ExtraData),
+            "mix_hash" => Ok(BlockField::MixHash),
+            "total_difficulty" => Ok(BlockField::TotalDifficulty),
+            "base_fee_per_gas" => Ok(BlockField::BaseFeePerGas),
+            "withdrawals_root" => Ok(BlockField::WithdrawalsRoot),
+            "blob_gas_used" => Ok(BlockField::BlobGasUsed),
+            "excess_blob_gas" => Ok(BlockField::ExcessBlobGas),
+            "parent_beacon_block_root" => Ok(BlockField::ParentBeaconBlockRoot),
+            invalid_field => Err(Box::new(FieldError::InvalidField(
+                invalid_field.to_string(),
+            ))),
+        }
+    }
+}
+
 // TODO: implement blob_versioned_hashes and access_list
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum TransactionField {
@@ -380,6 +337,125 @@ impl std::fmt::Display for TransactionField {
             TransactionField::MaxFeePerGas => write!(f, "max_fee_per_gas"),
             TransactionField::MaxPriorityFeePerGas => write!(f, "max_priority_fee_per_gas"),
             TransactionField::YParity => write!(f, "y_parity"),
+        }
+    }
+}
+
+impl TryFrom<&Field> for TransactionField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(field: &Field) -> Result<Self, Self::Error> {
+        match field {
+            Field::Transaction(transaction_field) => Ok(*transaction_field),
+            invalid_field => Err(Box::new(FieldError::InvalidField(format!(
+                "Invalid field {:?} for entity transaction",
+                invalid_field
+            )))),
+        }
+    }
+}
+
+impl TryFrom<&str> for TransactionField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "transaction_type" => Ok(TransactionField::TransactionType),
+            "hash" => Ok(TransactionField::Hash),
+            "from" => Ok(TransactionField::From),
+            "to" => Ok(TransactionField::To),
+            "data" => Ok(TransactionField::Data),
+            "value" => Ok(TransactionField::Value),
+            "gas_price" => Ok(TransactionField::GasPrice),
+            "gas" => Ok(TransactionField::Gas),
+            "status" => Ok(TransactionField::Status),
+            "chain_id" => Ok(TransactionField::ChainId),
+            "v" => Ok(TransactionField::V),
+            "r" => Ok(TransactionField::R),
+            "s" => Ok(TransactionField::S),
+            "max_fee_per_blob_gas" => Ok(TransactionField::MaxFeePerBlobGas),
+            "max_fee_per_gas" => Ok(TransactionField::MaxFeePerGas),
+            "max_priority_fee_per_gas" => Ok(TransactionField::MaxPriorityFeePerGas),
+            "y_parity" => Ok(TransactionField::YParity),
+            invalid_field => Err(Box::new(FieldError::InvalidField(
+                invalid_field.to_string(),
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+pub enum LogField {
+    Address,
+    Topic0,
+    Topic1,
+    Topic2,
+    Topic3,
+    Data,
+    BlockHash,
+    BlockNumber,
+    BlockTimestamp,
+    TransactionHash,
+    TransactionIndex,
+    LogIndex,
+    Removed,
+}
+
+impl std::fmt::Display for LogField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogField::Address => write!(f, "address"),
+            LogField::Topic0 => write!(f, "topic0"),
+            LogField::Topic1 => write!(f, "topic1"),
+            LogField::Topic2 => write!(f, "topic2"),
+            LogField::Topic3 => write!(f, "topic3"),
+            LogField::Data => write!(f, "data"),
+            LogField::BlockHash => write!(f, "block_hash"),
+            LogField::BlockNumber => write!(f, "block_number"),
+            LogField::BlockTimestamp => write!(f, "block_timestamp"),
+            LogField::TransactionHash => write!(f, "transaction_hash"),
+            LogField::TransactionIndex => write!(f, "transaction_index"),
+            LogField::LogIndex => write!(f, "log_index"),
+            LogField::Removed => write!(f, "removed"),
+        }
+    }
+}
+
+impl TryFrom<&Field> for LogField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(field: &Field) -> Result<Self, Self::Error> {
+        match field {
+            Field::Log(log_field) => Ok(*log_field),
+            invalid_field => Err(Box::new(FieldError::InvalidField(format!(
+                "Invalid field {:?} for entity log",
+                invalid_field
+            )))),
+        }
+    }
+}
+
+impl TryFrom<&str> for LogField {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "address" => Ok(LogField::Address),
+            "topic0" => Ok(LogField::Topic0),
+            "topic1" => Ok(LogField::Topic1),
+            "topic2" => Ok(LogField::Topic2),
+            "topic3" => Ok(LogField::Topic3),
+            "data" => Ok(LogField::Data),
+            "block_hash" => Ok(LogField::BlockHash),
+            "block_number" => Ok(LogField::BlockNumber),
+            "block_timestamp" => Ok(LogField::BlockTimestamp),
+            "transaction_hash" => Ok(LogField::TransactionHash),
+            "transaction_index" => Ok(LogField::TransactionIndex),
+            "log_index" => Ok(LogField::LogIndex),
+            "removed" => Ok(LogField::Removed),
+            invalid_field => Err(Box::new(FieldError::InvalidField(
+                invalid_field.to_string(),
+            ))),
         }
     }
 }

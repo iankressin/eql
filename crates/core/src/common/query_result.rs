@@ -24,6 +24,8 @@ pub enum ExpressionResult {
     Block(Vec<BlockQueryRes>),
     #[serde(rename = "transaction")]
     Transaction(Vec<TransactionQueryRes>),
+    #[serde(rename = "log")]
+    Log(Vec<LogQueryRes>),
 }
 
 // TODO: should this be replaced with Alloy's Block?
@@ -142,6 +144,44 @@ impl Default for TransactionQueryRes {
     }
 }
 
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct LogQueryRes {
+    pub address: Option<Address>,
+    pub topic0: Option<FixedBytes<32>>,
+    pub topic1: Option<FixedBytes<32>>,
+    pub topic2: Option<FixedBytes<32>>,
+    pub topic3: Option<FixedBytes<32>>,
+    pub data: Option<Bytes>,
+    pub block_hash: Option<B256>,
+    pub block_number: Option<u64>,
+    pub block_timestamp: Option<u64>,
+    pub transaction_hash: Option<B256>,
+    pub transaction_index: Option<u64>,
+    pub log_index: Option<u64>,
+    pub removed: Option<bool>,
+}
+
+impl Default for LogQueryRes {
+    fn default() -> Self {
+        Self {
+            address: None,
+            topic0: None,
+            topic1: None,
+            topic2: None,
+            topic3: None,
+            data: None,
+            block_hash: None,
+            block_number: None,
+            block_timestamp: None,
+            transaction_hash: None,
+            transaction_index: None,
+            log_index: None,
+            removed: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
@@ -214,6 +254,12 @@ fn dump_json(result: &ExpressionResult, dump_file: &Dump) {
                 content.push_str(",");
             }
         }
+        ExpressionResult::Log(log_results) => {
+            for log_result in log_results.iter() {
+                content.push_str(&serde_json::to_string(log_result).unwrap());
+                content.push_str(",");
+            }
+        }
     }
 
     content.push_str("]");
@@ -244,6 +290,13 @@ fn dump_csv(result: &ExpressionResult, dump_file: &Dump) {
                 writer
                     .serialize(transaction_result)
                     .expect("Unable to serialize transaction result");
+            }
+        }
+        ExpressionResult::Log(log_results) => {
+            for log_result in log_results.iter() {
+                writer
+                    .serialize(log_result)
+                    .expect("Unable to serialize log result");
             }
         }
     }

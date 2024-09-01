@@ -1,6 +1,7 @@
 use super::{
     chain::Chain,
     entity::Entity,
+    entity_filter::EntityFilter,
     entity_id::EntityId,
     query_result::QueryResult,
     types::{Expression, Field, GetExpression},
@@ -26,6 +27,7 @@ pub struct EQLBuilder {
     fields: Option<Vec<Field>>,
     entity: Option<Entity>,
     entity_id: Option<EntityId>,
+    entity_filters: Option<Vec<EntityFilter>>,
     chain: Option<Chain>,
 }
 
@@ -35,6 +37,7 @@ impl EQLBuilder {
             fields: None,
             entity: None,
             entity_id: None,
+            entity_filters: None,
             chain: None,
         }
     }
@@ -74,22 +77,22 @@ impl EQLBuilder {
             .entity
             .clone()
             .ok_or(EQLBuilderError::MissingEntityError)?;
-        let entity_id = self
-            .entity_id
-            .clone()
-            .ok_or(EQLBuilderError::MissingEntityIdError)?;
+        let entity_id = self.entity_id.clone();
         let chain = self
             .chain
             .clone()
             .ok_or(EQLBuilderError::MissingChainError)?;
+        let entity_filter = self.entity_filters.clone();
 
         Ok(Expression::Get(GetExpression {
             fields,
             entity,
             entity_id,
+            entity_filter,
             chain,
             query: "".to_string(),
             dump: None,
         }))
     }
 }
+

@@ -59,6 +59,9 @@ impl ResultHandler {
                     // it'll return multiple results and we should remove the vec![].
                     println!("{}", to_table(query_res)?);
                 }
+                ExpressionResult::Log(query_res) => {
+                    println!("{}", to_table(query_res)?);
+                }
             }
         }
 
