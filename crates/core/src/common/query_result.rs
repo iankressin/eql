@@ -216,6 +216,7 @@ where
     }
 }
 
+// TODO: these dump functions should include the id of the query
 // TODO: write test
 pub fn dump_results(result: &ExpressionResult, dump_file: &Dump) {
     match dump_file.format {
@@ -238,25 +239,25 @@ fn dump_json(result: &ExpressionResult, dump_file: &Dump) {
     match result {
         ExpressionResult::Account(account_results) => {
             for account_result in account_results.iter() {
-                content.push_str(&serde_json::to_string(account_result).unwrap());
+                content.push_str(&serde_json::to_string_pretty(account_result).unwrap());
                 content.push_str(",");
             }
         }
         ExpressionResult::Block(block_results) => {
             for block_result in block_results.iter() {
-                content.push_str(&serde_json::to_string(block_result).unwrap());
+                content.push_str(&serde_json::to_string_pretty(block_result).unwrap());
                 content.push_str(",");
             }
         }
         ExpressionResult::Transaction(transaction_results) => {
             for transaction_result in transaction_results.iter() {
-                content.push_str(&serde_json::to_string(transaction_result).unwrap());
+                content.push_str(&serde_json::to_string_pretty(transaction_result).unwrap());
                 content.push_str(",");
             }
         }
         ExpressionResult::Log(log_results) => {
             for log_result in log_results.iter() {
-                content.push_str(&serde_json::to_string(log_result).unwrap());
+                content.push_str(&serde_json::to_string_pretty(log_result).unwrap());
                 content.push_str(",");
             }
         }
