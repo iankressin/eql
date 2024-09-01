@@ -35,6 +35,10 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     // TODO: fields should only contain fields that are valid for the entity
+    // TODO: entity_id should correspond  to the entity
+    // TODO: entity_filter should only contain filters that are valid for the entity
+    // TODO: Warn if entity_filter is overring previous filters
+    // TODO: Check if either a block_hash or block_range is provided in log queries
     pub fn analyze(&self) -> Result<(), Box<dyn Error>> {
         for expression in self.expressions {
             match expression {
@@ -74,6 +78,14 @@ impl<'a> SemanticAnalyzer<'a> {
                         }));
                     }
                 }
+                Field::Log(_) => {
+                    if get_expr.entity != Entity::Log {
+                        return Err(Box::new(SemanticError::InvalidField {
+                            field: field.clone(),
+                            enetity: get_expr.entity.clone(),
+                        }));
+                    }
+                }
             }
         }
 
@@ -93,9 +105,10 @@ mod test {
     fn test_analyze_get_expression_with_wrong_fields() {
         let expressions = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: "0x1234567890123456789012345678901234567890"
+            entity_id: Some("0x1234567890123456789012345678901234567890"
                 .try_into()
-                .unwrap(),
+                .unwrap()),
+            entity_filter: None,
             chain: Chain::Ethereum,
             fields: vec![Field::Block(BlockField::Number)],
             // The query doesn't matter for this test

@@ -127,6 +127,44 @@ impl Default for TransactionQueryRes {
     }
 }
 
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct LogQueryRes {
+    pub address: Option<Address>,
+    pub topic0: Option<FixedBytes<32>>,
+    pub topic1: Option<FixedBytes<32>>,
+    pub topic2: Option<FixedBytes<32>>,
+    pub topic3: Option<FixedBytes<32>>,
+    pub data: Option<Bytes>,
+    pub block_hash: Option<B256>,
+    pub block_number: Option<u64>,
+    pub block_timestamp: Option<u64>,
+    pub transaction_hash: Option<B256>,
+    pub transaction_index: Option<u64>,
+    pub log_index: Option<u64>,
+    pub removed: Option<bool>,
+}
+
+impl Default for LogQueryRes {
+    fn default() -> Self {
+        Self {
+            address: None,
+            topic0: None,
+            topic1: None,
+            topic2: None,
+            topic3: None,
+            data: None,
+            block_hash: None,
+            block_number: None,
+            block_timestamp: None,
+            transaction_hash: None,
+            transaction_index: None,
+            log_index: None,
+            removed: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;

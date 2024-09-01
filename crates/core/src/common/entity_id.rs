@@ -1,4 +1,4 @@
-use super::{chain::Chain, ens::NameOrAddress};
+use super::{chain::Chain, ens::NameOrAddress, entity_filter::BlockRange};
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, FixedBytes},
@@ -11,18 +11,6 @@ pub enum EntityId {
     Block(BlockRange),
     Transaction(FixedBytes<32>),
     Account(NameOrAddress),
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct BlockRange {
-    start: BlockNumberOrTag,
-    end: Option<BlockNumberOrTag>,
-}
-
-impl BlockRange {
-    pub fn new(start: BlockNumberOrTag, end: Option<BlockNumberOrTag>) -> Self {
-        Self { start, end }
-    }
 }
 
 // TODO: return instance of Error trait instead of &'static str
@@ -55,38 +43,17 @@ impl TryFrom<&str> for EntityId {
                 None => parse_block_number_or_tag(id).map(|start| (start, None))?,
             };
 
-            Ok(EntityId::Block(BlockRange { start, end }))
+            Ok(EntityId::Block(BlockRange::new(start, end)))
         }
     }
 }
 
-fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
-    match id.parse::<u64>() {
-        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
-        Err(_) => id
-            .parse::<BlockNumberOrTag>()
-            .map_err(|_| EntityIdError::InvalidBlockNumber),
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum EntityIdError {
-    #[error("Invalid address")]
-    InvalidAddress,
-    #[error("Invalid tx hash")]
-    InvalidTxHash,
-    #[error("Invalid block number")]
-    InvalidBlockNumber,
-    #[error("Unable resolve ENS name")]
-    EnsResolution,
-}
-
 impl EntityId {
-    pub fn to_block_range(
+    pub fn to_block_id(
         &self,
     ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityIdError> {
         match self {
-            EntityId::Block(block_id) => Ok((block_id.start.clone(), block_id.end.clone())),
+            EntityId::Block(block_id) => Ok(block_id.range()),
             _ => Err(EntityIdError::InvalidBlockNumber),
         }
     }
@@ -120,5 +87,27 @@ impl EntityId {
             },
             _ => Err(EntityIdError::InvalidAddress),
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum EntityIdError {
+    #[error("Invalid address")]
+    InvalidAddress,
+    #[error("Invalid tx hash")]
+    InvalidTxHash,
+    #[error("Invalid block number")]
+    InvalidBlockNumber,
+    #[error("Unable resolve ENS name")]
+    EnsResolution,
+}
+
+//Should it be moved to a separate module?
+pub fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
+    match id.parse::<u64>() {
+        Ok(id) => Ok(BlockNumberOrTag::Number(id)),
+        Err(_) => id
+            .parse::<BlockNumberOrTag>()
+            .map_err(|_| EntityIdError::InvalidBlockNumber),
     }
 }
