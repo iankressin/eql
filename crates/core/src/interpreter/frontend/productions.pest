@@ -1,7 +1,7 @@
 program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
-    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
+    (^"GET") ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ (^"OF") ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ entity_id ~ WHITESPACE* ~ (^"ON") ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
 }
 fields    = { (account_field_list | block_field_list | tx_field_list) }
 entity    = { "account" | "block" | "tx" }
@@ -19,10 +19,10 @@ account_id = { address | ens }
 // Block
 block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
 // TODO: Check if we need uncles
-block_field      =  { 
+block_field      =  {
     "hash" |
     "parent_hash" |
-    "timestamp" | 
+    "timestamp" |
     "state_root" |
     "transactions_root" |
     "receipts_root" |
@@ -46,10 +46,10 @@ tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }
 tx_field = {
     "transaction_type" |
     "hash" |
-    "from" | 
-    "to" | 
-    "data" | 
-    "value" | 
+    "from" |
+    "to" |
+    "data" |
+    "value" |
     "fee" |
     "gas_price" |
     "gas" |

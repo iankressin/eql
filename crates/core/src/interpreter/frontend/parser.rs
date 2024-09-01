@@ -122,7 +122,31 @@ mod tests {
     #[test]
     fn test_build_ast_with_account_fields() {
         let source =
-            "GET nonce, balance, code FROM account 0x1234567890123456789012345678901234567890 ON eth";
+            "GET nonce, balance, code OF account 0x1234567890123456789012345678901234567890 ON eth";
+        let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Account,
+            entity_id: EntityId::Account(NameOrAddress::Address(address)),
+            fields: vec![
+                Field::Account(AccountField::Nonce),
+                Field::Account(AccountField::Balance),
+                Field::Account(AccountField::Code),
+            ],
+            chain: Chain::Ethereum,
+            query: source.to_string(),
+        })];
+        let parser = Parser::new(source);
+
+        match parser.parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_lowercase_with_account_fields() {
+        let source =
+            "get nonce, balance, code of account 0x1234567890123456789012345678901234567890 on eth";
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -145,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_using_ens() {
-        let source = "GET nonce, balance FROM account vitalik.eth ON eth";
+        let source = "GET nonce, balance OF account vitalik.eth ON eth";
         let name = String::from("vitalik.eth");
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -164,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_with_block_fields() {
-        let source = "GET parent_hash, state_root, transactions_root, receipts_root, logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, size FROM block 1 ON eth";
+        let source = "GET parent_hash, state_root, transactions_root, receipts_root, logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, size OF block 1 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
@@ -199,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_using_block_ranges() {
-        let source = "GET timestamp FROM block 1:2 ON eth";
+        let source = "GET timestamp OF block 1:2 ON eth";
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
             entity_id: EntityId::Block(BlockRange::new(
@@ -220,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_transaction_fields() {
-        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
+        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity OF tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction,
