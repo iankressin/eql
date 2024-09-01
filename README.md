@@ -58,6 +58,10 @@ To update EQL to the latest version, run `eqlup` again:
 eqlup
 ```
 
+## Roadmap
+![cover image](./roadmap.png)
+Check out the full roadmap [here](./ROADMAP.md)
+
 ## Expressions
 
 ### GET
