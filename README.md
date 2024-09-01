@@ -59,7 +59,7 @@ eqlup
 ```
 
 ## Roadmap
-![cover image](./roadmap.png)
+![roadmap image](./roadmap.png)
 Check out the full roadmap [here](./ROADMAP.md)
 
 ## Expressions
