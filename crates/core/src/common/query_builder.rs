@@ -4,7 +4,7 @@ use super::{
     entity_filter::EntityFilter,
     entity_id::EntityId,
     query_result::QueryResult,
-    types::{Expression, Field, GetExpression},
+    types::{Dump, Expression, Field, GetExpression},
 };
 use crate::interpreter::backend::execution_engine::ExecutionEngine;
 use std::error::Error;
@@ -29,6 +29,7 @@ pub struct EQLBuilder {
     entity_id: Option<EntityId>,
     entity_filters: Option<Vec<EntityFilter>>,
     chain: Option<Chain>,
+    dump: Option<Dump>,
 }
 
 impl EQLBuilder {
@@ -39,6 +40,7 @@ impl EQLBuilder {
             entity_id: None,
             entity_filters: None,
             chain: None,
+            dump: None,
         }
     }
 
@@ -55,6 +57,11 @@ impl EQLBuilder {
 
     pub fn on(&mut self, chain: Chain) -> &mut Self {
         self.chain = Some(chain);
+        self
+    }
+
+    pub fn dump(&mut self, dump_file: Dump) -> &mut Self {
+        self.dump = Some(dump_file);
         self
     }
 
@@ -95,4 +102,3 @@ impl EQLBuilder {
         }))
     }
 }
-

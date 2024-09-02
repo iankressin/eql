@@ -21,6 +21,12 @@ thiserror = { version = "1" }
 async-trait = { version = "0.1" }
 getrandom = { version = "0.2", features = ["js"] }
 csv = "1.1"
+criterion = "0.5.1"
 
 [dev-dependencies]
 pretty_assertions = "1"
+
+ [[bench]]
+ name = "bench"
+ harness = false
+ path = "benches/bench.rs"
