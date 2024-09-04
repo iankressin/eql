@@ -1,7 +1,6 @@
 use crate::interpreter::frontend::parser::Rule;
 
 use super::{chain::Chain, entity::Entity, entity_filter::EntityFilter, entity_id::EntityId};
-use alloy::eips::BlockNumberOrTag;
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Display};

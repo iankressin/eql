@@ -43,6 +43,7 @@ account_id = _{ address | ens }
 block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
 // TODO: Check if we need uncles
 block_field      =  { 
+    "number" |
     "hash" |
     "parent_hash" |
     "timestamp" | 
