@@ -3,9 +3,9 @@ use crate::common::{
     entity::{Entity, EntityError},
     entity_filter::EntityFilter,
     query_result::{
-        dump_results, AccountQueryRes, ExpressionResult, LogQueryRes, QueryResult,
-        TransactionQueryRes,
+        AccountQueryRes, ExpressionResult, LogQueryRes, QueryResult, TransactionQueryRes,
     },
+    serializer::{dump_results, serialize_results},
     types::{AccountField, BlockField, Expression, GetExpression, LogField, TransactionField},
 };
 use alloy::{
