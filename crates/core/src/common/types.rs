@@ -15,7 +15,7 @@ pub enum Expression {
 #[derive(Debug, PartialEq, Eq)]
 pub struct GetExpression {
     pub entity: Entity,
-    pub entity_id: Option<EntityId>,
+    pub entity_id: Option<Vec<EntityId>>,
     pub entity_filter: Option<Vec<EntityFilter>>,
     pub fields: Vec<Field>,
     pub chain: Chain,

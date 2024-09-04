@@ -1174,6 +1174,7 @@ version = "0.1.10"
 dependencies = [
  "alloy",
  "async-trait",
+ "futures",
  "getrandom",
  "pest",
  "pest_derive",
