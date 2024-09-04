@@ -35,7 +35,8 @@ account_field_list = _{ account_field ~ (", " ~ account_field)* }
 account_field = {
     "nonce" |
     "balance" |
-    "code"
+    "code" |
+    "address"
 }
 account_id = _{ address | ens }
 
