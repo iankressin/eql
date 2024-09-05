@@ -1,11 +1,12 @@
 use super::{
     chain::Chain,
     entity::Entity,
-    entity_id::EntityId,
     entity_filter::EntityFilter,
-    types::{Expression, Field, GetExpression},
+    entity_id::EntityId,
+    query_result::QueryResult,
+    types::{Dump, Expression, Field, GetExpression},
 };
-use crate::interpreter::backend::execution_engine::{ExecutionEngine, QueryResult};
+use crate::interpreter::backend::execution_engine::ExecutionEngine;
 use std::error::Error;
 
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +29,7 @@ pub struct EQLBuilder {
     entity_id: Option<EntityId>,
     entity_filters: Option<Vec<EntityFilter>>,
     chain: Option<Chain>,
+    dump: Option<Dump>,
 }
 
 impl EQLBuilder {
@@ -38,6 +40,7 @@ impl EQLBuilder {
             entity_id: None,
             entity_filters: None,
             chain: None,
+            dump: None,
         }
     }
 
@@ -54,6 +57,11 @@ impl EQLBuilder {
 
     pub fn on(&mut self, chain: Chain) -> &mut Self {
         self.chain = Some(chain);
+        self
+    }
+
+    pub fn dump(&mut self, dump_file: Dump) -> &mut Self {
+        self.dump = Some(dump_file);
         self
     }
 
@@ -76,16 +84,12 @@ impl EQLBuilder {
             .entity
             .clone()
             .ok_or(EQLBuilderError::MissingEntityError)?;
-        let entity_id = self
-            .entity_id
-            .clone();
+        let entity_id = self.entity_id.clone();
         let chain = self
             .chain
             .clone()
             .ok_or(EQLBuilderError::MissingChainError)?;
-        let entity_filter = self
-            .entity_filters
-            .clone();
+        let entity_filter = self.entity_filters.clone();
 
         Ok(Expression::Get(GetExpression {
             fields,
@@ -94,6 +98,7 @@ impl EQLBuilder {
             entity_filter,
             chain,
             query: "".to_string(),
+            dump: None,
         }))
     }
 }

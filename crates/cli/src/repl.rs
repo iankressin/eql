@@ -6,9 +6,9 @@ use crossterm::{
     style::{Print, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
-use eql_core::interpreter::{
-    backend::execution_engine::{ExpressionResult, QueryResult},
-    Interpreter,
+use eql_core::{
+    common::query_result::{ExpressionResult, QueryResult},
+    interpreter::Interpreter,
 };
 use std::io::{stdout, Stdout, Write};
 
@@ -222,7 +222,7 @@ impl Repl {
                     // it'll return multiple results and we should remove the vec![].
                     let table = to_table(vec![query_res])?;
                     table.to_string().split("\n").for_each(|line| {
-                        queue!(stdout(), MoveToNextLine(1), Print(line.magenta())).unwrap();
+                        queue!(stdout(), MoveToNextLine(1), Print(line.green())).unwrap();
                     });
                 }
                 ExpressionResult::Block(query_res) => {
