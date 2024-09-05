@@ -28,7 +28,7 @@ pub async fn resolve_transaction_query(
     fields: Vec<TransactionField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<TransactionQueryRes>, Box<dyn Error>> {
-    // Create a vector to store individual futures.
+    // Create a vector to store individual futures, for each request.
     let mut tx_futures = Vec::new();
     // Iterate through entity_ids and map them to futures.
     for entity_id in entity_ids {

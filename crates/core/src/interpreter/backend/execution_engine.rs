@@ -233,7 +233,10 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Block,
-            entity_id: Some(vec![EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))]),
+            entity_id: Some(vec![
+                EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
+                EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))
+                ]),
             entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::Timestamp),
@@ -255,7 +258,38 @@ mod test {
             ],
             query: String::from(""),
         })];
-        let expected = ExpressionResult::Block(vec![BlockQueryRes {
+        let expected = ExpressionResult::Block(vec![
+            BlockQueryRes {
+                timestamp: Some(1438269988),
+                number: None,
+                hash: Some(b256!(
+                    "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
+                )),
+                parent_hash: Some(b256!(
+                    "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+                )),
+                size: Some(U256::from(537)),
+                state_root: Some(b256!(
+                    "d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3"
+                )),
+                transactions_root: Some(b256!(
+                    "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+                )),
+                receipts_root: Some(b256!(
+                    "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+                )),
+                logs_bloom: Some(bloom!("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+                extra_data: Some(bytes!("476574682f76312e302e302f6c696e75782f676f312e342e32")),
+                mix_hash: Some(b256!("969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f59")),
+                total_difficulty: Some(U256::from(34351349760_u128)),
+                // The fields below were implemented by EIPs, 1st block doesn't have these
+                base_fee_per_gas: None,
+                withdrawals_root: None,
+                blob_gas_used: None,
+                excess_blob_gas: None,
+                parent_beacon_block_root: None,
+        },
+        BlockQueryRes {
             timestamp: Some(1438269988),
             number: None,
             hash: Some(b256!(
@@ -284,7 +318,8 @@ mod test {
             blob_gas_used: None,
             excess_blob_gas: None,
             parent_beacon_block_root: None,
-        }]);
+    },
+        ]);
         let execution_result = execution_engine.run(expressions).await;
 
         match execution_result {
@@ -302,65 +337,50 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Account,
-            entity_id: Some(vec![EntityId::Account(NameOrAddress::Address(
-                Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap(),
-            ))]),
+            entity_id: Some(vec![
+                EntityId::Account(NameOrAddress::Address(Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap())),
+                EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth")))
+                ]),
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
         })];
+
+        let expected = ExpressionResult::Account(vec![
+            AccountQueryRes {
+                nonce: None,
+                balance:Some(U256::from(11712705339518332754_u64)),
+                address: None,
+                code: None,
+            },
+            AccountQueryRes {
+                nonce: None,
+                balance:Some(U256::from(11712705339518332754_u64)),
+                address: None,
+                code: None,
+            },
+        ]);
+        
         let execution_result = execution_engine.run(expressions).await;
+        println!("{:#?}", execution_result);
 
         match execution_result {
-            Ok(results) => match &results[0] {
-                QueryResult { query, result, .. } => {
-                    assert_eq!(query, "");
-                    match result {
-                        ExpressionResult::Account(account) => {
-                            assert!(account[0].balance.is_some());
-                        }
-                        _ => panic!("Invalid result"),
-                    }
-                }
-            },
-            Err(e) => panic!("Error: {}", e),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_get_account_fields_using_ens() {
-        let execution_engine = ExecutionEngine::new();
-        let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
-            entity: Entity::Account,
-            entity_id: Some(vec![EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth")))]),
-            entity_filter: None,
-            fields: vec![Field::Account(AccountField::Balance)],
-            query: String::from(""),
-        })];
-        let execution_result = execution_engine.run(expressions).await;
-
-        match &execution_result.unwrap()[0] {
-            QueryResult { query, result, .. } => {
-                assert_eq!(query, "");
-                match result {
-                    ExpressionResult::Account(account) => {
-                        assert!(account[0].balance.is_some());
-                    }
-                    _ => panic!("Invalid result"),
-                }
+            Ok(results) => {
+                assert_eq!(results[0].result, expected);
             }
+            Err(_) => panic!("Error"),
         }
     }
+
     #[tokio::test]
     async fn test_get_account_fields_using_invalid_ens() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Account,
-            entity_id: Some(vec![EntityId::Account(NameOrAddress::Name(String::from(
-                "thisisinvalid235790123801.eth",
-            )))]),
+            entity_id: Some(vec![
+                EntityId::Account(NameOrAddress::Name(String::from("thisisinvalid235790123801.eth")))
+                ]),
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
@@ -375,7 +395,10 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Transaction,
-            entity_id: Some(vec![EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"))]),
+            entity_id: Some(vec![
+                EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")),
+                EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"))
+                ]),
             entity_filter: None,
             fields: vec![
                 Field::Transaction(TransactionField::TransactionType),
@@ -398,29 +421,53 @@ mod test {
             ],
             query: String::from(""),
         })];
-        let result = execution_engine.run(expressions).await;
-        let expected = vec![ExpressionResult::Transaction(vec![TransactionQueryRes {
-            transaction_type: Some(2),
-            hash: Some(b256!(
-                "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
-            )),
-            from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
-            to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
-            data: Some(bytes!("")),
-            value: Some(U256::from(234808500010631948_u128)),
-            gas_price: Some(10209184711_u128),
-            gas: Some(21000),
-            status: Some(true),
-            chain_id: Some(1),
-            v: Some(U256::from(0)),
-            r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
-            s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
-            max_fee_per_blob_gas: None,
-            max_fee_per_gas: Some(10209184711),
-            max_priority_fee_per_gas: Some(0),
-            y_parity: Some(false),
-        }])];
 
+        let expected = vec![ExpressionResult::Transaction(vec![
+            TransactionQueryRes {
+                transaction_type: Some(2),
+                hash: Some(b256!(
+                    "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+                )),
+                from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
+                to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
+                data: Some(bytes!("")),
+                value: Some(U256::from(234808500010631948_u128)),
+                gas_price: Some(10209184711_u128),
+                gas: Some(21000),
+                status: Some(true),
+                chain_id: Some(1),
+                v: Some(U256::from(0)),
+                r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
+                s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
+                max_fee_per_blob_gas: None,
+                max_fee_per_gas: Some(10209184711),
+                max_priority_fee_per_gas: Some(0),
+                y_parity: Some(false),
+            },
+            TransactionQueryRes {
+                transaction_type: Some(2),
+                hash: Some(b256!(
+                    "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+                )),
+                from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
+                to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
+                data: Some(bytes!("")),
+                value: Some(U256::from(234808500010631948_u128)),
+                gas_price: Some(10209184711_u128),
+                gas: Some(21000),
+                status: Some(true),
+                chain_id: Some(1),
+                v: Some(U256::from(0)),
+                r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
+                s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
+                max_fee_per_blob_gas: None,
+                max_fee_per_gas: Some(10209184711),
+                max_priority_fee_per_gas: Some(0),
+                y_parity: Some(false),
+            }])    
+        ];            
+
+        let result = execution_engine.run(expressions).await;
         match result {
             Ok(results) => {
                 assert_eq!(results[0].result, expected[0]);

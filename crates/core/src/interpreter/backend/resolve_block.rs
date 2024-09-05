@@ -24,7 +24,7 @@ pub async fn resolve_block_query(
     fields: Vec<BlockField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
-    // Create a vector to store individual futures.
+    // Create a vector to store individual futures, for each request.
     let mut block_futures = Vec::new();
 
     // Iterate through entity_ids and map them to futures.

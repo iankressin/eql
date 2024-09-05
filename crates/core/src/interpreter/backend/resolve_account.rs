@@ -30,7 +30,7 @@ pub async fn resolve_account_query(
     fields: Vec<AccountField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<AccountQueryRes>, Box<dyn Error>> {
-    // Create a vector to store individual futures.
+    // Create a vector to store individual futures, for each request.
     let mut account_futures = Vec::new();
     // Iterate through entity_ids and map them to futures.
     for entity_id in entity_ids {
