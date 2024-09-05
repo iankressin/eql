@@ -9,7 +9,7 @@
  `GET nonce, balance FROM vitalik.eth ON eth > data.csv`
 - [ ] List of entity ids:
  `GET value, to, timestamp FROM tx 0x..., 0x..., 0x... ON polygon`
-- [ ] Add support for more EVM chains
+- [x] Add support for more EVM chains
 
 ### v0.1.4-alpha
 - [ ] Get transactions from blocks:
