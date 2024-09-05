@@ -144,7 +144,33 @@ unit = { "ether" | "gwei" | "wei" }
 number = _{ float | integer }
 integer = _{ (ASCII_DIGIT)+ }
 float = _{ integer ~ "." ~ integer }
-chain = { "eth" | "arb" | "op" | "base" | "blast" | "polygon" | "sepolia" }
+chain = {
+    "eth" |
+    "arb" |
+    "op" |
+    "base" |
+    "blast" |
+    "polygon" |
+    "sepolia" |
+    "anvil" |
+    "local" |
+    "mantle" |
+    "zksync" |
+    "taiko" |
+    "celo" |
+    "avalanche" |
+    "scroll" |
+    "bnb" |
+    "linea" |
+    "tron" |
+    "zora" |
+    "moonbeam" |
+    "moonriver" |
+    "ronin" |
+    "fantom" |
+    "kava" |
+    "gnosis"
+}
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
