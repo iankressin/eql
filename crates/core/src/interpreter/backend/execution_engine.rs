@@ -8,36 +8,11 @@ use crate::common::{
     entity::Entity, 
     entity_filter::EntityFilter, 
     entity_id::EntityId, 
-    query_result::{AccountQueryRes, BlockQueryRes, LogQueryRes, TransactionQueryRes}, 
+    query_result::{ExpressionResult, QueryResult},
     types::{AccountField, BlockField, Expression, GetExpression, LogField, TransactionField}
 };
 use alloy::providers::ProviderBuilder;
-use serde::{Deserialize, Serialize};
 use std::error::Error;
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct QueryResult {
-    pub query: String,
-    pub result: ExpressionResult,
-}
-
-impl QueryResult {
-    pub fn new(query: String, result: ExpressionResult) -> QueryResult {
-        QueryResult { query, result }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub enum ExpressionResult {
-    #[serde(rename = "account")]
-    Account(Vec<AccountQueryRes>),
-    #[serde(rename = "block")]
-    Block(Vec<BlockQueryRes>),
-    #[serde(rename = "transaction")]
-    Transaction(Vec<TransactionQueryRes>),
-    #[serde(rename = "log")]
-    Log(Vec<LogQueryRes>),
-}
 
 pub struct ExecutionEngine;
 
@@ -139,7 +114,7 @@ impl ExecutionEngine {
             }
             Entity::Log => {
                 let filter = if let Some(entity_filter) = &expr.entity_filter {
-                    EntityFilter::build_filter(entity_filter)                
+                    EntityFilter::build_filter(entity_filter)
                 } else {
                     panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
                 };
@@ -161,9 +136,9 @@ mod test {
     use crate::common::{
         chain::Chain,
         ens::NameOrAddress,
-        entity_id::EntityId,
         entity_filter::{BlockRange, EntityFilter},
-        query_result::BlockQueryRes,
+        entity_id::EntityId,
+        query_result::{AccountQueryRes, BlockQueryRes, LogQueryRes, TransactionQueryRes},
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
     use alloy::{
@@ -181,9 +156,16 @@ mod test {
             entity: Entity::Log,
             entity_id: None,
             entity_filter: Some(vec![
-                EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(4638757), Some(BlockNumberOrTag::Number(4638758)))),
-                EntityFilter::LogEmitterAddress(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
-                EntityFilter::LogTopic0(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
+                EntityFilter::LogBlockRange(BlockRange::new(
+                    BlockNumberOrTag::Number(4638757),
+                    Some(BlockNumberOrTag::Number(4638758)),
+                )),
+                EntityFilter::LogEmitterAddress(address!(
+                    "dac17f958d2ee523a2206206994597c13d831ec7"
+                )),
+                EntityFilter::LogTopic0(b256!(
+                    "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
+                )),
             ]),
             fields: vec![
                 Field::Log(LogField::Address),
@@ -200,19 +182,28 @@ mod test {
                 Field::Log(LogField::LogIndex),
             ],
             query: String::from(""),
+            dump: None,
         })];
-        let execution_result = execution_engine.run(expressions).await; 
+        let execution_result = execution_engine.run(expressions).await;
         let expected = vec![LogQueryRes {
             address: Some(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
-            topic0: Some(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
+            topic0: Some(b256!(
+                "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
+            )),
             topic1: None,
             topic2: None,
             topic3: None,
-            data: Some(bytes!("00000000000000000000000000000000000000000000000000000002540be400")),
-            block_hash: Some(b256!("d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58")),
+            data: Some(bytes!(
+                "00000000000000000000000000000000000000000000000000000002540be400"
+            )),
+            block_hash: Some(b256!(
+                "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
+            )),
             block_number: Some(4638757),
             block_timestamp: Some(1511886266),
-            transaction_hash: Some(b256!("8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb")),
+            transaction_hash: Some(b256!(
+                "8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"
+            )),
             transaction_index: Some(9),
             log_index: Some(5),
             removed: None,
@@ -225,7 +216,6 @@ mod test {
             Err(_) => panic!("Error"),
         }
     }
-
 
     #[tokio::test]
     async fn test_get_block_fields() {
@@ -257,6 +247,7 @@ mod test {
                 Field::Block(BlockField::ParentBeaconBlockRoot),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let expected = ExpressionResult::Block(vec![
             BlockQueryRes {
@@ -328,7 +319,6 @@ mod test {
             }
             Err(_) => panic!("Error"),
         }
-
     }
 
     #[tokio::test]
@@ -344,6 +334,7 @@ mod test {
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
 
         let expected = ExpressionResult::Account(vec![
@@ -384,6 +375,7 @@ mod test {
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
         assert!(execution_result.is_err())
@@ -420,6 +412,7 @@ mod test {
                 Field::Transaction(TransactionField::YParity),
             ],
             query: String::from(""),
+            dump: None,
         })];
 
         let expected = vec![ExpressionResult::Transaction(vec![
@@ -507,6 +500,7 @@ mod test {
                 Field::Transaction(TransactionField::YParity),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let _result = execution_engine.run(expressions).await;
     }

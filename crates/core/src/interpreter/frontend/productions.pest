@@ -1,11 +1,32 @@
 program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
-    "GET" ~ WHITESPACE* ~ fields* ~ WHITESPACE* ~ "FROM" ~ WHITESPACE* ~ entity ~ WHITESPACE* ~ (entity_id | filter) ~ WHITESPACE* ~ "ON" ~ WHITESPACE* ~ chain ~ exp_separator* ~ WHITESPACE*
+    "GET" ~
+    WHITESPACE* ~
+    fields* ~
+    WHITESPACE* ~
+    "FROM" ~
+    WHITESPACE* ~
+    entity ~
+    WHITESPACE* ~
+    (entity_id | filter) ~
+    WHITESPACE* ~
+    "ON" ~
+    WHITESPACE* ~
+    chain ~
+    (WHITESPACE* ~ dump)* ~
+    exp_separator* ~
+    WHITESPACE*
 }
+
 fields    = { (account_field_list | block_field_list | tx_field_list | log_field_list) }
 entity    = { "account" | "block" | "tx" | "log" }
 entity_id = { tx_id_list | account_id_list | block_id_list }
+
+dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
+file_name = { (ASCII_ALPHANUMERIC | "-" | "_")+ }
+file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
+
 filter = _{ "WHERE" ~ WHITESPACE* ~ entity_filter}
 entity_filter = { log_filter_list | block_filter_list}
 
@@ -23,6 +44,7 @@ account_id = { address | ens }
 block_field_list = _{ block_field ~ ("," ~ WHITESPACE* ~ block_field_list)* }
 // TODO: Check if we need uncles
 block_field      =  { 
+    "number" |
     "hash" |
     "parent_hash" |
     "timestamp" | 
@@ -126,12 +148,45 @@ unit = { "ether" | "gwei" | "wei" }
 number = _{ float | integer }
 integer = _{ (ASCII_DIGIT)+ }
 float = _{ integer ~ "." ~ integer }
-chain = { "eth" | "arb" | "op" | "base" | "blast" | "polygon" | "sepolia" }
+chain = {
+    "eth" |
+    "arb" |
+    "op" |
+    "base" |
+    "blast" |
+    "polygon" |
+    "sepolia" |
+    "anvil" |
+    "local" |
+    "mantle" |
+    "zksync" |
+    "taiko" |
+    "celo" |
+    "avalanche" |
+    "scroll" |
+    "bnb" |
+    "linea" |
+    "tron" |
+    "zora" |
+    "moonbeam" |
+    "moonriver" |
+    "ronin" |
+    "fantom" |
+    "kava" |
+    "gnosis"
+}
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 function_signature = { ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
-solidity_type = _{ ("uint" ~ size | "uint[]" | "uint" ) | ("bytes" ~ size | "bytes[]" | "bytes" ) | ("int" ~ size | "int[]" | "int" ) | ("address" ~ "[]"*) | ("string" ~ "[]"*) | "bool" }
+solidity_type = _{ 
+    ("uint" ~ size | "uint[]" | "uint" ) |
+    ("bytes" ~ size | "bytes[]" | "bytes" ) |
+    ("int" ~ size | "int[]" | "int" ) |
+    ("address" ~ "[]"*) | 
+    ("string" ~ "[]"*) |
+    "bool" 
+}
 size = _{integer ~ "[]"*}
 
 // Helpers
