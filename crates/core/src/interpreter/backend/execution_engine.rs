@@ -6,7 +6,7 @@ use crate::common::{
         AccountQueryRes, ExpressionResult, LogQueryRes, QueryResult, TransactionQueryRes,
     },
     serializer::{dump_results, serialize_results},
-    types::{AccountField, BlockField, Expression, GetExpression, LogField, TransactionField},
+    types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField},
 };
 use alloy::{
     primitives::{Address, FixedBytes},
@@ -69,11 +69,35 @@ impl ExecutionEngine {
                     panic!("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening.");
                 };
 
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<BlockField>, _>>()?;
+                let fields = match &expr.fields[0] {
+                    Field::Star => {
+                        vec![
+                            BlockField::Timestamp,
+                            BlockField::Hash,
+                            BlockField::ParentHash,
+                            BlockField::Size,
+                            BlockField::StateRoot,
+                            BlockField::TransactionsRoot,
+                            BlockField::ReceiptsRoot,
+                            BlockField::LogsBloom,
+                            BlockField::ExtraData,
+                            BlockField::MixHash,
+                            BlockField::TotalDifficulty,
+                            BlockField::BaseFeePerGas,
+                            BlockField::WithdrawalsRoot,
+                            BlockField::BlobGasUsed,
+                            BlockField::ExcessBlobGas,
+                            BlockField::ParentBeaconBlockRoot,
+                        ]
+                    },
+                    _ => {
+                        expr
+                            .fields
+                            .iter()
+                            .map(|field| field.try_into())
+                            .collect::<Result<Vec<BlockField>, _>>()?
+                    }
+                };
 
                 let block_query_res =
                     resolve_block_query(start_block, end_block, fields, &provider).await?;
@@ -87,11 +111,24 @@ impl ExecutionEngine {
                     panic!("An address_id was not provided. Pest rules should have prevented this from happening.");
                 };
 
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<AccountField>, _>>()?;
+                let fields = match expr.fields[0] {
+                    Field::Star => {
+                        vec![
+                            AccountField::Address,
+                            AccountField::Nonce,
+                            AccountField::Balance,
+                            AccountField::Code,
+                        ]
+                    },
+                    _ => {
+                        expr
+                            .fields
+                            .iter()
+                            .map(|field| field.try_into())
+                            .collect::<Result<Vec<AccountField>, _>>()?
+                    }
+                };                
+                
                 match address {
                     Ok(address) => {
                         let account = self.get_account(address, fields, &provider).await?;
@@ -108,12 +145,37 @@ impl ExecutionEngine {
                 } else {
                     panic!("A tx_id was not provided. Pest rules should have prevented this from happening.");
                 };
-
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<TransactionField>, _>>()?;
+                
+                let fields = match expr.fields[0] {
+                    Field::Star => {
+                        vec![
+                            TransactionField::TransactionType,
+                            TransactionField::Hash,
+                            TransactionField::From,
+                            TransactionField::To,
+                            TransactionField::Data,
+                            TransactionField::Value,
+                            TransactionField::GasPrice,
+                            TransactionField::Gas,
+                            TransactionField::Status,
+                            TransactionField::ChainId,
+                            TransactionField::V,
+                            TransactionField::R,
+                            TransactionField::S,
+                            TransactionField::MaxFeePerBlobGas,
+                            TransactionField::MaxFeePerGas,
+                            TransactionField::MaxPriorityFeePerGas,
+                            TransactionField::YParity,
+                        ]
+                    },
+                    _ => {
+                        expr
+                            .fields
+                            .iter()
+                            .map(|field| field.try_into())
+                            .collect::<Result<Vec<TransactionField>, _>>()?
+                    }
+                };
 
                 match hash {
                     Ok(hash) => {
@@ -131,11 +193,29 @@ impl ExecutionEngine {
                 } else {
                     panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
                 };
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<LogField>, _>>()?;
+                
+                let fields = match expr.fields[0] {
+                    Field::Star => vec![
+                        LogField::Address,
+                        LogField::Topic0,
+                        LogField::Topic1,
+                        LogField::Topic2,
+                        LogField::Topic3,
+                        LogField::Data,
+                        LogField::BlockHash,
+                        LogField::BlockNumber,
+                        LogField::BlockTimestamp,
+                        LogField::TransactionHash,
+                        LogField::TransactionIndex,
+                        LogField::LogIndex,
+                        LogField::Removed,
+                    ],
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<LogField>, _>>()?,
+                }; 
 
                 let logs = self.get_logs(filter, fields, &provider).await?;
                 Ok(ExpressionResult::Log(logs))
@@ -521,6 +601,37 @@ mod test {
             }
         }
     }
+
+    #[tokio::test]
+    async fn test_get_account_fields_using_star_operator() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Account,
+            entity_id: Some(EntityId::Account(NameOrAddress::Name(String::from(
+                "vitalik.eth",
+            )))),
+            entity_filter: None,
+            fields: vec![Field::Star],
+            query: String::from(""),
+            dump: None,
+        })];
+        let expected = ExpressionResult::Account(vec![AccountQueryRes {
+            nonce: Some(1307),
+            balance: Some(U256::from(11712705339518332754_u64)),
+            address: Some(address!("d8da6bf26964af9d7eed9e03e53415d37aa96045")),
+            code: Some(bytes!(""))
+        }]);
+
+        let execution_result = execution_engine.run(expressions).await;
+        match execution_result {
+            Ok(results) => {
+                assert_eq!(results[0].result, expected);
+            }
+            Err(_) => panic!("Error"),
+        }
+    }
+
     #[tokio::test]
     async fn test_get_account_fields_using_invalid_ens() {
         let execution_engine = ExecutionEngine::new();

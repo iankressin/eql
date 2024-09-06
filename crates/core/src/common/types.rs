@@ -124,6 +124,7 @@ pub enum Field {
     Block(BlockField),
     Transaction(TransactionField),
     Log(LogField),
+    Star,
 }
 
 impl Display for Field {
@@ -133,6 +134,7 @@ impl Display for Field {
             Field::Block(block_field) => write!(f, "{}", block_field),
             Field::Transaction(transaction_field) => write!(f, "{}", transaction_field),
             Field::Log(log_field) => write!(f, "{}", log_field),
+            Field::Star => write!(f, "*"),
         }
     }
 }

@@ -19,7 +19,7 @@ get       = {
     WHITESPACE*
 }
 
-fields    = { (account_field_list | block_field_list | tx_field_list | log_field_list) }
+fields    = { (star_operator | account_field_list | block_field_list | tx_field_list | log_field_list) }
 entity    = { "account" | "block" | "tx" | "log" }
 entity_id = { hash | account_id | block_id }
 
@@ -189,3 +189,4 @@ size = _{integer ~ "[]"*}
 WHITESPACE = _{ " " | "\t" | NEWLINE }
 exp_separator = _{"," | ";"}
 silent_eoi = _{ !ANY }
+star_operator = { "*" }
