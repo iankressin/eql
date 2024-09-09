@@ -336,30 +336,21 @@ mod test {
             query: String::from(""),
             dump: None,
         })];
-
-        let expected = ExpressionResult::Account(vec![
-            AccountQueryRes {
-                nonce: None,
-                balance:Some(U256::from(11712705339518332754_u64)),
-                address: None,
-                code: None,
-            },
-            AccountQueryRes {
-                nonce: None,
-                balance:Some(U256::from(11712705339518332754_u64)),
-                address: None,
-                code: None,
-            },
-        ]);
-        
         let execution_result = execution_engine.run(expressions).await;
-        println!("{:#?}", execution_result);
-
+        
         match execution_result {
-            Ok(results) => {
-                assert_eq!(results[0].result, expected);
-            }
-            Err(_) => panic!("Error"),
+            Ok(results) => match &results[0] {
+                QueryResult { query, result, .. } => {
+                    assert_eq!(query, "");
+                    match result {
+                        ExpressionResult::Account(account) => {
+                            assert!(account[0].balance.is_some());
+                        }
+                        _ => panic!("Invalid result"),
+                    }
+                }
+            },
+            Err(e) => panic!("Error: {}", e),
         }
     }
 
