@@ -5,8 +5,10 @@ use crate::common::{
     query_result::{
         AccountQueryRes, ExpressionResult, LogQueryRes, QueryResult, TransactionQueryRes,
     },
-    serializer::{dump_results, serialize_results},
-    types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField},
+    serializer::dump_results,
+    types::{
+        AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField,
+    },
 };
 use alloy::{
     primitives::{Address, FixedBytes},
@@ -70,33 +72,12 @@ impl ExecutionEngine {
                 };
 
                 let fields = match &expr.fields[0] {
-                    Field::Star => {
-                        vec![
-                            BlockField::Timestamp,
-                            BlockField::Hash,
-                            BlockField::ParentHash,
-                            BlockField::Size,
-                            BlockField::StateRoot,
-                            BlockField::TransactionsRoot,
-                            BlockField::ReceiptsRoot,
-                            BlockField::LogsBloom,
-                            BlockField::ExtraData,
-                            BlockField::MixHash,
-                            BlockField::TotalDifficulty,
-                            BlockField::BaseFeePerGas,
-                            BlockField::WithdrawalsRoot,
-                            BlockField::BlobGasUsed,
-                            BlockField::ExcessBlobGas,
-                            BlockField::ParentBeaconBlockRoot,
-                        ]
-                    },
-                    _ => {
-                        expr
-                            .fields
-                            .iter()
-                            .map(|field| field.try_into())
-                            .collect::<Result<Vec<BlockField>, _>>()?
-                    }
+                    Field::Star => BlockField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<BlockField>, _>>()?,
                 };
 
                 let block_query_res =
@@ -112,21 +93,12 @@ impl ExecutionEngine {
                 };
 
                 let fields = match expr.fields[0] {
-                    Field::Star => {
-                        vec![
-                            AccountField::Address,
-                            AccountField::Nonce,
-                            AccountField::Balance,
-                            AccountField::Code,
-                        ]
-                    },
-                    _ => {
-                        expr
-                            .fields
-                            .iter()
-                            .map(|field| field.try_into())
-                            .collect::<Result<Vec<AccountField>, _>>()?
-                    }
+                    Field::Star => AccountField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<AccountField>, _>>()?,
                 };                
                 
                 match address {
@@ -147,34 +119,12 @@ impl ExecutionEngine {
                 };
                 
                 let fields = match expr.fields[0] {
-                    Field::Star => {
-                        vec![
-                            TransactionField::TransactionType,
-                            TransactionField::Hash,
-                            TransactionField::From,
-                            TransactionField::To,
-                            TransactionField::Data,
-                            TransactionField::Value,
-                            TransactionField::GasPrice,
-                            TransactionField::Gas,
-                            TransactionField::Status,
-                            TransactionField::ChainId,
-                            TransactionField::V,
-                            TransactionField::R,
-                            TransactionField::S,
-                            TransactionField::MaxFeePerBlobGas,
-                            TransactionField::MaxFeePerGas,
-                            TransactionField::MaxPriorityFeePerGas,
-                            TransactionField::YParity,
-                        ]
-                    },
-                    _ => {
-                        expr
-                            .fields
-                            .iter()
-                            .map(|field| field.try_into())
-                            .collect::<Result<Vec<TransactionField>, _>>()?
-                    }
+                    Field::Star => TransactionField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<TransactionField>, _>>()?,
                 };
 
                 match hash {
@@ -195,27 +145,13 @@ impl ExecutionEngine {
                 };
                 
                 let fields = match expr.fields[0] {
-                    Field::Star => vec![
-                        LogField::Address,
-                        LogField::Topic0,
-                        LogField::Topic1,
-                        LogField::Topic2,
-                        LogField::Topic3,
-                        LogField::Data,
-                        LogField::BlockHash,
-                        LogField::BlockNumber,
-                        LogField::BlockTimestamp,
-                        LogField::TransactionHash,
-                        LogField::TransactionIndex,
-                        LogField::LogIndex,
-                        LogField::Removed,
-                    ],
+                    Field::Star => LogField::all_variants().to_vec(),
                     _ => expr
                         .fields
                         .iter()
                         .map(|field| field.try_into())
                         .collect::<Result<Vec<LogField>, _>>()?,
-                }; 
+                };
 
                 let logs = self.get_logs(filter, fields, &provider).await?;
                 Ok(ExpressionResult::Log(logs))
@@ -620,7 +556,7 @@ mod test {
             nonce: Some(1307),
             balance: Some(U256::from(11712705339518332754_u64)),
             address: Some(address!("d8da6bf26964af9d7eed9e03e53415d37aa96045")),
-            code: Some(bytes!(""))
+            code: Some(bytes!("")),
         }]);
 
         let execution_result = execution_engine.run(expressions).await;

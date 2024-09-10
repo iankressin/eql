@@ -1,6 +1,7 @@
 use crate::interpreter::frontend::parser::Rule;
 
 use super::{chain::Chain, entity::Entity, entity_filter::EntityFilter, entity_id::EntityId};
+use eql_macros::EnumVariants;
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Display};
@@ -158,8 +159,7 @@ impl Error for FieldError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum AccountField {
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]pub enum AccountField {
     Address,
     Nonce,
     Balance,
@@ -208,7 +208,7 @@ impl TryFrom<&str> for AccountField {
 }
 
 // TODO: should include nonce, transactions and withdrawals
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]
 pub enum BlockField {
     Number,
     Timestamp,
@@ -297,7 +297,7 @@ impl TryFrom<&str> for BlockField {
 }
 
 // TODO: implement blob_versioned_hashes and access_list
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]
 pub enum TransactionField {
     TransactionType,
     Hash,
@@ -385,7 +385,7 @@ impl TryFrom<&str> for TransactionField {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]
 pub enum LogField {
     Address,
     Topic0,

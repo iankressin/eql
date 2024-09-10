@@ -22,6 +22,7 @@ async-trait = { version = "0.1" }
 getrandom = { version = "0.2", features = ["js"] }
 csv = "1.1"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
+eql_macros = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1"
