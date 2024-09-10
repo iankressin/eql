@@ -15,41 +15,34 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum TransactionResolverErrors {
-    // #[error("Invalid address")]
-    // InvalidAddress,
-    #[error("Mismatch between Entity and EntityId")]
-    MismatchEntityAndEntityId,
-    #[error("Unable resolve ENS name")]
-    EnsResolution,
+    #[error("Mismatch between Entity and EntityId, {0} can't be resolved as a transaction id")]
+    MismatchEntityAndEntityId(String),
 }
 
+/// Resolve the query to get transactions after receiving an transaction entity expression
+/// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results.
 pub async fn resolve_transaction_query(
     entity_ids: Vec<EntityId>, 
     fields: Vec<TransactionField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<TransactionQueryRes>, Box<dyn Error>> {
-    // Create a vector to store individual futures, for each request.
     let mut tx_futures = Vec::new();
-    // Iterate through entity_ids and map them to futures.
     for entity_id in entity_ids {
-        let fields = fields.clone(); // Clone fields for each async block.
-        let provider = provider.clone(); // Clone the provider if necessary, ensure it's Send + Sync.
+        let fields = fields.clone();
+        let provider = provider.clone();
         let tx_future = async move {
         
             match entity_id {
                 EntityId::Transaction(hash) => { 
                     get_transaction(hash, fields, &provider).await
                 },
-                // Ensure all entity IDs are of the variant EntityId::Transaction
-                _ => Err(Box::new(TransactionResolverErrors::MismatchEntityAndEntityId).into()),
+                id => Err(Box::new(TransactionResolverErrors::MismatchEntityAndEntityId(id.to_string())).into()),
             }
         };
 
-    // Add the future to the list.
     tx_futures.push(tx_future);
     }
 
-    // Execute all futures concurrently and collect the results.
     let tx_res = try_join_all(tx_futures).await?;
     Ok(tx_res)
 }

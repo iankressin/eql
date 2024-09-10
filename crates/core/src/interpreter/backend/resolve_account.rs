@@ -17,42 +17,36 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum AccountResolverErrors {
-    // #[error("Invalid address")]
-    // InvalidAddress,
-    #[error("Mismatch between Entity and EntityId")]
-    MismatchEntityAndEntityId,
+    #[error("Mismatch between Entity and EntityId, {0} can't be resolved as a account id")]
+    MismatchEntityAndEntityId(String),
     #[error("Unable resolve ENS name")]
     EnsResolution,
 }
 
+/// Resolve the query to get accounts after receiving an account entity expression
+/// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results.
 pub async fn resolve_account_query(
     entity_ids: Vec<EntityId>, 
     fields: Vec<AccountField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<AccountQueryRes>, Box<dyn Error>> {
-    // Create a vector to store individual futures, for each request.
     let mut account_futures = Vec::new();
-    // Iterate through entity_ids and map them to futures.
     for entity_id in entity_ids {
-        let fields = fields.clone(); // Clone fields for each async block.
-        let provider = provider.clone(); // Clone the provider if necessary, ensure it's Send + Sync.
+        let fields = fields.clone();
+        let provider = provider.clone();
         let account_future = async move {
-        
             match entity_id {
                 EntityId::Account(name_or_address) => { 
                     let address = to_address(name_or_address).await?;
                     get_account(address, fields, &provider).await
                 },
-                // Ensure all entity IDs are of the variant EntityId::Account
-                _ => Err(Box::new(AccountResolverErrors::MismatchEntityAndEntityId).into()),
+                id => Err(Box::new(AccountResolverErrors::MismatchEntityAndEntityId(id.to_string())).into()),
             }
         };
 
-    // Add the future to the list.
     account_futures.push(account_future);
     }
 
-    // Execute all futures concurrently and collect the results.
     let account_res = try_join_all(account_futures).await?;
     Ok(account_res)
 }

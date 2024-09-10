@@ -63,9 +63,6 @@ impl<'a> Parser<'a> {
                     get_expr.fields = self.get_fields(inner_pair)?;
                 }
                 Rule::entity => get_expr.entity = pair.as_str().try_into()?,
-                // TODO: We shouldn't need to call `trim()` here, but the parser is
-                // adding an extra whitespace when entity_id is block number.
-                // The grammar and productions should be double checked.
                 Rule::entity_id => {
                     get_expr.entity_id = Some(pair
                         .into_inner()

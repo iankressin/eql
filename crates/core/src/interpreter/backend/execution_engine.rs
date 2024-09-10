@@ -16,7 +16,14 @@ use std::error::Error;
 
 pub struct ExecutionEngine;
 
-// TODO: create ExecutionEngineErrors instead of throwing static strings
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ExecutionEngineError {
+    #[error("Neither an entity_id nor a filter was provided. Pest rules should have prevented this from happening.")]
+    NoEntityIdOrFilter,
+    #[error("Multiple filters are not supported for block queries.")]
+    MultipleFiltersNotSupported,
+}
+
 impl ExecutionEngine {
     pub fn new() -> ExecutionEngine {
         ExecutionEngine
@@ -55,26 +62,22 @@ impl ExecutionEngine {
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<BlockField>, _>>()?;
 
-                // Handle entity_id if present.
                 let block_query_res = if let Some(entity_ids) = &expr.entity_id {
                         resolve_block_query(entity_ids.to_vec(), fields, &provider).await?
                 } 
-                // Handle entity_filter if present.
                 else if let Some(entity_filter) = &expr.entity_filter {
-                    // Check if there's exactly one filter and it is a block range.
                     match entity_filter.as_slice() {
                         [EntityFilter::LogBlockRange(range)] => {
                             let entity_ids = vec![EntityId::Block(range.clone())];
                             resolve_block_query(entity_ids, fields, &provider).await?
                         }
                         _ => {
-                            return Err("Block filters don't support multiple filters or non-block range filters.".into());
+                            return Err(Box::new(ExecutionEngineError::MultipleFiltersNotSupported));
                         }
                     }
                 } 
-                // If neither entity_id nor entity_filter is provided, return an error.
                 else {
-                    return Err("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening.".into());
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
 
                 Ok(ExpressionResult::Block(block_query_res))
@@ -90,7 +93,7 @@ impl ExecutionEngine {
                 let account_query_res = if let Some(entity_ids) = &expr.entity_id {
                     resolve_account_query(entity_ids.to_vec(), fields, &provider).await?    
                 } else {
-                    panic!("An accoun_id was not provided. Pest rules should have prevented this from happening.");
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
 
                 Ok(ExpressionResult::Account(account_query_res))
@@ -106,7 +109,7 @@ impl ExecutionEngine {
                 let tx_query_res = if let Some(entity_ids) = &expr.entity_id {
                     resolve_transaction_query(entity_ids.to_vec(), fields, &provider).await?   
                 } else {
-                    panic!("An transaction_id was not provided. Pest rules should have prevented this from happening.");
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
 
                 Ok(ExpressionResult::Transaction(tx_query_res))
@@ -116,7 +119,7 @@ impl ExecutionEngine {
                 let filter = if let Some(entity_filter) = &expr.entity_filter {
                     EntityFilter::build_filter(entity_filter)
                 } else {
-                    panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
                 let fields = expr
                     .fields

@@ -7,10 +7,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum LogResolverErrors {
-    // #[error("Invalid address")]
-    // InvalidAddress,
-    #[error("Mismatch between Entity and EntityId")]
-    MismatchEntityAndEntityId,
+    #[error("Query returned no results within the given filters")]
+    NoLogsFound,
 }
 
 pub async fn resolve_log_query(
@@ -31,13 +29,12 @@ async fn get_logs(
     
     let logs = provider.get_logs(&filter).await?;
     if logs.is_empty() {
-        return Err("No logs found".into()); // Check if this is the best approach for no logs return. I understand it shouldn't panic.
+        return Err(Box::new(LogResolverErrors::NoLogsFound))
     }
 
     let results: Vec<LogQueryRes> = logs.into_iter().map(|log| {
         let mut result = LogQueryRes::default();
 
-        // Use a for loop with match to map fields to result
         for field in &fields {
             match field {
                 LogField::Address => result.address = Some(log.inner.address),

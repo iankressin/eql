@@ -5,7 +5,7 @@ use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, FixedBytes},
 };
-use std::{error::Error, str::FromStr};
+use std::{error::Error, fmt::{self, Display, Formatter}, str::FromStr};
 use pest::iterators::Pair;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -27,6 +27,16 @@ pub enum EntityId {
     Account(NameOrAddress),
 }
 
+impl Display for EntityId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            EntityId::Block(block_range) => write!(f, "{:?}", block_range),
+            EntityId::Transaction(tx_hash) => write!(f, "TransactionHash({})", tx_hash),
+            EntityId::Account(name_or_address) => write!(f, "{:?}", name_or_address),
+        }
+    }
+}
+
 impl<'a> TryFrom<Pair<'a, Rule>> for EntityId {
     type Error = Box<dyn Error>;
 
@@ -34,20 +44,21 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityId {
         match pair.as_rule() {
             Rule::account_id => {
                 let account_id = pair.as_str().trim();
+                // TODO: We shouldn't need to call `trim()` here, but the parser is
+                // adding an extra whitespace when entity_id is block number.
+                // The grammar and productions should be double checked.
                 if account_id.starts_with("0x") {
                     if account_id.len() == 42 {
                         let address = Address::from_str(account_id).map_err(|_| "Invalid address")?;
                         let address = NameOrAddress::Address(address);
                         Ok(EntityId::Account(address))
                     } else {
-                        // Return error: type not supported
                         Err(EntityIdError::InvalidAddress.into())
                     }
                 } else if account_id.ends_with(".eth") {
                     let ens = NameOrAddress::Name(account_id.to_string());
                     Ok(EntityId::Account(ens))
                 } else {
-                    // Return error: type not supported
                     Err(EntityIdError::InvalidAddress.into())
                 }
             }
@@ -70,7 +81,6 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityId {
                     let tx_hash = FixedBytes::from_str(tx_id).map_err(|_| "Invalid tx hash")?;
                     Ok(EntityId::Transaction(tx_hash))
                 } else {
-                    // Return error: type not supported
                     Err(EntityIdError::InvalidTxHash.into())
                 }
             }
