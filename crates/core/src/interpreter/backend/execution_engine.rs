@@ -2,41 +2,19 @@ use super::block_resolver::resolve_block_query;
 use crate::common::{
     entity::{Entity, EntityError},
     entity_filter::EntityFilter,
-    query_result::{AccountQueryRes, BlockQueryRes, TransactionQueryRes, LogQueryRes},
-    types::{AccountField, BlockField, TransactionField, LogField, Expression, GetExpression},
+    query_result::{
+        AccountQueryRes, ExpressionResult, LogQueryRes, QueryResult, TransactionQueryRes,
+    },
+    serializer::{dump_results, serialize_results},
+    types::{AccountField, BlockField, Expression, GetExpression, LogField, TransactionField},
 };
 use alloy::{
     primitives::{Address, FixedBytes},
     providers::{Provider, ProviderBuilder, RootProvider},
+    rpc::types::Filter,
     transports::http::{Client, Http},
-    rpc::types::Filter
 };
-use serde::{Deserialize, Serialize};
 use std::error::Error;
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct QueryResult {
-    pub query: String,
-    pub result: ExpressionResult,
-}
-
-impl QueryResult {
-    pub fn new(query: String, result: ExpressionResult) -> QueryResult {
-        QueryResult { query, result }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub enum ExpressionResult {
-    #[serde(rename = "account")]
-    Account(Vec<AccountQueryRes>),
-    #[serde(rename = "block")]
-    Block(Vec<BlockQueryRes>),
-    #[serde(rename = "transaction")]
-    Transaction(Vec<TransactionQueryRes>),
-    #[serde(rename = "log")]
-    Log(Vec<LogQueryRes>),
-}
 
 pub struct ExecutionEngine;
 
@@ -71,12 +49,12 @@ impl ExecutionEngine {
         let rpc_url = expr.chain.rpc_url().parse()?;
         let provider = ProviderBuilder::new().on_http(rpc_url);
 
-        match expr.entity {
+        let result = match expr.entity {
             Entity::Block => {
                 //First, check if expr.entity_id is Some(entity_id). If this condition is true, it calls the to_block_id method on entity_id.
-                //If expr.entity_id is None, the code then checks if expr.entity_filter is Some(entity_filter). If this condition is true, it calls the to_block_range method on entity_filter. 
+                //If expr.entity_id is None, the code then checks if expr.entity_filter is Some(entity_filter). If this condition is true, it calls the to_block_range method on entity_filter.
                 //If neither entity_id nor entity_filter is present in expr, the code panics with the message "Invalid block_id".
-     
+
                 let (start_block, end_block) = if let Some(entity_id) = &expr.entity_id {
                     entity_id.to_block_id()?
                 } else if let Some(entity_filter) = &expr.entity_filter {
@@ -84,20 +62,20 @@ impl ExecutionEngine {
                         let (start_block, end_block) = entity_filter[0].to_block_range()?;
                         (start_block, end_block)
                     } else {
-                        return Err("Block filters don't support multiple filters".into()); // Check if this is the best approach for multiple filters.
+                        return Err("Block filters don't support multiple filters".into());
+                        // Check if this is the best approach for multiple filters.
                     }
                 } else {
-                    panic!("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening."); 
+                    panic!("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening.");
                 };
-        
-                
+
                 let fields = expr
                     .fields
                     .iter()
                     .map(|field| field.try_into())
                     .collect::<Result<Vec<BlockField>, _>>()?;
 
-                let block_query_res = 
+                let block_query_res =
                     resolve_block_query(start_block, end_block, fields, &provider).await?;
 
                 Ok(ExpressionResult::Block(block_query_res))
@@ -149,7 +127,7 @@ impl ExecutionEngine {
             }
             Entity::Log => {
                 let filter = if let Some(entity_filter) = &expr.entity_filter {
-                    EntityFilter::build_filter(entity_filter)                
+                    EntityFilter::build_filter(entity_filter)
                 } else {
                     panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
                 };
@@ -161,9 +139,13 @@ impl ExecutionEngine {
 
                 let logs = self.get_logs(filter, fields, &provider).await?;
                 Ok(ExpressionResult::Log(logs))
-                
             }
-        }
+        };
+
+        result.and_then(|result| {
+            expr.dump.as_ref().map(|dump| dump_results(&result, &dump));
+            Ok(result)
+        })
     }
 
     async fn get_transaction(
@@ -281,37 +263,41 @@ impl ExecutionEngine {
         fields: Vec<LogField>,
         provider: &RootProvider<Http<Client>>,
     ) -> Result<Vec<LogQueryRes>, Box<dyn Error>> {
-        
         let logs = provider.get_logs(&filter).await?;
         if logs.is_empty() {
             return Err("No logs found".into()); // Check if this is the best approach for no logs return. I understand it shouldn't panic.
         }
-    
-        let results: Vec<LogQueryRes> = logs.into_iter().map(|log| {
-            let mut result = LogQueryRes::default();
-    
-            // Use a for loop with match to map fields to result
-            for field in &fields {
-                match field {
-                    LogField::Address => result.address = Some(log.inner.address),
-                    LogField::Topic0 => result.topic0 = log.topic0().copied(),
-                    LogField::Topic1 => result.topic1 = log.inner.data.topics().get(1).copied(),
-                    LogField::Topic2 => result.topic2 = log.inner.data.topics().get(2).copied(),
-                    LogField::Topic3 => result.topic3 = log.inner.data.topics().get(3).copied(),
-                    LogField::Data => result.data = Some(log.data().data.clone()),
-                    LogField::BlockHash => result.block_hash = log.block_hash,
-                    LogField::BlockNumber => result.block_number = log.block_number,
-                    LogField::BlockTimestamp => result.block_timestamp = log.block_timestamp,
-                    LogField::TransactionHash => result.transaction_hash = log.transaction_hash,
-                    LogField::TransactionIndex => result.transaction_index = log.transaction_index,
-                    LogField::LogIndex => result.log_index = log.log_index,
-                    LogField::Removed => result.removed = Some(log.removed),
+
+        let results: Vec<LogQueryRes> = logs
+            .into_iter()
+            .map(|log| {
+                let mut result = LogQueryRes::default();
+
+                // Use a for loop with match to map fields to result
+                for field in &fields {
+                    match field {
+                        LogField::Address => result.address = Some(log.inner.address),
+                        LogField::Topic0 => result.topic0 = log.topic0().copied(),
+                        LogField::Topic1 => result.topic1 = log.inner.data.topics().get(1).copied(),
+                        LogField::Topic2 => result.topic2 = log.inner.data.topics().get(2).copied(),
+                        LogField::Topic3 => result.topic3 = log.inner.data.topics().get(3).copied(),
+                        LogField::Data => result.data = Some(log.data().data.clone()),
+                        LogField::BlockHash => result.block_hash = log.block_hash,
+                        LogField::BlockNumber => result.block_number = log.block_number,
+                        LogField::BlockTimestamp => result.block_timestamp = log.block_timestamp,
+                        LogField::TransactionHash => result.transaction_hash = log.transaction_hash,
+                        LogField::TransactionIndex => {
+                            result.transaction_index = log.transaction_index
+                        }
+                        LogField::LogIndex => result.log_index = log.log_index,
+                        LogField::Removed => result.removed = Some(log.removed),
+                    }
                 }
-            }
-    
-            result
-        }).collect();
-    
+
+                result
+            })
+            .collect();
+
         Ok(results)
     }
 }
@@ -322,8 +308,8 @@ mod test {
     use crate::common::{
         chain::Chain,
         ens::NameOrAddress,
-        entity_id::EntityId,
         entity_filter::{BlockRange, EntityFilter},
+        entity_id::EntityId,
         query_result::BlockQueryRes,
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
@@ -342,9 +328,16 @@ mod test {
             entity: Entity::Log,
             entity_id: None,
             entity_filter: Some(vec![
-                EntityFilter::LogBlockRange(BlockRange::new(BlockNumberOrTag::Number(4638757), Some(BlockNumberOrTag::Number(4638758)))),
-                EntityFilter::LogEmitterAddress(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
-                EntityFilter::LogTopic0(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
+                EntityFilter::LogBlockRange(BlockRange::new(
+                    BlockNumberOrTag::Number(4638757),
+                    Some(BlockNumberOrTag::Number(4638758)),
+                )),
+                EntityFilter::LogEmitterAddress(address!(
+                    "dac17f958d2ee523a2206206994597c13d831ec7"
+                )),
+                EntityFilter::LogTopic0(b256!(
+                    "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
+                )),
             ]),
             fields: vec![
                 Field::Log(LogField::Address),
@@ -361,19 +354,28 @@ mod test {
                 Field::Log(LogField::LogIndex),
             ],
             query: String::from(""),
+            dump: None,
         })];
-        let execution_result = execution_engine.run(expressions).await; 
+        let execution_result = execution_engine.run(expressions).await;
         let expected = vec![LogQueryRes {
             address: Some(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
-            topic0: Some(b256!("cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a")),
+            topic0: Some(b256!(
+                "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
+            )),
             topic1: None,
             topic2: None,
             topic3: None,
-            data: Some(bytes!("00000000000000000000000000000000000000000000000000000002540be400")),
-            block_hash: Some(b256!("d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58")),
+            data: Some(bytes!(
+                "00000000000000000000000000000000000000000000000000000002540be400"
+            )),
+            block_hash: Some(b256!(
+                "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
+            )),
             block_number: Some(4638757),
             block_timestamp: Some(1511886266),
-            transaction_hash: Some(b256!("8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb")),
+            transaction_hash: Some(b256!(
+                "8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"
+            )),
             transaction_index: Some(9),
             log_index: Some(5),
             removed: None,
@@ -387,14 +389,16 @@ mod test {
         }
     }
 
-
     #[tokio::test]
     async fn test_get_block_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))),
+            entity_id: Some(EntityId::Block(BlockRange::new(
+                BlockNumberOrTag::Number(1),
+                None,
+            ))),
             entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::Timestamp),
@@ -415,6 +419,7 @@ mod test {
                 Field::Block(BlockField::ParentBeaconBlockRoot),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let expected = ExpressionResult::Block(vec![BlockQueryRes {
             timestamp: Some(1438269988),
@@ -454,7 +459,6 @@ mod test {
             }
             Err(_) => panic!("Error"),
         }
-
     }
 
     #[tokio::test]
@@ -469,6 +473,7 @@ mod test {
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
 
@@ -494,10 +499,13 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth")))),
+            entity_id: Some(EntityId::Account(NameOrAddress::Name(String::from(
+                "vitalik.eth",
+            )))),
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
 
@@ -525,6 +533,7 @@ mod test {
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
+            dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
         assert!(execution_result.is_err())
@@ -536,7 +545,9 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Transaction,
-            entity_id: Some(EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"))),
+            entity_id: Some(EntityId::Transaction(b256!(
+                "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+            ))),
             entity_filter: None,
             fields: vec![
                 Field::Transaction(TransactionField::TransactionType),
@@ -558,6 +569,7 @@ mod test {
                 Field::Transaction(TransactionField::YParity),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let result = execution_engine.run(expressions).await;
         let expected = vec![ExpressionResult::Transaction(vec![TransactionQueryRes {
@@ -621,6 +633,7 @@ mod test {
                 Field::Transaction(TransactionField::YParity),
             ],
             query: String::from(""),
+            dump: None,
         })];
         let _result = execution_engine.run(expressions).await;
     }

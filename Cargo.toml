@@ -14,3 +14,5 @@ eql_core = { path = "crates/core" }
 eql_cli = { path = "crates/cli" }
 eql_wasm = { path = "crates/wasm" }
 
+[profile.bench]
+debug = true

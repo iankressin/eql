@@ -1,8 +1,8 @@
 pub mod backend;
 pub mod frontend;
 
-use crate::common::types::Expression;
-use backend::execution_engine::{ExecutionEngine, QueryResult};
+use crate::common::{query_result::QueryResult, types::Expression};
+use backend::execution_engine::ExecutionEngine;
 use frontend::{parser::Parser, sementic_analyzer::SemanticAnalyzer};
 use std::error::Error;
 

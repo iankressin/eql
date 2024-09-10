@@ -1,14 +1,34 @@
 use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, B256, U256};
 use serde::{Deserialize, Serialize, Serializer};
 
-fn serialize_option_u256<S>(option: &Option<U256>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match option {
-        Some(u256) => serializer.serialize_some(&u256.to_string()),
-        None => serializer.serialize_none(),
+use super::types::Dump;
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct QueryResult {
+    pub query: String,
+    pub result: ExpressionResult,
+}
+
+impl QueryResult {
+    pub fn new(query: String, result: ExpressionResult) -> QueryResult {
+        QueryResult { query, result }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub enum ExpressionResult {
+    #[serde(rename = "account")]
+    Account(Vec<AccountQueryRes>),
+    #[serde(rename = "block")]
+    Block(Vec<BlockQueryRes>),
+    #[serde(rename = "transaction")]
+    Transaction(Vec<TransactionQueryRes>),
+    #[serde(rename = "log")]
+    Log(Vec<LogQueryRes>),
+}
+
+impl ExpressionResult {
+    pub fn serialize(&self, dump: &Dump) {}
 }
 
 // TODO: should this be replaced with Alloy's Block?
@@ -186,5 +206,15 @@ mod test {
         let u256 = U256Serializable { value: Some(value) };
         let u256_str = json!(u256).to_string();
         assert_eq!("{\"value\":\"100\"}", u256_str);
+    }
+}
+
+fn serialize_option_u256<S>(option: &Option<U256>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match option {
+        Some(u256) => serializer.serialize_some(&u256.to_string()),
+        None => serializer.serialize_none(),
     }
 }
