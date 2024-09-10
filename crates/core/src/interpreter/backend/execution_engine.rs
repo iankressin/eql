@@ -141,7 +141,7 @@ mod test {
         ens::NameOrAddress,
         entity_filter::{BlockRange, EntityFilter},
         entity_id::EntityId,
-        query_result::{AccountQueryRes, BlockQueryRes, LogQueryRes, TransactionQueryRes},
+        query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
         types::{AccountField, BlockField, Expression, Field, GetExpression},
     };
     use alloy::{
