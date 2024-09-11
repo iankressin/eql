@@ -30,9 +30,9 @@ pub enum EntityId {
 impl Display for EntityId {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            EntityId::Block(block_range) => write!(f, "{:?}", block_range),
-            EntityId::Transaction(tx_hash) => write!(f, "TransactionHash({})", tx_hash),
-            EntityId::Account(name_or_address) => write!(f, "{:?}", name_or_address),
+            EntityId::Block(block_range) => write!(f, "{}", block_range),
+            EntityId::Transaction(tx_hash) => write!(f, "{}", tx_hash),
+            EntityId::Account(name_or_address) => write!(f, "{}", name_or_address),
         }
     }
 }

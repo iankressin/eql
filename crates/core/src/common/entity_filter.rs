@@ -3,7 +3,7 @@ use alloy::{
     rpc::types::Filter,
     primitives::{Address, B256},
 };
-use std::error::Error;
+use std::{error::Error, fmt::{self, Display, Formatter}};
 use pest::iterators::Pair;
 use crate::interpreter::frontend::parser::{ParserError, Rule};
 use super::entity_id::parse_block_number_or_tag;
@@ -137,5 +137,11 @@ impl BlockRange {
 
     pub fn range(&self) -> (BlockNumberOrTag, Option<BlockNumberOrTag>) {
         (self.start, self.end)
+    }
+}
+
+impl Display for BlockRange {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
