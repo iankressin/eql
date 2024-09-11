@@ -106,6 +106,9 @@ impl<'a> Parser<'a> {
                 Rule::log_field => {
                     fields.push(Field::Log(pair.as_str().try_into()?));
                 }
+                Rule::star_operator => {
+                    fields.push(Field::Star);
+                }
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(
                         pair.as_str().to_string(),

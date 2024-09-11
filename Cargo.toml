@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cli", "crates/core", "crates/wasm"]
+members = ["crates/cli", "crates/core", "crates/wasm", "crates/macros"]
 resolver = "2"
 
 [workspace.package]
@@ -13,6 +13,7 @@ authors = ["Ian K. Guimaraes <ianguimaraes31@gmail.com>"]
 eql_core = { path = "crates/core" }
 eql_cli = { path = "crates/cli" }
 eql_wasm = { path = "crates/wasm" }
+eql_macros = { path = "crates/macros" }
 
 [profile.bench]
 debug = true

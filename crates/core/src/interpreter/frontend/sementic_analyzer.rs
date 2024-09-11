@@ -85,6 +85,7 @@ impl<'a> SemanticAnalyzer<'a> {
                         }));
                     }
                 }
+                Field::Star => {} 
             }
         }
 

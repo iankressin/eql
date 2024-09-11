@@ -5,11 +5,11 @@ use super::{
     resolve_transaction::resolve_transaction_query,
 };
 use crate::common::{
-    entity::Entity, 
     entity_filter::EntityFilter, 
-    entity_id::EntityId, 
+    entity_id::EntityId,
+    types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField},
+    entity::Entity,
     query_result::{ExpressionResult, QueryResult},
-    types::{AccountField, BlockField, Expression, GetExpression, LogField, TransactionField}
 };
 use alloy::providers::ProviderBuilder;
 use std::error::Error;
@@ -56,11 +56,14 @@ impl ExecutionEngine {
 
         match expr.entity {
             Entity::Block => {
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<BlockField>, _>>()?;
+                let fields = match &expr.fields[0] {
+                    Field::Star => BlockField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<BlockField>, _>>()?,
+                };
 
                 let block_query_res = if let Some(entity_ids) = &expr.entity_id {
                         resolve_block_query(entity_ids.to_vec(), fields, &provider).await?
@@ -84,14 +87,17 @@ impl ExecutionEngine {
             }
 
             Entity::Account => {
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<AccountField>, _>>()?;
+                let fields = match expr.fields[0] {
+                    Field::Star => AccountField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<AccountField>, _>>()?,
+                };             
                 
                 let account_query_res = if let Some(entity_ids) = &expr.entity_id {
-                    resolve_account_query(entity_ids.to_vec(), fields, &provider).await?    
+                    resolve_account_query(entity_ids.to_vec(), fields, &provider).await?
                 } else {
                     return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
@@ -99,12 +105,15 @@ impl ExecutionEngine {
                 Ok(ExpressionResult::Account(account_query_res))
             }
 
-            Entity::Transaction => {
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<TransactionField>, _>>()?;
+            Entity::Transaction => {                
+                let fields = match expr.fields[0] {
+                    Field::Star => TransactionField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<TransactionField>, _>>()?,
+                };
                 
                 let tx_query_res = if let Some(entity_ids) = &expr.entity_id {
                     resolve_transaction_query(entity_ids.to_vec(), fields, &provider).await?   
@@ -113,19 +122,23 @@ impl ExecutionEngine {
                 };
 
                 Ok(ExpressionResult::Transaction(tx_query_res))
-
             }
-            Entity::Log => {
+            
+            Entity::Log => {                
+                let fields = match expr.fields[0] {
+                    Field::Star => LogField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<LogField>, _>>()?,
+                };
+
                 let filter = if let Some(entity_filter) = &expr.entity_filter {
                     EntityFilter::build_filter(entity_filter)
                 } else {
                     return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<LogField>, _>>()?;
 
                 Ok(ExpressionResult::Log(resolve_log_query(filter, fields, &provider).await?))
             }
@@ -142,7 +155,7 @@ mod test {
         entity_filter::{BlockRange, EntityFilter},
         entity_id::EntityId,
         query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
-        types::{AccountField, BlockField, Expression, Field, GetExpression},
+        types::{BlockField, Expression, Field, GetExpression},
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -325,7 +338,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_account_fields() {
+    async fn test_get_account_fields_using_star_operator() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
@@ -335,12 +348,12 @@ mod test {
                 EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth")))
                 ]),
             entity_filter: None,
-            fields: vec![Field::Account(AccountField::Balance)],
+            fields: vec![Field::Star],
             query: String::from(""),
             dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
-        
+
         match execution_result {
             Ok(results) => match &results[0] {
                 QueryResult { query, result, .. } => {
@@ -408,7 +421,6 @@ mod test {
             query: String::from(""),
             dump: None,
         })];
-
         let expected = vec![ExpressionResult::Transaction(vec![
             TransactionQueryRes {
                 transaction_type: Some(2),

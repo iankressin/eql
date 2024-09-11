@@ -1287,6 +1287,7 @@ dependencies = [
  "async-trait",
  "criterion",
  "csv",
+ "eql_macros",
  "futures",
  "getrandom",
  "pest",
@@ -1297,6 +1298,15 @@ dependencies = [
  "serde_with",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "eql_macros"
+version = "0.1.1-alpha"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
