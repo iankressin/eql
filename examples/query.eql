@@ -1,4 +1,4 @@
-GET hash, size  FROM block 1 ON eth
-GET nonce, balance FROM account 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 ON eth
-GET from, to, value, gas_price, status FROM tx 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 ON eth
+GET hash, size OF block 1 ON eth
+GET nonce, balance OF account 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 ON eth
+GET from, to, value, gas_price, status OF tx 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 ON eth
 

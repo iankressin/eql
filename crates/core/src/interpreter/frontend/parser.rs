@@ -135,7 +135,33 @@ mod tests {
     #[test]
     fn test_build_ast_with_account_fields() {
         let source =
-            "GET nonce, balance, code FROM account 0x1234567890123456789012345678901234567890 ON eth";
+            "GET nonce, balance, code OF account 0x1234567890123456789012345678901234567890 ON eth";
+        let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Account,
+            entity_id: Some(EntityId::Account(NameOrAddress::Address(address))),
+            entity_filter: None,
+            fields: vec![
+                Field::Account(AccountField::Nonce),
+                Field::Account(AccountField::Balance),
+                Field::Account(AccountField::Code),
+            ],
+            chain: Chain::Ethereum,
+            query: source.to_string(),
+            dump: None,
+        })];
+        let parser = Parser::new(source);
+
+        match parser.parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_lowercase_with_account_fields() {
+        let source =
+            "get nonce, balance, code of account 0x1234567890123456789012345678901234567890 on eth";
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -160,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_using_ens() {
-        let source = "GET nonce, balance FROM account vitalik.eth ON eth";
+        let source = "GET nonce, balance OF account vitalik.eth ON eth";
         let name = String::from("vitalik.eth");
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -181,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_with_block_fields() {
-        let source = "GET parent_hash, state_root, transactions_root, receipts_root, logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, size FROM block 1 ON eth";
+        let source = "GET parent_hash, state_root, transactions_root, receipts_root, logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, size OF block 1 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
@@ -221,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_using_block_ranges() {
-        let source = "GET timestamp FROM block 1:2 ON eth";
+        let source = "GET timestamp OF block 1:2 ON eth";
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
             entity_id: Some(EntityId::Block(BlockRange::new(
@@ -244,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_transaction_fields() {
-        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
+        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity OF tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction,
@@ -284,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_dump() {
-        let source = "GET balance FROM account vitalik.eth ON eth > dump.csv";
+        let source = "GET balance OF account vitalik.eth ON eth > dump.csv";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
@@ -306,8 +332,8 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_log_fields() {
-        let source = "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed FROM log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,
-        GET address FROM log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, event_signature Transfer(address,address,uint256), topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth";
+        let source = "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed OF log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,
+        GET address OF log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, event_signature Transfer(address,address,uint256), topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth";
 
         let expected = vec![
         Expression::Get(GetExpression {
@@ -336,9 +362,8 @@ mod tests {
                 Field::Log(LogField::Removed),
             ],
             chain: Chain::Ethereum,
-            query: "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed FROM log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,\n        ".to_string(),
-            dump: None,
-        }),
+            query: "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed OF log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,\n        ".to_string(),
+        dump: None,}),
 
         Expression::Get(GetExpression {
             entity: Entity::Log,
@@ -355,10 +380,10 @@ mod tests {
                 Field::Log(LogField::Address),
             ],
             chain: Chain::Ethereum,
-            query: "GET address FROM log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, event_signature Transfer(address,address,uint256), topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth".to_string(),
+            query: "GET address OF log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, event_signature Transfer(address,address,uint256), topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth".to_string(),
             dump: None,
-        }),
-        ];
+        })
+            ];
 
         match Parser::new(source).parse_expressions() {
             Ok(result) => assert_eq!(result, expected),

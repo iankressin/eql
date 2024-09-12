@@ -1,17 +1,17 @@
 program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
-    "GET" ~
+    (^"GET") ~
     WHITESPACE* ~
     fields* ~
     WHITESPACE* ~
-    "FROM" ~
+    (^"OF") ~
     WHITESPACE* ~
     entity ~
     WHITESPACE* ~
     (entity_id | filter) ~
     WHITESPACE* ~
-    "ON" ~
+    (^"ON") ~
     WHITESPACE* ~
     chain ~
     (WHITESPACE* ~ dump)* ~
@@ -27,7 +27,7 @@ dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
 file_name = { (ASCII_ALPHANUMERIC | "-" | "_")+ }
 file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
 
-filter = _{ "WHERE" ~ WHITESPACE* ~ entity_filter}
+filter = _{ (^"WHERE") ~ WHITESPACE* ~ entity_filter}
 entity_filter = { log_filter_list | block_filter_list}
 
 // Account
@@ -46,7 +46,7 @@ block_field      =  {
     "number" |
     "hash" |
     "parent_hash" |
-    "timestamp" | 
+    "timestamp" |
     "state_root" |
     "transactions_root" |
     "receipts_root" |
@@ -74,10 +74,10 @@ tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }
 tx_field = {
     "transaction_type" |
     "hash" |
-    "from" | 
-    "to" | 
-    "data" | 
-    "value" | 
+    "from" |
+    "to" |
+    "data" |
+    "value" |
     "fee" |
     "gas_price" |
     "gas" |
@@ -138,7 +138,7 @@ topic3_filter = {"topic3" ~ hash}
 blockhash_filter = {"block_hash" ~ hash}
 blockrange_filter = {"block" ~ block_id}
 event_signature_filter ={"event_signature" ~ function_signature}
-   
+
 // Terminals
 unit = { "ether" | "gwei" | "wei" }
 number = _{ float | integer }

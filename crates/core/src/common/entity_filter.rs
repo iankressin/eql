@@ -1,12 +1,12 @@
+use super::entity_id::parse_block_number_or_tag;
+use crate::interpreter::frontend::parser::{ParserError, Rule};
 use alloy::{
     eips::BlockNumberOrTag,
-    rpc::types::Filter,
     primitives::{Address, B256},
+    rpc::types::Filter,
 };
-use std::error::Error;
 use pest::iterators::Pair;
-use crate::interpreter::frontend::parser::{ParserError, Rule};
-use super::entity_id::parse_block_number_or_tag;
+use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EntityFilterError {
@@ -21,7 +21,7 @@ pub enum EntityFilter {
     LogEmitterAddress(Address),
     LogEventSignature(String),
     LogTopic0(B256),
-    LogTopic1(B256),    
+    LogTopic1(B256),
     LogTopic2(B256),
     LogTopic3(B256),
 }
@@ -36,7 +36,7 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
                 let address = Address::parse_checksummed(tochecksum, None)
                     .map_err(|e| format!("{}: {}", e, tochecksum))?;
                 Ok(EntityFilter::LogEmitterAddress(address))
-            },
+            }
             Rule::blockrange_filter => {
                 let range = pair.as_str().trim_start_matches("block ").trim();
                 let (start, end) = match range.split_once(":") {
@@ -46,15 +46,16 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
                         Some(parse_block_number_or_tag(end)?),
                     ),
                     //else we only have start.
-                    None => (
-                        parse_block_number_or_tag(range)?,
-                        None,
-                    ),
+                    None => (parse_block_number_or_tag(range)?, None),
                 };
                 Ok(EntityFilter::LogBlockRange(BlockRange { start, end }))
             }
             Rule::blockhash_filter => {
-                let hash = pair.as_str().trim_start_matches("blockhash ").trim_start_matches("block_hash ").trim();
+                let hash = pair
+                    .as_str()
+                    .trim_start_matches("blockhash ")
+                    .trim_start_matches("block_hash ")
+                    .trim();
                 let hash = hash.parse::<B256>()?;
                 Ok(EntityFilter::LogBlockHash(hash))
             }
@@ -82,7 +83,9 @@ impl<'a> TryFrom<Pair<'a, Rule>> for EntityFilter {
                 let topic = topic.parse::<B256>()?;
                 Ok(EntityFilter::LogTopic3(topic))
             }
-            _ => Err(Box::new(ParserError::UnexpectedToken(pair.as_str().to_string()))),
+            _ => Err(Box::new(ParserError::UnexpectedToken(
+                pair.as_str().to_string(),
+            ))),
         }
     }
 }
@@ -100,10 +103,11 @@ impl EntityFilter {
     fn to_filter(&self, filter: Filter) -> Filter {
         match self {
             EntityFilter::LogBlockRange(range) => {
-                filter.from_block(range.start)
-                    // If end is None, range is actually one block. unwrap_or will reuse start as range  
+                filter
+                    .from_block(range.start)
+                    // If end is None, range is actually one block. unwrap_or will reuse start as range
                     .to_block(range.end.unwrap_or(range.start))
-            },
+            }
             EntityFilter::LogBlockHash(hash) => filter.at_block_hash(*hash),
             EntityFilter::LogEmitterAddress(address) => filter.address(*address),
             EntityFilter::LogEventSignature(signature) => filter.event(signature),
@@ -112,7 +116,6 @@ impl EntityFilter {
             EntityFilter::LogTopic2(topic_hash) => filter.topic2(*topic_hash),
             EntityFilter::LogTopic3(topic_hash) => filter.topic3(*topic_hash),
         }
-
     }
 
     pub fn build_filter(entity_filters: &[EntityFilter]) -> Filter {
