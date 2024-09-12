@@ -5,11 +5,7 @@ use super::{
     resolve_transaction::resolve_transaction_query,
 };
 use crate::common::{
-    entity_filter::EntityFilter, 
-    entity_id::EntityId,
-    types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField},
-    entity::Entity,
-    query_result::{ExpressionResult, QueryResult},
+    entity::Entity, entity_filter::EntityFilter, entity_id::EntityId, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField}
 };
 use alloy::providers::ProviderBuilder;
 use std::error::Error;
@@ -54,7 +50,7 @@ impl ExecutionEngine {
         let rpc_url = expr.chain.rpc_url().parse()?;
         let provider = ProviderBuilder::new().on_http(rpc_url);
 
-        match expr.entity {
+        let result = match expr.entity {
             Entity::Block => {
                 let fields = match &expr.fields[0] {
                     Field::Star => BlockField::all_variants().to_vec(),
@@ -142,7 +138,12 @@ impl ExecutionEngine {
 
                 Ok(ExpressionResult::Log(resolve_log_query(filter, fields, &provider).await?))
             }
-        }
+        };
+
+        result.and_then(|result| {
+            expr.dump.as_ref().map(|dump| dump_results(&result, dump));
+            Ok(result)
+        })
     }
 }
 
@@ -155,7 +156,7 @@ mod test {
         entity_filter::{BlockRange, EntityFilter},
         entity_id::EntityId,
         query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
-        types::{BlockField, Expression, Field, GetExpression},
+        types::{BlockField, Dump, DumpFormat, Expression, Field, GetExpression},
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -529,5 +530,45 @@ mod test {
             dump: None,
         })];
         let _result = execution_engine.run(expressions).await;
+    }
+
+    #[tokio::test]
+    async fn test_dump_results() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            chain: Chain::Ethereum,
+            entity: Entity::Block,
+            entity_id: Some(vec![
+                EntityId::Block(BlockRange::new(1.into(), None)),
+            ]),
+            entity_filter: None,
+            fields: vec![Field::Block(BlockField::Timestamp)],
+            query: String::from(""),
+            dump: Some(Dump::new(String::from("test"), DumpFormat::Json)),
+        })];
+        execution_engine.run(expressions).await.unwrap();
+
+        let path = std::path::Path::new("test.json").to_str();
+        let expected_content = r#"
+        {
+            "block": [
+                {
+                    "timestamp": 1438269988
+                }
+            ]
+        }"#;
+
+        println!("{:?}", path);
+
+        assert!(std::path::Path::new("test.json").exists());
+
+        let content = std::fs::read_to_string("test.json").unwrap();
+        assert_eq!(flatten_string(&content), flatten_string(expected_content));
+
+        std::fs::remove_file("test.json").unwrap();
+    }
+
+    fn flatten_string(s: &str) -> String {
+        s.replace('\n', "").replace('\r', "").replace(" ", "")
     }
 }
