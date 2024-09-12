@@ -24,10 +24,10 @@ async fn dump_blocks(end_block: u64, format: DumpFormat) -> Result<(), Box<dyn E
         ])
         .from(
             Entity::Block,
-            EntityId::Block(BlockRange::new(
+            vec![EntityId::Block(BlockRange::new(
                 BlockNumberOrTag::Number(1),
                 Some(BlockNumberOrTag::Number(end_block)),
-            )),
+            ))],
         )
         .on(Chain::Ethereum)
         .dump(Dump::new("bech".to_string(), format))

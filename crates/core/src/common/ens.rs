@@ -5,6 +5,7 @@ use alloy::primitives::{address, Address, Keccak256, B256};
 use alloy::providers::RootProvider;
 use alloy::sol;
 use alloy::transports::http::{Client, Http};
+use std::fmt::Display;
 use std::{borrow::Cow, str::FromStr};
 
 // ENS Registry and Resolver contracts.
@@ -129,6 +130,15 @@ impl FromStr for NameOrAddress {
             Ok(Self::Address(addr))
         } else {
             Ok(Self::Name(s.to_string()))
+        }
+    }
+}
+
+impl Display for NameOrAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(name) => write!(f, "{}", name),
+            Self::Address(addr) => write!(f, "{}", addr),
         }
     }
 }

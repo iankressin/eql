@@ -19,9 +19,9 @@ get       = {
     WHITESPACE*
 }
 
-fields    = { (account_field_list | block_field_list | tx_field_list | log_field_list) }
+fields    = { (star_operator | account_field_list | block_field_list | tx_field_list | log_field_list) }
 entity    = { "account" | "block" | "tx" | "log" }
-entity_id = { hash | account_id | block_id }
+entity_id = { tx_id_list | account_id_list | block_id_list }
 
 dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
 file_name = { (ASCII_ALPHANUMERIC | "-" | "_")+ }
@@ -31,16 +31,17 @@ filter = _{ "WHERE" ~ WHITESPACE* ~ entity_filter}
 entity_filter = { log_filter_list | block_filter_list}
 
 // Account
-account_field_list = _{ account_field ~ (", " ~ account_field)* }
+account_field_list = _{ account_field ~ ("," ~ WHITESPACE* ~ account_field)* }
 account_field = {
     "nonce" |
     "balance" |
     "code"
 }
-account_id = _{ address | ens }
+account_id_list = _{ account_id ~ ("," ~ WHITESPACE* ~ account_id)* }
+account_id = { address | ens }
 
 // Block
-block_field_list = _{ block_field ~ (", " ~ block_field_list)* }
+block_field_list = _{ block_field ~ ("," ~ WHITESPACE* ~ block_field_list)* }
 // TODO: Check if we need uncles
 block_field      =  { 
     "number" |
@@ -62,15 +63,16 @@ block_field      =  {
     "parent_beacon_block_root" |
     "size"
 }
-block_id    = _{ block_tag ~ ":" ~ block_tag | block_tag }
+block_id_list = _{ block_id ~ ("," ~ WHITESPACE* ~ block_id)* }
+block_id    = { block_tag ~ ":" ~ block_tag | block_tag }
 block_tag = _{ "latest" | "earliest" | "pending" | "finalized" | "safe" | integer }
-block_filter_list = _{ block_filter ~ (", " ~ block_filter)* }
+block_filter_list = _{ block_filter ~ ("," ~ WHITESPACE* ~ block_filter)* }
 block_filter = _{
     blockrange_filter
 }
 
 // Transaction
-tx_field_list = _{ tx_field ~ (", " ~ tx_field)* }
+tx_field_list = _{ tx_field ~ ("," ~ WHITESPACE* ~ tx_field)* }
 tx_field = {
     "transaction_type" |
     "hash" |
@@ -99,9 +101,11 @@ tx_field = {
     "access_list" |
     "y_parity"
 }
+tx_id_list = _{ tx_id ~ ("," ~ WHITESPACE* ~ tx_id)* }
+tx_id = { hash } 
 
 // Log
-log_field_list = _{ log_field ~ (", " ~ log_field)* }
+log_field_list = _{ log_field ~ ("," ~ WHITESPACE* ~ log_field)* }
 log_field      =  {
     "address" |
     "topic0" |
@@ -117,7 +121,7 @@ log_field      =  {
     "log_index" |
     "removed"
 }
-log_filter_list = _{ log_filter ~ (", " ~ log_filter)* }
+log_filter_list = _{ log_filter ~ ("," ~ WHITESPACE* ~ log_filter)* }
 log_filter = _{
     address_filter |
     topic0_filter |
@@ -189,3 +193,4 @@ size = _{integer ~ "[]"*}
 WHITESPACE = _{ " " | "\t" | NEWLINE }
 exp_separator = _{"," | ";"}
 silent_eoi = _{ !ANY }
+star_operator = { "*" }

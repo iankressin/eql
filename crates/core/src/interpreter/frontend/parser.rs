@@ -1,4 +1,5 @@
 use crate::common::entity_filter::EntityFilter;
+use crate::common::entity_id::EntityId;
 use crate::common::types::{Expression, Field, GetExpression};
 use pest::iterators::Pairs;
 use pest::Parser as PestParser;
@@ -62,17 +63,18 @@ impl<'a> Parser<'a> {
                     get_expr.fields = self.get_fields(inner_pair)?;
                 }
                 Rule::entity => get_expr.entity = pair.as_str().try_into()?,
-                // TODO: We shouldn't need to call `trim()` here, but the parser is
-                // adding an extra whitespace when entity_id is block number.
-                // The grammar and productions should be double checked.
-                Rule::entity_id => get_expr.entity_id = Some(pair.as_str().trim().try_into()?),
-                Rule::entity_filter => {
-                    get_expr.entity_filter = Some(
-                        pair.into_inner()
-                            .map(|pair| pair.try_into())
-                            .collect::<Result<Vec<EntityFilter>, _>>()?,
-                    );
+                Rule::entity_id => {
+                    get_expr.entity_id = Some(pair
+                        .into_inner()
+                        .map(|pair| pair.try_into())
+                        .collect::<Result<Vec<EntityId>, _>>()?);
                 }
+                Rule::entity_filter => {
+                    get_expr.entity_filter = Some(pair
+                        .into_inner()
+                        .map(|pair| pair.try_into())
+                        .collect::<Result<Vec<EntityFilter>, _>>()?);
+                } 
                 Rule::chain => get_expr.chain = pair.as_str().try_into()?,
                 // TODO: the name of the file is being stored along with the operator >
                 Rule::dump => get_expr.dump = Some(pair.try_into()?),
@@ -103,6 +105,9 @@ impl<'a> Parser<'a> {
                 }
                 Rule::log_field => {
                     fields.push(Field::Log(pair.as_str().try_into()?));
+                }
+                Rule::star_operator => {
+                    fields.push(Field::Star);
                 }
                 _ => {
                     return Err(Box::new(ParserError::UnexpectedToken(
@@ -136,7 +141,7 @@ mod tests {
         let address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Address(address))),
+            entity_id: Some(vec![EntityId::Account(NameOrAddress::Address(address))]),
             entity_filter: None,
             fields: vec![
                 Field::Account(AccountField::Nonce),
@@ -161,7 +166,7 @@ mod tests {
         let name = String::from("vitalik.eth");
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Name(name))),
+            entity_id: Some(vec![EntityId::Account(NameOrAddress::Name(name))]),
             entity_filter: None,
             fields: vec![
                 Field::Account(AccountField::Nonce),
@@ -182,10 +187,7 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockRange::new(
-                BlockNumberOrTag::Number(1),
-                None,
-            ))),
+            entity_id: Some(vec![EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))]),
             entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::ParentHash),
@@ -221,10 +223,10 @@ mod tests {
         let source = "GET timestamp FROM block 1:2 ON eth";
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockRange::new(
+            entity_id: Some(vec![EntityId::Block(BlockRange::new(
                 BlockNumberOrTag::Number(1),
                 Some(BlockNumberOrTag::Number(2)),
-            ))),
+            ))]),
             entity_filter: None,
             fields: vec![Field::Block(BlockField::Timestamp)],
             chain: Chain::Ethereum,
@@ -245,9 +247,9 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction,
-            entity_id: Some(EntityId::Transaction(b256!(
+            entity_id: Some(vec![EntityId::Transaction(b256!(
                 "8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81"
-            ))),
+            ))]),
             entity_filter: None,
             fields: vec![
                 Field::Transaction(TransactionField::TransactionType),
@@ -285,9 +287,9 @@ mod tests {
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Name(
+            entity_id: Some(vec![EntityId::Account(NameOrAddress::Name(
                 "vitalik.eth".to_string(),
-            ))),
+            ))]),
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             chain: Chain::Ethereum,

@@ -26,7 +26,7 @@ pub enum EQLBuilderError {
 pub struct EQLBuilder {
     fields: Option<Vec<Field>>,
     entity: Option<Entity>,
-    entity_id: Option<EntityId>,
+    entity_id: Option<Vec<EntityId>>,
     entity_filters: Option<Vec<EntityFilter>>,
     chain: Option<Chain>,
     dump: Option<Dump>,
@@ -49,7 +49,7 @@ impl EQLBuilder {
         self
     }
 
-    pub fn from(&mut self, entity: Entity, entity_id: EntityId) -> &mut Self {
+    pub fn from(&mut self, entity: Entity, entity_id: Vec<EntityId>) -> &mut Self {
         self.entity = Some(entity);
         self.entity_id = Some(entity_id);
         self

@@ -1,24 +1,29 @@
-use super::block_resolver::resolve_block_query;
+use super::{
+    resolve_account::resolve_account_query,
+    resolve_block::resolve_block_query,
+    resolve_logs::resolve_log_query,
+    resolve_transaction::resolve_transaction_query,
+};
 use crate::common::{
-    entity::{Entity, EntityError},
-    entity_filter::EntityFilter,
-    query_result::{
-        AccountQueryRes, ExpressionResult, LogQueryRes, QueryResult, TransactionQueryRes,
-    },
-    serializer::{dump_results, serialize_results},
-    types::{AccountField, BlockField, Expression, GetExpression, LogField, TransactionField},
+    entity_filter::EntityFilter, 
+    entity_id::EntityId,
+    types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField},
+    entity::Entity,
+    query_result::{ExpressionResult, QueryResult},
 };
-use alloy::{
-    primitives::{Address, FixedBytes},
-    providers::{Provider, ProviderBuilder, RootProvider},
-    rpc::types::Filter,
-    transports::http::{Client, Http},
-};
+use alloy::providers::ProviderBuilder;
 use std::error::Error;
 
 pub struct ExecutionEngine;
 
-// TODO: create ExecutionEngineErrors instead of throwing static strings
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ExecutionEngineError {
+    #[error("Neither an entity_id nor a filter was provided. Pest rules should have prevented this from happening.")]
+    NoEntityIdOrFilter,
+    #[error("Multiple filters are not supported for block queries.")]
+    MultipleFiltersNotSupported,
+}
+
 impl ExecutionEngine {
     pub fn new() -> ExecutionEngine {
         ExecutionEngine
@@ -49,256 +54,95 @@ impl ExecutionEngine {
         let rpc_url = expr.chain.rpc_url().parse()?;
         let provider = ProviderBuilder::new().on_http(rpc_url);
 
-        let result = match expr.entity {
+        match expr.entity {
             Entity::Block => {
-                //First, check if expr.entity_id is Some(entity_id). If this condition is true, it calls the to_block_id method on entity_id.
-                //If expr.entity_id is None, the code then checks if expr.entity_filter is Some(entity_filter). If this condition is true, it calls the to_block_range method on entity_filter.
-                //If neither entity_id nor entity_filter is present in expr, the code panics with the message "Invalid block_id".
-
-                let (start_block, end_block) = if let Some(entity_id) = &expr.entity_id {
-                    entity_id.to_block_id()?
-                } else if let Some(entity_filter) = &expr.entity_filter {
-                    if entity_filter.len() == 1 {
-                        let (start_block, end_block) = entity_filter[0].to_block_range()?;
-                        (start_block, end_block)
-                    } else {
-                        return Err("Block filters don't support multiple filters".into());
-                        // Check if this is the best approach for multiple filters.
-                    }
-                } else {
-                    panic!("Neither a block_id nor a block filter was provided. Pest rules should have prevented this from happening.");
+                let fields = match &expr.fields[0] {
+                    Field::Star => BlockField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<BlockField>, _>>()?,
                 };
 
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<BlockField>, _>>()?;
-
-                let block_query_res =
-                    resolve_block_query(start_block, end_block, fields, &provider).await?;
+                let block_query_res = if let Some(entity_ids) = &expr.entity_id {
+                        resolve_block_query(entity_ids.to_vec(), fields, &provider).await?
+                } 
+                else if let Some(entity_filter) = &expr.entity_filter {
+                    match entity_filter.as_slice() {
+                        [EntityFilter::LogBlockRange(range)] => {
+                            let entity_ids = vec![EntityId::Block(range.clone())];
+                            resolve_block_query(entity_ids, fields, &provider).await?
+                        }
+                        _ => {
+                            return Err(Box::new(ExecutionEngineError::MultipleFiltersNotSupported));
+                        }
+                    }
+                } 
+                else {
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
+                };
 
                 Ok(ExpressionResult::Block(block_query_res))
             }
+
             Entity::Account => {
-                let address = if let Some(address_id) = &expr.entity_id {
-                    address_id.to_address().await
+                let fields = match expr.fields[0] {
+                    Field::Star => AccountField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<AccountField>, _>>()?,
+                };             
+                
+                let account_query_res = if let Some(entity_ids) = &expr.entity_id {
+                    resolve_account_query(entity_ids.to_vec(), fields, &provider).await?
                 } else {
-                    panic!("An address_id was not provided. Pest rules should have prevented this from happening.");
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
 
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<AccountField>, _>>()?;
-                match address {
-                    Ok(address) => {
-                        let account = self.get_account(address, fields, &provider).await?;
-                        // TODO: temporary solution, vec![] should be removed when we have multiple
-                        // transactions in the result
-                        Ok(ExpressionResult::Account(vec![account]))
-                    }
-                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
-                }
+                Ok(ExpressionResult::Account(account_query_res))
             }
-            Entity::Transaction => {
-                let hash = if let Some(tx_id) = &expr.entity_id {
-                    tx_id.to_tx_hash()
+
+            Entity::Transaction => {                
+                let fields = match expr.fields[0] {
+                    Field::Star => TransactionField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<TransactionField>, _>>()?,
+                };
+                
+                let tx_query_res = if let Some(entity_ids) = &expr.entity_id {
+                    resolve_transaction_query(entity_ids.to_vec(), fields, &provider).await?   
                 } else {
-                    panic!("A tx_id was not provided. Pest rules should have prevented this from happening.");
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
 
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<TransactionField>, _>>()?;
-
-                match hash {
-                    Ok(hash) => {
-                        let tx = self.get_transaction(hash, fields, &provider).await?;
-                        // TODO: temporary solution, vec![] should be removed when we have multiple
-                        // transactions in the result
-                        Ok(ExpressionResult::Transaction(vec![tx]))
-                    }
-                    Err(err) => Err(EntityError::InvalidEntity(err.to_string()).into()),
-                }
+                Ok(ExpressionResult::Transaction(tx_query_res))
             }
-            Entity::Log => {
+            
+            Entity::Log => {                
+                let fields = match expr.fields[0] {
+                    Field::Star => LogField::all_variants().to_vec(),
+                    _ => expr
+                        .fields
+                        .iter()
+                        .map(|field| field.try_into())
+                        .collect::<Result<Vec<LogField>, _>>()?,
+                };
+
                 let filter = if let Some(entity_filter) = &expr.entity_filter {
                     EntityFilter::build_filter(entity_filter)
                 } else {
-                    panic!("A log filter was not provided. Pest rules should have prevented this from happening.");
+                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
                 };
-                let fields = expr
-                    .fields
-                    .iter()
-                    .map(|field| field.try_into())
-                    .collect::<Result<Vec<LogField>, _>>()?;
 
-                let logs = self.get_logs(filter, fields, &provider).await?;
-                Ok(ExpressionResult::Log(logs))
-            }
-        };
-
-        result.and_then(|result| {
-            expr.dump.as_ref().map(|dump| dump_results(&result, &dump));
-            Ok(result)
-        })
-    }
-
-    async fn get_transaction(
-        &self,
-        hash: FixedBytes<32>,
-        fields: Vec<TransactionField>,
-        provider: &RootProvider<Http<Client>>,
-    ) -> Result<TransactionQueryRes, Box<dyn Error>> {
-        let mut result = TransactionQueryRes::default();
-        match provider.get_transaction_by_hash(hash).await? {
-            Some(tx) => {
-                for field in fields {
-                    match field {
-                        TransactionField::TransactionType => {
-                            result.transaction_type = tx.transaction_type;
-                        }
-                        TransactionField::Hash => {
-                            result.hash = Some(tx.hash);
-                        }
-                        TransactionField::From => {
-                            result.from = Some(tx.from);
-                        }
-                        TransactionField::To => {
-                            result.to = tx.to;
-                        }
-                        TransactionField::Data => {
-                            result.data = Some(tx.input.clone());
-                        }
-                        TransactionField::Value => {
-                            result.value = Some(tx.value);
-                        }
-                        TransactionField::GasPrice => {
-                            result.gas_price = tx.gas_price;
-                        }
-                        TransactionField::Gas => {
-                            result.gas = Some(tx.gas);
-                        }
-                        TransactionField::Status => {
-                            match provider.get_transaction_receipt(hash).await? {
-                                Some(receipt) => {
-                                    result.status = Some(receipt.status());
-                                }
-                                None => {
-                                    result.status = None;
-                                }
-                            }
-                        }
-                        TransactionField::ChainId => {
-                            result.chain_id = tx.chain_id;
-                        }
-                        TransactionField::V => {
-                            result.v = tx.signature.map_or(None, |s| Some(s.v));
-                        }
-                        TransactionField::R => {
-                            result.r = tx.signature.map_or(None, |s| Some(s.r));
-                        }
-                        TransactionField::S => {
-                            result.s = tx.signature.map_or(None, |s| Some(s.s));
-                        }
-                        TransactionField::MaxFeePerBlobGas => {
-                            result.max_fee_per_blob_gas = tx.max_fee_per_blob_gas;
-                        }
-                        TransactionField::MaxFeePerGas => {
-                            result.max_fee_per_gas = tx.max_fee_per_gas;
-                        }
-                        TransactionField::MaxPriorityFeePerGas => {
-                            result.max_priority_fee_per_gas = tx.max_priority_fee_per_gas;
-                        }
-                        TransactionField::YParity => {
-                            result.y_parity = tx
-                                .signature
-                                .map_or(None, |s| s.y_parity)
-                                .map_or(None, |y| Some(y.0));
-                        }
-                    }
-                }
-            }
-            None => panic!("Transaction not found"),
-        }
-
-        Ok(result)
-    }
-
-    async fn get_account(
-        &self,
-        address: Address,
-        fields: Vec<AccountField>,
-        provider: &RootProvider<Http<Client>>,
-    ) -> Result<AccountQueryRes, Box<dyn Error>> {
-        let mut account = AccountQueryRes::default();
-
-        for field in &fields {
-            match field {
-                AccountField::Balance => {
-                    account.balance = Some(provider.get_balance(address).await?);
-                }
-                AccountField::Nonce => {
-                    account.nonce = Some(provider.get_transaction_count(address).await?);
-                }
-                AccountField::Address => {
-                    account.address = Some(address);
-                }
-                AccountField::Code => {
-                    account.code = Some(provider.get_code_at(address).await?);
-                }
+                Ok(ExpressionResult::Log(resolve_log_query(filter, fields, &provider).await?))
             }
         }
-
-        Ok(account)
-    }
-
-    async fn get_logs(
-        &self,
-        filter: Filter,
-        fields: Vec<LogField>,
-        provider: &RootProvider<Http<Client>>,
-    ) -> Result<Vec<LogQueryRes>, Box<dyn Error>> {
-        let logs = provider.get_logs(&filter).await?;
-        if logs.is_empty() {
-            return Err("No logs found".into()); // Check if this is the best approach for no logs return. I understand it shouldn't panic.
-        }
-
-        let results: Vec<LogQueryRes> = logs
-            .into_iter()
-            .map(|log| {
-                let mut result = LogQueryRes::default();
-
-                // Use a for loop with match to map fields to result
-                for field in &fields {
-                    match field {
-                        LogField::Address => result.address = Some(log.inner.address),
-                        LogField::Topic0 => result.topic0 = log.topic0().copied(),
-                        LogField::Topic1 => result.topic1 = log.inner.data.topics().get(1).copied(),
-                        LogField::Topic2 => result.topic2 = log.inner.data.topics().get(2).copied(),
-                        LogField::Topic3 => result.topic3 = log.inner.data.topics().get(3).copied(),
-                        LogField::Data => result.data = Some(log.data().data.clone()),
-                        LogField::BlockHash => result.block_hash = log.block_hash,
-                        LogField::BlockNumber => result.block_number = log.block_number,
-                        LogField::BlockTimestamp => result.block_timestamp = log.block_timestamp,
-                        LogField::TransactionHash => result.transaction_hash = log.transaction_hash,
-                        LogField::TransactionIndex => {
-                            result.transaction_index = log.transaction_index
-                        }
-                        LogField::LogIndex => result.log_index = log.log_index,
-                        LogField::Removed => result.removed = Some(log.removed),
-                    }
-                }
-
-                result
-            })
-            .collect();
-
-        Ok(results)
     }
 }
 
@@ -310,8 +154,8 @@ mod test {
         ens::NameOrAddress,
         entity_filter::{BlockRange, EntityFilter},
         entity_id::EntityId,
-        query_result::BlockQueryRes,
-        types::{AccountField, BlockField, Expression, Field, GetExpression},
+        query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
+        types::{BlockField, Expression, Field, GetExpression},
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -395,10 +239,10 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Block,
-            entity_id: Some(EntityId::Block(BlockRange::new(
-                BlockNumberOrTag::Number(1),
-                None,
-            ))),
+            entity_id: Some(vec![
+                EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
+                EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))
+                ]),
             entity_filter: None,
             fields: vec![
                 Field::Block(BlockField::Timestamp),
@@ -421,7 +265,38 @@ mod test {
             query: String::from(""),
             dump: None,
         })];
-        let expected = ExpressionResult::Block(vec![BlockQueryRes {
+        let expected = ExpressionResult::Block(vec![
+            BlockQueryRes {
+                timestamp: Some(1438269988),
+                number: None,
+                hash: Some(b256!(
+                    "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
+                )),
+                parent_hash: Some(b256!(
+                    "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+                )),
+                size: Some(U256::from(537)),
+                state_root: Some(b256!(
+                    "d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3"
+                )),
+                transactions_root: Some(b256!(
+                    "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+                )),
+                receipts_root: Some(b256!(
+                    "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+                )),
+                logs_bloom: Some(bloom!("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+                extra_data: Some(bytes!("476574682f76312e302e302f6c696e75782f676f312e342e32")),
+                mix_hash: Some(b256!("969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f59")),
+                total_difficulty: Some(U256::from(34351349760_u128)),
+                // The fields below were implemented by EIPs, 1st block doesn't have these
+                base_fee_per_gas: None,
+                withdrawals_root: None,
+                blob_gas_used: None,
+                excess_blob_gas: None,
+                parent_beacon_block_root: None,
+        },
+        BlockQueryRes {
             timestamp: Some(1438269988),
             number: None,
             hash: Some(b256!(
@@ -450,7 +325,8 @@ mod test {
             blob_gas_used: None,
             excess_blob_gas: None,
             parent_beacon_block_root: None,
-        }]);
+    },
+        ]);
         let execution_result = execution_engine.run(expressions).await;
 
         match execution_result {
@@ -462,16 +338,37 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_account_fields() {
+    async fn test_error_when_id_doesnt_match_transaction() {
+        let fields = vec![]; // Empty fields for simplicity
+        let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().parse().unwrap());
+        let entity_id = EntityId::Block(BlockRange::new(
+            10.into(),
+            Some(BlockNumberOrTag::from_str("latest").unwrap()),
+        ));
+
+        let result = resolve_transaction_query(vec![entity_id], fields, &provider)
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(
+            result,
+            "Mismatch between Entity and EntityId, 10:latest can't be resolved as a transaction id"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_account_fields_using_star_operator() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Address(
-                Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap(),
-            ))),
+            entity_id: Some(vec![
+                EntityId::Account(NameOrAddress::Address(Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap())),
+                EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth")))
+                ]),
             entity_filter: None,
-            fields: vec![Field::Account(AccountField::Balance)],
+            fields: vec![Field::Star],
             query: String::from(""),
             dump: None,
         })];
@@ -494,42 +391,14 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_account_fields_using_ens() {
-        let execution_engine = ExecutionEngine::new();
-        let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
-            entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Name(String::from(
-                "vitalik.eth",
-            )))),
-            entity_filter: None,
-            fields: vec![Field::Account(AccountField::Balance)],
-            query: String::from(""),
-            dump: None,
-        })];
-        let execution_result = execution_engine.run(expressions).await;
-
-        match &execution_result.unwrap()[0] {
-            QueryResult { query, result, .. } => {
-                assert_eq!(query, "");
-                match result {
-                    ExpressionResult::Account(account) => {
-                        assert!(account[0].balance.is_some());
-                    }
-                    _ => panic!("Invalid result"),
-                }
-            }
-        }
-    }
-    #[tokio::test]
     async fn test_get_account_fields_using_invalid_ens() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Account,
-            entity_id: Some(EntityId::Account(NameOrAddress::Name(String::from(
-                "thisisinvalid235790123801.eth",
-            )))),
+            entity_id: Some(vec![
+                EntityId::Account(NameOrAddress::Name(String::from("thisisinvalid235790123801.eth")))
+                ]),
             entity_filter: None,
             fields: vec![Field::Account(AccountField::Balance)],
             query: String::from(""),
@@ -545,9 +414,10 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Transaction,
-            entity_id: Some(EntityId::Transaction(b256!(
-                "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
-            ))),
+            entity_id: Some(vec![
+                EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")),
+                EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"))
+                ]),
             entity_filter: None,
             fields: vec![
                 Field::Transaction(TransactionField::TransactionType),
@@ -571,29 +441,52 @@ mod test {
             query: String::from(""),
             dump: None,
         })];
-        let result = execution_engine.run(expressions).await;
-        let expected = vec![ExpressionResult::Transaction(vec![TransactionQueryRes {
-            transaction_type: Some(2),
-            hash: Some(b256!(
-                "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
-            )),
-            from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
-            to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
-            data: Some(bytes!("")),
-            value: Some(U256::from(234808500010631948_u128)),
-            gas_price: Some(10209184711_u128),
-            gas: Some(21000),
-            status: Some(true),
-            chain_id: Some(1),
-            v: Some(U256::from(0)),
-            r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
-            s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
-            max_fee_per_blob_gas: None,
-            max_fee_per_gas: Some(10209184711),
-            max_priority_fee_per_gas: Some(0),
-            y_parity: Some(false),
-        }])];
+        let expected = vec![ExpressionResult::Transaction(vec![
+            TransactionQueryRes {
+                transaction_type: Some(2),
+                hash: Some(b256!(
+                    "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+                )),
+                from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
+                to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
+                data: Some(bytes!("")),
+                value: Some(U256::from(234808500010631948_u128)),
+                gas_price: Some(10209184711_u128),
+                gas: Some(21000),
+                status: Some(true),
+                chain_id: Some(1),
+                v: Some(U256::from(0)),
+                r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
+                s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
+                max_fee_per_blob_gas: None,
+                max_fee_per_gas: Some(10209184711),
+                max_priority_fee_per_gas: Some(0),
+                y_parity: Some(false),
+            },
+            TransactionQueryRes {
+                transaction_type: Some(2),
+                hash: Some(b256!(
+                    "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+                )),
+                from: Some(address!("95222290dd7278aa3ddd389cc1e1d165cc4bafe5")),
+                to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
+                data: Some(bytes!("")),
+                value: Some(U256::from(234808500010631948_u128)),
+                gas_price: Some(10209184711_u128),
+                gas: Some(21000),
+                status: Some(true),
+                chain_id: Some(1),
+                v: Some(U256::from(0)),
+                r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
+                s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
+                max_fee_per_blob_gas: None,
+                max_fee_per_gas: Some(10209184711),
+                max_priority_fee_per_gas: Some(0),
+                y_parity: Some(false),
+            }])    
+        ];            
 
+        let result = execution_engine.run(expressions).await;
         match result {
             Ok(results) => {
                 assert_eq!(results[0].result, expected[0]);
@@ -609,9 +502,9 @@ mod test {
         let expressions = vec![Expression::Get(GetExpression {
             chain: Chain::Ethereum,
             entity: Entity::Transaction,
-            entity_id: Some(EntityId::Transaction(b256!(
+            entity_id: Some(vec![EntityId::Transaction(b256!(
                 "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
-            ))),
+            ))]),
             entity_filter: None,
             fields: vec![
                 Field::Transaction(TransactionField::TransactionType),

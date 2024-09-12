@@ -1,12 +1,13 @@
 use std::error::Error;
 
-use crate::common::{query_result::BlockQueryRes, types::BlockField};
+use crate::common::{entity_id::EntityId, query_result::BlockQueryRes, types::BlockField};
 use alloy::{
     eips::BlockNumberOrTag,
     providers::{Provider, RootProvider},
     transports::http::{Client, Http},
 };
 use serde::{Deserialize, Serialize};
+use futures::future::try_join_all;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum BlockResolverErrors {
@@ -14,37 +15,50 @@ pub enum BlockResolverErrors {
     UnableToFetchBlockNumber(BlockNumberOrTag),
     #[error("Start block must be greater than end block")]
     StartBlockMustBeGreaterThanEndBlock,
+    #[error("Mismatch between Entity and EntityId, {0} can't be resolved as a block id")]
+    MismatchEntityAndEntityId(String),
 }
 
-/// Block resolver is responsible for receiving a get expression
-/// and resolving it to a [`BlockQueryRes`].
+/// Resolve the query to get blocks after receiving a block entity expression
+/// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results flattening results into a single vec.
 pub async fn resolve_block_query(
-    start_block: BlockNumberOrTag,
-    end_block: Option<BlockNumberOrTag>,
+    entity_ids: Vec<EntityId>, 
     fields: Vec<BlockField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
-    let start_block_number = get_block_number_from_tag(&provider, start_block).await?;
-    let end_block_number = match end_block {
-        Some(end) => Some(get_block_number_from_tag(&provider, end).await?),
-        _ => None,
-    };
+    let mut block_futures = Vec::new();
 
-    // This check is being done here, because it's the first time that we have the block numbers
-    if let Some(end) = end_block_number {
-        if start_block_number > end {
-            return Err(BlockResolverErrors::StartBlockMustBeGreaterThanEndBlock.into());
-        }
+    for entity_id in entity_ids {
+        let fields = fields.clone();
+        let provider = provider.clone();
+        let block_future = async move {
+            match entity_id {
+                EntityId::Block(block_range) => {
+                    let (start_block, end_block) = block_range.range();
+                    let start_block_number = get_block_number_from_tag(&provider, start_block).await?;
+                    let end_block_number = match end_block {
+                        Some(end) => Some(get_block_number_from_tag(&provider, end).await?),
+                        None => None,
+                    };
+
+                    if let Some(end_number) = end_block_number {
+                        if start_block_number > end_number {
+                            return Err(BlockResolverErrors::StartBlockMustBeGreaterThanEndBlock.into());
+                        }
+                        batch_get_block(start_block_number, end_number, fields, &provider).await
+                    } else {
+                        batch_get_block(start_block_number, start_block_number, fields, &provider).await
+                    }
+                }
+                id => Err(Box::new(BlockResolverErrors::MismatchEntityAndEntityId(id.to_string())).into()),
+            }
+        };
+
+        block_futures.push(block_future);
     }
 
-    match end_block_number {
-        Some(number) => batch_get_block(start_block_number, number, fields, &provider).await,
-        None => {
-            let block_res = get_block(start_block, fields, &provider).await?;
-
-            Ok(vec![block_res])
-        }
-    }
+    let block_res: Vec<Vec<BlockQueryRes>> = try_join_all(block_futures).await?;
+   Ok(block_res.into_iter().flatten().collect())
 }
 
 async fn batch_get_block(
@@ -161,22 +175,20 @@ async fn get_block_number_from_tag(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use alloy::providers::ProviderBuilder;
-
-    use crate::common::chain::Chain;
-
-    use super::resolve_block_query;
+    use crate::common::{chain::Chain, entity_filter::BlockRange};
 
     #[tokio::test]
     async fn test_resolve_block_query_when_start_is_greater_than_end() {
         let start_block = 10;
         let end_block = 5;
-        let fields = vec![];
+        let fields = vec![]; // Empty fields for simplicity
         let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().parse().unwrap());
+        let entity_id = EntityId::Block(BlockRange::new(start_block.into(), Some(end_block.into())));
 
         let result = resolve_block_query(
-            start_block.into(),
-            Some(end_block.into()),
+            vec![entity_id],
             fields,
             &provider,
         )
