@@ -142,6 +142,19 @@ impl BlockRange {
 
 impl Display for BlockRange {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        let start = match &self.start {
+            BlockNumberOrTag::Number(number) => number.to_string(),
+            _ => self.start.to_string(),
+        };
+
+        if let Some(end) = &self.end {
+            let end = match end {
+                BlockNumberOrTag::Number(number) => number.to_string(),
+                _ => end.to_string(),
+            };
+            write!(f, "{}:{}", start, end)
+        } else {
+            write!(f, "{}", start)
+        }
     }
 }

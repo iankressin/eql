@@ -338,6 +338,26 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_error_when_id_doesnt_match_transaction() {
+        let fields = vec![]; // Empty fields for simplicity
+        let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().parse().unwrap());
+        let entity_id = EntityId::Block(BlockRange::new(
+            10.into(),
+            Some(BlockNumberOrTag::from_str("latest").unwrap()),
+        ));
+
+        let result = resolve_transaction_query(vec![entity_id], fields, &provider)
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert_eq!(
+            result,
+            "Mismatch between Entity and EntityId, 10:latest can't be resolved as a transaction id"
+        );
+    }
+
+    #[tokio::test]
     async fn test_get_account_fields_using_star_operator() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
