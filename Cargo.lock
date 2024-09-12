@@ -1288,6 +1288,7 @@ dependencies = [
  "criterion",
  "csv",
  "eql_macros",
+ "futures",
  "getrandom",
  "pest",
  "pest_derive",

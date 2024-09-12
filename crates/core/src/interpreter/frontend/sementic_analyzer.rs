@@ -35,7 +35,6 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     // TODO: fields should only contain fields that are valid for the entity
-    // TODO: entity_id should correspond  to the entity
     // TODO: entity_filter should only contain filters that are valid for the entity
     // TODO: Warn if entity_filter is overring previous filters
     // TODO: Check if either a block_hash or block_range is provided in log queries
@@ -106,9 +105,7 @@ mod test {
     fn test_analyze_get_expression_with_wrong_fields() {
         let expressions = vec![Expression::Get(GetExpression {
             entity: Entity::Account,
-            entity_id: Some("0x1234567890123456789012345678901234567890"
-                .try_into()
-                .unwrap()),
+            entity_id: None,
             entity_filter: None,
             chain: Chain::Ethereum,
             fields: vec![Field::Block(BlockField::Number)],

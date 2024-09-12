@@ -218,9 +218,7 @@ impl Repl {
         for query_result in query_results {
             match query_result.result {
                 ExpressionResult::Account(query_res) => {
-                    // AccountQueryRes only return single result as of now. But in the future
-                    // it'll return multiple results and we should remove the vec![].
-                    let table = to_table(vec![query_res])?;
+                    let table = to_table(query_res)?;
                     table.to_string().split("\n").for_each(|line| {
                         queue!(stdout(), MoveToNextLine(1), Print(line.green())).unwrap();
                     });
@@ -232,9 +230,7 @@ impl Repl {
                     });
                 }
                 ExpressionResult::Transaction(query_res) => {
-                    // TransactionQueryRes only return single result as of now. But in the future
-                    // it'll return multiple results and we should remove the vec![].
-                    let table = to_table(vec![query_res])?;
+                    let table = to_table(query_res)?;
                     table.to_string().split("\n").for_each(|line| {
                         queue!(stdout(), MoveToNextLine(1), Print(line.yellow())).unwrap();
                     });
