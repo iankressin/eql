@@ -7,7 +7,7 @@
  `GET topic0, topic1 FROM log WHERE block latest address 0x0 ON eth`
 - [ ] Dump query results to json, parquet, and, csv:
  `GET nonce, balance FROM vitalik.eth ON eth > data.csv`
-- [ ] List of entity ids:
+- [x] List of entity ids:
  `GET value, to, timestamp FROM tx 0x..., 0x..., 0x... ON polygon`
 - [x] Add support for more EVM chains
 
