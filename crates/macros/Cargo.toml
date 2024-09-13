@@ -1,8 +1,8 @@
 [package]
 name = "eql_macros"
-description = "Procedural macros for the eql"
+version = "0.1.0"
+description = "Procedural macros for eql_core"
 license.workspace = true
-version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
