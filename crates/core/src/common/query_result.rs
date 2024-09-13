@@ -1,8 +1,6 @@
 use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, B256, U256};
 use serde::{Deserialize, Serialize, Serializer};
 
-use super::types::Dump;
-
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
     pub query: String,
@@ -25,10 +23,6 @@ pub enum ExpressionResult {
     Transaction(Vec<TransactionQueryRes>),
     #[serde(rename = "log")]
     Log(Vec<LogQueryRes>),
-}
-
-impl ExpressionResult {
-    pub fn serialize(&self, dump: &Dump) {}
 }
 
 // TODO: should this be replaced with Alloy's Block?

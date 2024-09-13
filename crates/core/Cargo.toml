@@ -1,6 +1,6 @@
 [package]
 name = "eql_core"
-version = "0.1.10"
+version = "0.1.11"
 rust-version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -23,7 +23,10 @@ getrandom = { version = "0.2", features = ["js"] }
 futures = { version = "0.3", features = ["async-await"] }
 csv = "1.1"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
-eql_macros = { workspace = true }
+eql_macros = "0.1.0"
+parquet = "34.0.0"
+arrow = "34.0.0"
+base64 = "0.22.1"
 
 [dev-dependencies]
 pretty_assertions = "1"
