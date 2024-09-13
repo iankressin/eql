@@ -3,7 +3,7 @@
 
 This document is subject to change as EQL is actively being improved. If you find any inconsistencies, please raise an issue in the repository. Your contribution is highly valuable.
 
-The `/crates` directory in the `iankressin/eql` repository contains all the Rust code for the project, organized into three main subdirectories: `/cli`, `/core`, and `/wasm`. Each subdirectory houses Rust source code for different components of the EVM Query Language (EQL) project.
+The `/crates` directory in the `iankressin/eql` repository contains all the Rust code for the project, organized into three main subdirectories: `/cli`, `/core`, `/wasm` and `/macros`. Each subdirectory houses Rust source code for different components of the EVM Query Language (EQL) project.
 
 ## `/crates/cli`
 
@@ -41,25 +41,37 @@ Contains the code for executing EQL queries, with key responsibilities split bet
 - **`backend` module**: 
   - Executes queries using the [Alloy](https://docs.rs/alloy/0.2.0/alloy/index.html) library.
   - **`execution_engine.rs`**: Processes parsed expressions and executes them, with functions tailored to handle different entity types and their respective query requirements. It implements the `run_get_expr` (for each entity type, it parse the fields into a vector, resolve the entity IDs and Filters, and call the respective resolve function for that entity).
+  - **`resolve_account`**: Called in execution engine when `Entity::Account`, map each `account_id` to a future list and concurrently collect the results. Two auxiliary functions are `to_address` (resolve ENS) and `get_account` (query accounts using `alloy::{get_balance, get_transaction_count, get_code_at}`).
+  - **`resolve_block`**: Called in execution engine when `Entity::Block`, map each `block_id` to a future list and concurrently collect the results, flattening results into a single vec. Two auxiliary functions are `batch_get_block` (call `get_block` to all BlockRange) and `get_block` (query blocks using `alloy::get_block_by_number`).
+  - **`resolve_logs`**: Called in execution engine when `Entity::Log`, it has one function `resolve_log_query` (query logs using `alloy::get_logs` with the provided filter).
+  - **`resolve_transaction`**: Called in execution engine when `Entity::Transaction`, map each `transaction_id` to a future list and concurrently collect the results. The auxiliary functions is `get_transaction` (query transactions fields using `alloy::get_transaction_by_hash`).
 
 ### `common` Module
 
 Contains types and utilities shared across the program, such as entities, query builders, and results.
 
-- **`query_builder.rs`**: Defines the `EQLBuilder` struct for constructing and executing EQL queries, allowing specification of fields, entities, and chains.
-- **`types.rs`**: Includes various types and enums like `Expression`, `Field`, and entity-specific fields, with conversion methods for parsing.
+- **`query_builder.rs`**: Defines the `EQLBuilder` struct for constructing and executing EQL queries, allowing specification of fields, entities, entity_id, entity_filter, chains and dump.
+- **`types.rs`**: Includes various types and enums like `Expression`, `Field`, entity-specific fields, with conversion methods for parsing and `DumpFormat`.
 - **`entity.rs`**: Defines the `Entity` enum for blockchain entities (e.g., Block, Transaction, Account and Logs) and methods for string conversion.
 - **`entity_id.rs`**: Defines the `EntityId` enum for different entity identifiers, supporting conversions from Pest pairs.
 - **`entity_filter.rs`**: Defines the `EntityFilter` enum represents different types of filter you can make when quering. It's mainly used for Logs.It also supports conversions from Pest pairs.
+- **`query_result.rs`**: Defines structs for query results corresponding to different entity types, and defining the schema each entity have.
 - **`chain.rs`**: Provides the `Chain` enum, representing various blockchains (e.g., Ethereum, Arbitrum) with associated RPC URLs and IDs.
 - **`ens.rs`**: Implements Ethereum Name Service (ENS) functionality, including address resolution and the namehash algorithm.
-- **`query_result.rs`**: Defines structs for query results corresponding to different entity types, and defining the schema each entity have.
+- **`serializer.rs`**: Implements functionality for dumping query results into different file formats. It provides functions to serialize data into JSON, CSV, and Parquet formats. The main function dump_results takes an ExpressionResult and a Dump configuration, then writes the serialized data to a file based on the specified format. 
 
 ## `/crates/wasm`
 
 This directory contains a Rust crate providing WebAssembly bindings for EQL.
 
 - **`lib.rs`**: Exposes an asynchronous function `eql` that interprets a string-based EQL program using `eql_interpreter` from `eql_core`, returning results as `JsValue`.
+- 
+## `/crates/macros`
+
+This directory contains the procedural macros for eql_core.
+
+- **`lib.rs`**: Defines the only procedural macro currently, called EnumVariants (uses the `proc_macro` crate to generate `all_variants()` method for the enum.)
+
 
 ## Other Files
 

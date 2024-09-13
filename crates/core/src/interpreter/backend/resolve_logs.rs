@@ -16,17 +16,6 @@ pub async fn resolve_log_query(
     fields: Vec<LogField>,
     provider: &RootProvider<Http<Client>>,
 ) -> Result<Vec<LogQueryRes>, Box<dyn Error>> {
-    
-    let logs = get_logs(filter, fields, &provider).await?;
-    Ok(logs)
-}
-
-async fn get_logs(
-    filter: Filter,
-    fields: Vec<LogField>,
-    provider: &RootProvider<Http<Client>>,
-) -> Result<Vec<LogQueryRes>, Box<dyn Error>> {
-    
     let logs = provider.get_logs(&filter).await?;
     if logs.is_empty() {
         return Err(Box::new(LogResolverErrors::NoLogsFound))
