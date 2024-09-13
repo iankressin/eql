@@ -51,10 +51,12 @@ fn serialize_csv(result: &ExpressionResult) -> Result<String, Box<dyn Error>> {
 
 fn serialize_parquet(result: &ExpressionResult) -> Result<Vec<u8>, Box<dyn Error>> {
     let (schema, data) = match result {
-        ExpressionResult::Account(accounts) => create_schema_and_data(accounts)?,
-        ExpressionResult::Block(blocks) => create_schema_and_data(blocks)?,
-        ExpressionResult::Transaction(transactions) => create_schema_and_data(transactions)?,
-        ExpressionResult::Log(logs) => create_schema_and_data(logs)?,
+        ExpressionResult::Account(accounts) => create_parquet_schema_and_data(accounts)?,
+        ExpressionResult::Block(blocks) => create_parquet_schema_and_data(blocks)?,
+        ExpressionResult::Transaction(transactions) => {
+            create_parquet_schema_and_data(transactions)?
+        }
+        ExpressionResult::Log(logs) => create_parquet_schema_and_data(logs)?,
     };
 
     let batch = RecordBatch::try_new(Arc::new(schema), data)?;
