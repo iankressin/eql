@@ -24,6 +24,9 @@ futures = { version = "0.3", features = ["async-await"] }
 csv = "1.1"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 eql_macros = { workspace = true }
+parquet = "34.0.0"
+arrow = "34.0.0"
+base64 = "0.22.1"
 
 [dev-dependencies]
 pretty_assertions = "1"
