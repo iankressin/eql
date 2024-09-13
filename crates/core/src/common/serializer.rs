@@ -68,7 +68,7 @@ fn serialize_parquet(result: &ExpressionResult) -> Result<Vec<u8>, Box<dyn Error
     Ok(buf)
 }
 
-fn create_schema_and_data<T: Serialize>(
+fn create_parquet_schema_and_data<T: Serialize>(
     items: &[T],
 ) -> Result<(Schema, Vec<ArrayRef>), Box<dyn Error>> {
     let mut fields = Vec::new();
