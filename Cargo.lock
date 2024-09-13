@@ -1604,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "alloy",
  "arrow",
@@ -1612,7 +1612,7 @@ dependencies = [
  "base64 0.22.1",
  "criterion",
  "csv",
- "eql_macros",
+ "eql_macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures",
  "getrandom",
  "parquet",
@@ -1628,7 +1628,18 @@ dependencies = [
 
 [[package]]
 name = "eql_macros"
-version = "0.1.1-alpha"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "eql_macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dc5bc85ecaa792859580d162a2cb6571ca0e630f08ac59cadc732872c467c82"
 dependencies = [
  "proc-macro2",
  "quote",
