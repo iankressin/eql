@@ -20,7 +20,14 @@ pub(crate) fn dump_results(result: &ExpressionResult, dump: &Dump) -> Result<(),
             std::fs::write(dump.path(), content)?;
         }
         DumpFormat::Csv => {
-            let content = serialize_csv(result)?;
+            let content = match result {
+                ExpressionResult::Account(accounts) => serialize_csv(accounts)?,
+                ExpressionResult::Block(blocks) => serialize_csv(blocks)?,
+                ExpressionResult::Transaction(txs) => serialize_csv(txs)?,
+                ExpressionResult::Log(logs) => serialize_csv(logs)?,
+            };
+
+            // let content = serialize_csv(result)?;
             std::fs::write(dump.path(), content)?;
         }
         DumpFormat::Parquet => {
@@ -31,22 +38,18 @@ pub(crate) fn dump_results(result: &ExpressionResult, dump: &Dump) -> Result<(),
     Ok(())
 }
 
-fn serialize_json(result: &ExpressionResult) -> Result<String, Box<dyn Error>> {
+fn serialize_json<T: Serialize>(result: &T) -> Result<String, Box<dyn Error>> {
     Ok(serde_json::to_string_pretty(result)?)
 }
 
-fn serialize_csv(result: &ExpressionResult) -> Result<String, Box<dyn Error>> {
+fn serialize_csv<T: Serialize>(results: &Vec<T>) -> Result<String, Box<dyn Error>> {
     let mut writer = WriterBuilder::new().has_headers(true).from_writer(vec![]);
 
-    match result {
-        ExpressionResult::Account(accounts) => writer.serialize(accounts)?,
-        ExpressionResult::Block(blocks) => writer.serialize(blocks)?,
-        ExpressionResult::Transaction(transactions) => writer.serialize(transactions)?,
-        ExpressionResult::Log(logs) => writer.serialize(logs)?,
+    for result in results {
+        writer.serialize(result)?
     }
 
-    let content = writer.into_inner()?;
-    Ok(String::from_utf8(content)?)
+    Ok(String::from_utf8(writer.into_inner()?)?)
 }
 
 fn serialize_parquet(result: &ExpressionResult) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -127,16 +130,23 @@ mod test {
 
     #[test]
     fn test_serialize_csv() {
-        let res = AccountQueryRes {
-            address: None,
-            balance: Some(U256::from_str("100").unwrap()),
-            nonce: Some(0),
-            code: None,
-        };
-        let result = ExpressionResult::Account(vec![res]);
-        let content = serialize_csv(&result).unwrap();
+        let res = vec![
+            AccountQueryRes {
+                address: None,
+                balance: Some(U256::from_str("100").unwrap()),
+                nonce: Some(0),
+                code: None,
+            },
+            AccountQueryRes {
+                address: None,
+                balance: Some(U256::from_str("200").unwrap()),
+                nonce: Some(1),
+                code: None,
+            },
+        ];
+        let content = serialize_csv(&res).unwrap();
 
-        assert_eq!(content, "nonce,balance\n0,100\n");
+        assert_eq!(content, "nonce,balance\n0,100\n1,200\n");
     }
 
     #[test]
