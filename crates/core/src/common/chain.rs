@@ -97,7 +97,7 @@ impl From<&Chain> for u64 {
 impl Chain {
     pub fn rpc_url(&self) -> &str {
         match self {
-            Chain::Ethereum => "https://eth.llamarpc.com",
+            Chain::Ethereum => "https://ethereum.drpc.org",
             Chain::Sepolia => "https://rpc.ankr.com/eth_sepolia",
             Chain::Arbitrum => "https://rpc.ankr.com/arbitrum",
             Chain::Base => "https://rpc.ankr.com/base",
