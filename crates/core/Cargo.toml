@@ -18,18 +18,17 @@ serde = { version = "1" }
 serde_json = { version = "1" }
 serde_with = "1.14"
 thiserror = { version = "1" }
-async-trait = { version = "0.1" }
 getrandom = { version = "0.2", features = ["js"] }
 futures = { version = "0.3", features = ["async-await"] }
 csv = "1.1"
-criterion = { version = "0.5.1", features = ["async_tokio"] }
 eql_macros = "0.1.0"
 parquet = "34.0.0"
 arrow = "34.0.0"
-base64 = "0.22.1"
 
 [dev-dependencies]
 pretty_assertions = "1"
+pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
+criterion = { version = "0.5.1", features = ["async_tokio"] }
 
 [[bench]]
 name = "bench"
