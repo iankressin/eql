@@ -253,6 +253,14 @@ async fn fetch_blocks_interpreter(end_block: u64) -> Result<(), Box<dyn Error>> 
     Ok(())
 }
 
+async fn fetch_logs_interpreter() -> Result<(), Box<dyn Error>> {
+    println!("Fetching logs");
+    Interpreter::run_program(
+        "GET * FROM log WHERE block 4638657:4638758, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth"
+    ).await?;
+    Ok(())
+}
+
 async fn dump_blocks_query_builder(end_block: u64, format: &str) -> Result<(), Box<dyn Error>> {
     println!("Dumping {} blocks in {} format", end_block, format);
     Interpreter::run_program(&format!(
@@ -298,7 +306,7 @@ fn bench_fetch_100_blocks(c: &mut Criterion) {
 fn bench_fetch_100_accounts(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
 
-    c.bench_function("Dump 100 accounts", |b| {
+    c.bench_function("Fetch 100 accounts", |b| {
         b.to_async(&rt)
             .iter(|| fetch_accounts_interpreter(black_box(100)))
     });
@@ -313,10 +321,19 @@ fn bench_fetch_100_transactions(c: &mut Criterion) {
     });
 }
 
+fn bench_fetch_logs(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+
+    c.bench_function("Fetch log", |b| {
+        b.to_async(&rt).iter(|| fetch_logs_interpreter())
+    });
+}
+
 criterion_group! {
     name = fetch_100_rows;
     config = Criterion::default().with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
-    targets = bench_fetch_100_blocks, bench_fetch_100_accounts, bench_fetch_100_transactions
+    targets = bench_fetch_100_blocks, bench_fetch_100_accounts, bench_fetch_100_transactions, bench_fetch_logs
+
 }
 
 criterion_main!(dump_10_rows, fetch_100_rows);
