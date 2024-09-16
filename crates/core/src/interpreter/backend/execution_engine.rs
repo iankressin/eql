@@ -548,7 +548,7 @@ mod test {
         })];
         execution_engine.run(expressions).await.unwrap();
 
-        let path = std::path::Path::new("test.json").to_str();
+        let path = std::path::Path::new("test.json");
         let expected_content = r#"
         {
             "block": [
@@ -558,12 +558,12 @@ mod test {
             ]
         }"#;
 
-        assert!(std::path::Path::new("test.json").exists());
+        assert!(path.exists());
 
-        let content = std::fs::read_to_string("test.json").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(flatten_string(&content), flatten_string(expected_content));
 
-        std::fs::remove_file("test.json").unwrap();
+        std::fs::remove_file(&path).unwrap();
     }
 
     fn flatten_string(s: &str) -> String {
