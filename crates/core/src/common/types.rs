@@ -159,7 +159,8 @@ impl Error for FieldError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]pub enum AccountField {
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]
+pub enum AccountField {
     Address,
     Nonce,
     Balance,

@@ -7,8 +7,8 @@ use super::{
 use crate::common::{
     entity::Entity, entity_filter::EntityFilter, entity_id::EntityId, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField}
 };
-use alloy::providers::ProviderBuilder;
-use std::error::Error;
+use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
+use std::{error::Error, sync::Arc};
 
 pub struct ExecutionEngine;
 
@@ -47,8 +47,8 @@ impl ExecutionEngine {
         &self,
         expr: &GetExpression,
     ) -> Result<ExpressionResult, Box<dyn std::error::Error>> {
-        let rpc_url = expr.chain.rpc_url().parse()?;
-        let provider = ProviderBuilder::new().on_http(rpc_url);
+        let rpc_url: Url = expr.chain.rpc_url().parse()?;
+        let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
 
         let result = match expr.entity {
             Entity::Block => {
@@ -62,13 +62,13 @@ impl ExecutionEngine {
                 };
 
                 let block_query_res = if let Some(entity_ids) = &expr.entity_id {
-                        resolve_block_query(entity_ids.to_vec(), fields, &provider).await?
+                    resolve_block_query(entity_ids.to_vec(), fields, provider).await?
                 } 
                 else if let Some(entity_filter) = &expr.entity_filter {
                     match entity_filter.as_slice() {
                         [EntityFilter::LogBlockRange(range)] => {
                             let entity_ids = vec![EntityId::Block(range.clone())];
-                            resolve_block_query(entity_ids, fields, &provider).await?
+                            resolve_block_query(entity_ids.to_vec(), fields, provider).await?
                         }
                         _ => {
                             return Err(Box::new(ExecutionEngineError::MultipleFiltersNotSupported));
@@ -217,7 +217,7 @@ mod test {
                 "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
             )),
             block_number: Some(4638757),
-            block_timestamp: Some(1511886266),
+            block_timestamp: None,
             transaction_hash: Some(b256!(
                 "8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"
             )),
@@ -557,8 +557,6 @@ mod test {
                 }
             ]
         }"#;
-
-        println!("{:?}", path);
 
         assert!(std::path::Path::new("test.json").exists());
 
