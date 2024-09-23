@@ -34,3 +34,4 @@
 
 ### v0.1.7-alpha
 - [ ] Codebase refactor
+- [ ] Project documentation
