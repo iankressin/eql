@@ -24,7 +24,7 @@ entity    = { "account" | "block" | "tx" | "log" }
 entity_id = { tx_id_list | account_id_list | block_id_list }
 
 dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
-file_name = { (ASCII_ALPHANUMERIC | "-" | "_")+ }
+file_name = { (ASCII_ALPHANUMERIC | "-" | "_" | "/")+ }
 file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
 
 filter = _{ "WHERE" ~ WHITESPACE* ~ entity_filter}

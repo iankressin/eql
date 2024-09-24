@@ -1615,7 +1615,7 @@ dependencies = [
 
 [[package]]
 name = "eql_cli"
-version = "0.1.1-alpha"
+version = "0.1.2-alpha"
 dependencies = [
  "clap",
  "crossterm",
@@ -1628,7 +1628,7 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "alloy",
  "arrow",
