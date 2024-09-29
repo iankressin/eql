@@ -4,6 +4,7 @@ USERNAME="iankressin"
 REPO_NAME="eql"
 REPO_URL="https://github.com/{$USERNAME}/${REPO_NAME}"
 REPO_API_URL="https://api.github.com/repos/${USERNAME}/${REPO_NAME}"
+CONFIG_FILE_URL="https://raw.githubusercontent.com/${USERNAME}/${REPO_NAME}/main/eqlup/default-config.json"
 
 LINUX_ASSET="eql"
 MAC_ASSET="eql"
@@ -56,15 +57,25 @@ move_to_bin() {
     echo "[INFO] Installed to /usr/local/bin/eql"
 }
 
-cleanup() {
-    rm -rf latest latest.zip
-    echo "[INFO] Cleaned up"
-}
-
 remove_old_version() {
     echo "[INFO] Removing old version of eql"
     sudo rm -f /usr/local/bin/eql
     echo "[INFO] Old version removed "
+}
+
+clone_chains_file_if_needed() {
+    if [ ! -f ~/eql-config.json ]; then
+        echo "[INFO] Cloning default EQL config file to ~/eql-config.json"
+        curl -s -o eql-config.json $CONFIG_FILE_URL
+        mv eql-config.json ~/eql-config.json
+    else
+        echo "[INFO] EQL config file already exists. Skipping"
+    fi
+}
+
+cleanup() {
+    rm -rf latest latest.zip
+    echo "[INFO] Cleaned up"
 }
 
 final_message() {
@@ -73,12 +84,13 @@ final_message() {
 }
 
 main() {
-    get_latest_release_tag
     initial_message
+    get_latest_release_tag
     remove_old_version
     detect_os
     download_asset
     move_to_bin
+    clone_chains_file_if_needed
     cleanup
     final_message
 }
