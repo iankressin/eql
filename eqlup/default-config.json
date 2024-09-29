@@ -1,0 +1,145 @@
+{
+    "chains": {
+        "eth": {
+            "default": "https://ethereum.drpc.org",
+            "rpcs": [
+                "https://ethereum.drpc.org",
+                "https://eth.llamarpc.com",
+                "https://rpc.ankr.com/eth",
+            ]
+        },
+        "sepolia": {
+            "default": "https://rpc.ankr.com/eth_sepolia",
+            "rpcs": [
+                "https://rpc.ankr.com/eth_sepolia"
+            ]
+        },
+        "bnb": {
+            "default": "https://bsc.drpc.org",
+            "rpcs": [
+                "https://bsc.drpc.org",
+                "https://rpc.ankr.com/bsc",
+            ]
+        },
+        "arb": {
+            "default": "https://rpc.ankr.com/arbitrum",
+            "rpcs": [
+                "https://rpc.ankr.com/arbitrum"
+            ]
+        },
+        "base": {
+            "default": "https://rpc.ankr.com/base",
+            "rpcs": [
+                "https://rpc.ankr.com/base"
+            ]
+        },
+        "blast": {
+            "default": "https://rpc.ankr.com/blast",
+            "rpcs": [
+                "https://rpc.ankr.com/blast"
+            ]
+        },
+        "op": {
+            "default": "https://rpc.ankr.com/optimism",
+            "rpcs": [
+                "https://rpc.ankr.com/optimism"
+            ]
+        },
+        "polygon": {
+            "default": "https://polygon.llamarpc.com",
+            "rpcs": [
+                "https://polygon.llamarpc.com"
+            ]
+        },
+        "anvil": {
+            "default": "http://localhost:8545",
+            "rpcs": [
+                "http://localhost:8545"
+            ]
+        },
+        "mantle": {
+            "default": "https://mantle.drpc.org",
+            "rpcs": [
+                "https://mantle.drpc.org"
+            ]
+        },
+        "zksync": {
+            "default": "https://zksync.drpc.org",
+            "rpcs": [
+                "https://zksync.drpc.org"
+            ]
+        },
+        "taiko": {
+            "default": "https://rpc.taiko.xyz",
+            "rpcs": [
+                "https://rpc.taiko.xyz"
+            ]
+        },
+        "celo": {
+            "default": "https://forno.celo.org",
+            "rpcs": [
+                "https://forno.celo.org"
+            ]
+        },
+        "avalanche": {
+            "default": "https://avalanche.drpc.org",
+            "rpcs": [
+                "https://avalanche.drpc.org"
+            ]
+        },
+        "scroll": {
+            "default": "https://scroll.drpc.org",
+            "rpcs": [
+                "https://scroll.drpc.org"
+            ]
+        },
+        "linea": {
+            "default": "https://rpc.linea.build",
+            "rpcs": [
+                "https://rpc.linea.build"
+            ]
+        },
+        "zora": {
+            "default": "https://zora.drpc.org",
+            "rpcs": [
+                "https://zora.drpc.org"
+            ]
+        },
+        "moonbeam": {
+            "default": "https://moonbeam.drpc.org",
+            "rpcs": [
+                "https://moonbeam.drpc.org"
+            ]
+        },
+        "moonriver": {
+            "default": "https://moonriver.drpc.org",
+            "rpcs": [
+                "https://moonriver.drpc.org"
+            ]
+        },
+        "ronin": {
+            "default": "https://ronin.drpc.org",
+            "rpcs": [
+                "https://ronin.drpc.org"
+            ]
+        },
+        "fantom": {
+            "default": "https://fantom.drpc.org",
+            "rpcs": [
+                "https://fantom.drpc.org"
+            ]
+        },
+        "kava": {
+            "default": "https://kava.drpc.org",
+            "rpcs": [
+                "https://kava.drpc.org"
+            ]
+        },
+        "gnosis": {
+            "default": "https://gnosis.drpc.org",
+            "rpcs": [
+                "https://gnosis.drpc.org"
+            ]
+        }
+    }
+}
