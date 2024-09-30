@@ -1,3 +1,9 @@
+use std::error::Error;
+
+use alloy::transports::http::reqwest::Url;
+
+use super::config::Config;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Chain {
     Ethereum,
@@ -94,32 +100,38 @@ impl From<&Chain> for u64 {
     }
 }
 
-impl Chain {
-    pub fn rpc_url(&self) -> &str {
-        match self {
-            Chain::Ethereum => "https://ethereum.drpc.org",
-            Chain::Sepolia => "https://rpc.ankr.com/eth_sepolia",
-            Chain::Arbitrum => "https://rpc.ankr.com/arbitrum",
-            Chain::Base => "https://rpc.ankr.com/base",
-            Chain::Blast => "https://rpc.ankr.com/blast",
-            Chain::Optimism => "https://rpc.ankr.com/optimism",
-            Chain::Polygon => "https://polygon.llamarpc.com",
-            Chain::Anvil => "http://localhost:8545",
-            Chain::Mantle => "https://mantle.drpc.org",
-            Chain::Zksync => "https://zksync.drpc.org",
-            Chain::Taiko => "https://rpc.taiko.xyz",
-            Chain::Celo => "https://forno.celo.org",
-            Chain::Avalanache => "https://avalanche.drpc.org",
-            Chain::Scroll => "https://scroll.drpc.org",
-            Chain::Bnb => "https://binance.llamarpc.com",
-            Chain::Linea => "https://rpc.linea.build",
-            Chain::Zora => "https://zora.drpc.org",
-            Chain::Moonbeam => "https://moonbeam.drpc.org",
-            Chain::Moonriver => "https://moonriver.drpc.org",
-            Chain::Ronin => "https://ronin.drpc.org",
-            Chain::Fantom => "https://fantom.drpc.org",
-            Chain::Kava => "https://kava.drpc.org",
-            Chain::Gnosis => "https://gnosis.drpc.org",
+impl From<&Chain> for String {
+    fn from(value: &Chain) -> Self {
+        match value {
+            Chain::Ethereum => "eth".to_string(),
+            Chain::Sepolia => "sepolia".to_string(),
+            Chain::Arbitrum => "arb".to_string(),
+            Chain::Base => "base".to_string(),
+            Chain::Blast => "blast".to_string(),
+            Chain::Optimism => "optimism".to_string(),
+            Chain::Polygon => "polygon".to_string(),
+            Chain::Anvil => "anvil".to_string(),
+            Chain::Mantle => "mantle".to_string(),
+            Chain::Zksync => "zksync".to_string(),
+            Chain::Taiko => "taiko".to_string(),
+            Chain::Celo => "celo".to_string(),
+            Chain::Avalanache => "avalanche".to_string(),
+            Chain::Scroll => "scroll".to_string(),
+            Chain::Bnb => "bnb".to_string(),
+            Chain::Linea => "linea".to_string(),
+            Chain::Zora => "zora".to_string(),
+            Chain::Moonbeam => "moonbeam".to_string(),
+            Chain::Moonriver => "moonriver".to_string(),
+            Chain::Ronin => "ronin".to_string(),
+            Chain::Fantom => "fantom".to_string(),
+            Chain::Kava => "kava".to_string(),
+            Chain::Gnosis => "gnosis".to_string(),
         }
+    }
+}
+
+impl Chain {
+    pub fn rpc_url(&self) -> Result<Url, Box<dyn Error>> {
+        Config::new().get_chain_default_rpc(self)
     }
 }

@@ -7,7 +7,7 @@ use super::{
 use crate::common::{
     entity::Entity, entity_filter::EntityFilter, entity_id::EntityId, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField}
 };
-use alloy::{providers::ProviderBuilder, transports::http::reqwest::Url};
+use alloy::providers::ProviderBuilder;
 use std::{error::Error, sync::Arc};
 
 pub struct ExecutionEngine;
@@ -47,7 +47,8 @@ impl ExecutionEngine {
         &self,
         expr: &GetExpression,
     ) -> Result<ExpressionResult, Box<dyn std::error::Error>> {
-        let rpc_url: Url = expr.chain.rpc_url().parse()?;
+        let rpc_url = expr.chain.rpc_url()?;
+        println!("RPC URL: {}", rpc_url);
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
 
         let result = match expr.entity {
@@ -341,7 +342,7 @@ mod test {
     #[tokio::test]
     async fn test_error_when_id_doesnt_match_transaction() {
         let fields = vec![]; // Empty fields for simplicity
-        let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().parse().unwrap());
+        let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().unwrap());
         let entity_id = EntityId::Block(BlockRange::new(
             10.into(),
             Some(BlockNumberOrTag::from_str("latest").unwrap()),
