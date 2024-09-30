@@ -5,7 +5,7 @@
             "rpcs": [
                 "https://ethereum.drpc.org",
                 "https://eth.llamarpc.com",
-                "https://rpc.ankr.com/eth",
+                "https://rpc.ankr.com/eth"
             ]
         },
         "sepolia": {
@@ -18,7 +18,7 @@
             "default": "https://bsc.drpc.org",
             "rpcs": [
                 "https://bsc.drpc.org",
-                "https://rpc.ankr.com/bsc",
+                "https://rpc.ankr.com/bsc"
             ]
         },
         "arb": {
