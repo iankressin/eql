@@ -1,4 +1,5 @@
 pub mod chain;
+pub mod config;
 pub mod ens;
 pub mod entity;
 pub mod entity_filter;

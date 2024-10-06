@@ -85,7 +85,7 @@ impl<'a> SemanticAnalyzer<'a> {
                         }));
                     }
                 }
-                Field::Star => {} 
+                Field::Star => {}
             }
         }
 
@@ -98,7 +98,7 @@ mod test {
     use crate::common::{
         chain::Chain,
         entity::Entity,
-        types::{BlockField, Expression, Field, GetExpression},
+        types::{BlockField, ChainOrRpc, Expression, Field, GetExpression},
     };
 
     #[test]
@@ -107,7 +107,7 @@ mod test {
             entity: Entity::Account,
             entity_id: None,
             entity_filter: None,
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             fields: vec![Field::Block(BlockField::Number)],
             // The query doesn't matter for this test
             query: String::from(""),

@@ -192,16 +192,18 @@ async fn get_block_number_from_tag(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{chain::Chain, entity_filter::BlockRange};
+    use crate::common::entity_filter::BlockRange;
     use alloy::providers::ProviderBuilder;
 
     #[tokio::test]
     async fn test_resolve_block_query_when_start_is_greater_than_end() {
         let start_block = 10;
         let end_block = 5;
-        let fields = vec![]; // Empty fields for simplicity
-        let provider =
-            Arc::new(ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().parse().unwrap()));
+        // Empty fields for simplicity
+        let fields = vec![];
+        let provider = Arc::new(
+            ProviderBuilder::new().on_http("https://rpc.ankr.com/eth_sepolia".parse().unwrap()),
+        );
         let entity_id =
             EntityId::Block(BlockRange::new(start_block.into(), Some(end_block.into())));
 
