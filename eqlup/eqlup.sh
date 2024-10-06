@@ -66,7 +66,7 @@ remove_old_version() {
 clone_chains_file_if_needed() {
     if [ ! -f ~/eql-config.json ]; then
         echo "[INFO] Cloning default EQL config file to ~/eql-config.json"
-        curl -s -o eql-config.json $CONFIG_FILE_URL
+        curl -L -s -o eql-config.json $CONFIG_FILE_URL
         mv eql-config.json ~/eql-config.json
     else
         echo "[INFO] EQL config file already exists. Skipping"
@@ -95,4 +95,4 @@ main() {
     final_message
 }
 
-main
+maineql
