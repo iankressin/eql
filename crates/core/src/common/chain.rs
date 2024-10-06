@@ -1,4 +1,8 @@
-use std::error::Error;
+use core::fmt;
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+};
 
 use alloy::transports::http::reqwest::Url;
 
@@ -29,6 +33,44 @@ pub enum Chain {
     Fantom,
     Kava,
     Gnosis,
+}
+
+impl Chain {
+    pub fn rpc_url(&self) -> Result<Url, Box<dyn Error>> {
+        match Config::new().get_chain_default_rpc(self) {
+            Ok(Some(url)) => Ok(url),
+            Ok(None) => Ok(self.rpc_fallback().parse()?),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn rpc_fallback(&self) -> &str {
+        match self {
+            Chain::Ethereum => "https://ethereum.drpc.org",
+            Chain::Sepolia => "https://rpc.ankr.com/eth_sepolia",
+            Chain::Arbitrum => "https://rpc.ankr.com/arbitrum",
+            Chain::Base => "https://rpc.ankr.com/base",
+            Chain::Blast => "https://rpc.ankr.com/blast",
+            Chain::Optimism => "https://rpc.ankr.com/optimism",
+            Chain::Polygon => "https://polygon.llamarpc.com",
+            Chain::Anvil => "http://localhost:8545",
+            Chain::Mantle => "https://mantle.drpc.org",
+            Chain::Zksync => "https://zksync.drpc.org",
+            Chain::Taiko => "https://rpc.taiko.xyz",
+            Chain::Celo => "https://forno.celo.org",
+            Chain::Avalanache => "https://avalanche.drpc.org",
+            Chain::Scroll => "https://scroll.drpc.org",
+            Chain::Bnb => "https://binance.llamarpc.com",
+            Chain::Linea => "https://rpc.linea.build",
+            Chain::Zora => "https://zora.drpc.org",
+            Chain::Moonbeam => "https://moonbeam.drpc.org",
+            Chain::Moonriver => "https://moonriver.drpc.org",
+            Chain::Ronin => "https://ronin.drpc.org",
+            Chain::Fantom => "https://fantom.drpc.org",
+            Chain::Kava => "https://kava.drpc.org",
+            Chain::Gnosis => "https://gnosis.drpc.org",
+        }
+    }
 }
 
 impl Default for Chain {
@@ -130,8 +172,8 @@ impl From<&Chain> for String {
     }
 }
 
-impl Chain {
-    pub fn rpc_url(&self) -> Result<Url, Box<dyn Error>> {
-        Config::new().get_chain_default_rpc(self)
+impl Display for Chain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", String::from(self))
     }
 }

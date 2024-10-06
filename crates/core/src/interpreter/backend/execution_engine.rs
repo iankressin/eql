@@ -48,7 +48,6 @@ impl ExecutionEngine {
         expr: &GetExpression,
     ) -> Result<ExpressionResult, Box<dyn std::error::Error>> {
         let rpc_url = expr.chain.rpc_url()?;
-        println!("RPC URL: {}", rpc_url);
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
 
         let result = match expr.entity {
