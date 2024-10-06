@@ -1,10 +1,7 @@
 use super::config::Config;
 use alloy::transports::http::reqwest::Url;
 use core::fmt;
-use std::{
-    error::Error,
-    fmt::{Display, Formatter},
-};
+use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Chain {
@@ -20,7 +17,7 @@ pub enum Chain {
     Zksync,
     Taiko,
     Celo,
-    Avalanache,
+    Avalanche,
     Scroll,
     Bnb,
     Linea,
@@ -56,7 +53,7 @@ impl Chain {
             Chain::Zksync => "https://zksync.drpc.org",
             Chain::Taiko => "https://rpc.taiko.xyz",
             Chain::Celo => "https://forno.celo.org",
-            Chain::Avalanache => "https://avalanche.drpc.org",
+            Chain::Avalanche => "https://avalanche.drpc.org",
             Chain::Scroll => "https://scroll.drpc.org",
             Chain::Bnb => "https://binance.llamarpc.com",
             Chain::Linea => "https://rpc.linea.build",
@@ -94,7 +91,7 @@ impl TryFrom<&str> for Chain {
             "zksync" => Ok(Chain::Zksync),
             "taiko" => Ok(Chain::Taiko),
             "celo" => Ok(Chain::Celo),
-            "avalanche" => Ok(Chain::Avalanache),
+            "avalanche" => Ok(Chain::Avalanche),
             "scroll" => Ok(Chain::Scroll),
             "bnb" => Ok(Chain::Bnb),
             "linea" => Ok(Chain::Linea),
@@ -125,7 +122,7 @@ impl From<&Chain> for u64 {
             Chain::Zksync => 324,
             Chain::Taiko => 167000,
             Chain::Celo => 42220,
-            Chain::Avalanache => 43114,
+            Chain::Avalanche => 43114,
             Chain::Scroll => 534352,
             Chain::Bnb => 56,
             Chain::Linea => 59144,
@@ -140,38 +137,33 @@ impl From<&Chain> for u64 {
     }
 }
 
-impl From<&Chain> for String {
-    fn from(value: &Chain) -> Self {
-        match value {
-            Chain::Ethereum => "eth".to_string(),
-            Chain::Sepolia => "sepolia".to_string(),
-            Chain::Arbitrum => "arb".to_string(),
-            Chain::Base => "base".to_string(),
-            Chain::Blast => "blast".to_string(),
-            Chain::Optimism => "op".to_string(),
-            Chain::Polygon => "polygon".to_string(),
-            Chain::Anvil => "anvil".to_string(),
-            Chain::Mantle => "mantle".to_string(),
-            Chain::Zksync => "zksync".to_string(),
-            Chain::Taiko => "taiko".to_string(),
-            Chain::Celo => "celo".to_string(),
-            Chain::Avalanache => "avalanche".to_string(),
-            Chain::Scroll => "scroll".to_string(),
-            Chain::Bnb => "bnb".to_string(),
-            Chain::Linea => "linea".to_string(),
-            Chain::Zora => "zora".to_string(),
-            Chain::Moonbeam => "moonbeam".to_string(),
-            Chain::Moonriver => "moonriver".to_string(),
-            Chain::Ronin => "ronin".to_string(),
-            Chain::Fantom => "fantom".to_string(),
-            Chain::Kava => "kava".to_string(),
-            Chain::Gnosis => "gnosis".to_string(),
-        }
-    }
-}
-
-impl Display for Chain {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from(self))
+impl fmt::Display for Chain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let chain_str = match self {
+            Chain::Ethereum => "eth",
+            Chain::Sepolia => "sepolia",
+            Chain::Arbitrum => "arb",
+            Chain::Base => "base",
+            Chain::Blast => "blast",
+            Chain::Optimism => "optimism",
+            Chain::Polygon => "polygon",
+            Chain::Anvil => "anvil",
+            Chain::Mantle => "mantle",
+            Chain::Zksync => "zksync",
+            Chain::Taiko => "taiko",
+            Chain::Celo => "celo",
+            Chain::Avalanche => "avalanche",
+            Chain::Scroll => "scroll",
+            Chain::Bnb => "bnb",
+            Chain::Linea => "linea",
+            Chain::Zora => "zora",
+            Chain::Moonbeam => "moonbeam",
+            Chain::Moonriver => "moonriver",
+            Chain::Ronin => "ronin",
+            Chain::Fantom => "fantom",
+            Chain::Kava => "kava",
+            Chain::Gnosis => "gnosis",
+        };
+        write!(f, "{}", chain_str)
     }
 }
