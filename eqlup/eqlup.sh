@@ -95,4 +95,4 @@ main() {
     final_message
 }
 
-maineql
+main
