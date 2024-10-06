@@ -84,8 +84,8 @@ final_message() {
 }
 
 main() {
-    initial_message
     get_latest_release_tag
+    initial_message
     remove_old_version
     detect_os
     download_asset
