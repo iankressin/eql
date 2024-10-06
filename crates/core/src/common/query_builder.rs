@@ -1,5 +1,4 @@
 use super::{
-    chain::Chain,
     entity::Entity,
     entity_filter::EntityFilter,
     entity_id::EntityId,
@@ -28,7 +27,7 @@ pub struct EQLBuilder {
     entity: Option<Entity>,
     entity_id: Option<Vec<EntityId>>,
     entity_filters: Option<Vec<EntityFilter>>,
-    chain: Option<ChainOrRpc>,
+    chain_or_rpc: Option<ChainOrRpc>,
     dump: Option<Dump>,
 }
 
@@ -39,7 +38,7 @@ impl EQLBuilder {
             entity: None,
             entity_id: None,
             entity_filters: None,
-            chain: None,
+            chain_or_rpc: None,
             dump: None,
         }
     }
@@ -55,8 +54,8 @@ impl EQLBuilder {
         self
     }
 
-    pub fn on(&mut self, chain: ChainOrRpc) -> &mut Self {
-        self.chain = Some(chain);
+    pub fn on(&mut self, chain_or_rpc: ChainOrRpc) -> &mut Self {
+        self.chain_or_rpc = Some(chain_or_rpc);
         self
     }
 
@@ -86,7 +85,7 @@ impl EQLBuilder {
             .ok_or(EQLBuilderError::MissingEntityError)?;
         let entity_id = self.entity_id.clone();
         let chain = self
-            .chain
+            .chain_or_rpc
             .clone()
             .ok_or(EQLBuilderError::MissingChainError)?;
         let entity_filter = self.entity_filters.clone();
