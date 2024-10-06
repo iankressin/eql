@@ -10,14 +10,6 @@ use super::chain::Chain;
 
 const CONFIG_FILE: &str = "eql-config.json";
 
-#[derive(thiserror::Error, Debug)]
-enum ConfigErrors {
-    #[error("Default RPC for chain {0} not found in config file")]
-    DefaultRpcNotFound(String),
-    #[error("RPC list for chain {0} not found in config file")]
-    RpcNotFound(String),
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 struct ConfigFile {
     chains: HashMap<String, ChainConfig>,
@@ -80,7 +72,7 @@ impl Config {
                     let url = chain_config.default.parse::<Url>()?;
                     Ok(Some(url))
                 } else {
-                    Err(Box::new(ConfigErrors::DefaultRpcNotFound(chain.into())) as Box<dyn Error>)
+                    Ok(None)
                 }
             }
             None => Ok(None),
@@ -93,15 +85,12 @@ impl Config {
                 let file = fs::read_to_string(file_path)?;
                 let config_file: ConfigFile = serde_json::from_str(&file)?;
 
-                println!("Config file: {:?}", config_file);
-                println!("CHAIN: {:?}", chain.to_string());
-
                 if let Some(chain_config) = config_file.chains.get(&chain.to_string()) {
                     let urls: Result<Vec<Url>, _> =
                         chain_config.rpcs.iter().map(|rpc| rpc.parse()).collect();
                     Ok(Some(urls?))
                 } else {
-                    Err(Box::new(ConfigErrors::RpcNotFound(chain.into())) as Box<dyn Error>)
+                    Ok(None)
                 }
             }
             None => Ok(None),
