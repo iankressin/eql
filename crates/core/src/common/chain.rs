@@ -145,7 +145,7 @@ impl fmt::Display for Chain {
             Chain::Arbitrum => "arb",
             Chain::Base => "base",
             Chain::Blast => "blast",
-            Chain::Optimism => "optimism",
+            Chain::Optimism => "op",
             Chain::Polygon => "polygon",
             Chain::Anvil => "anvil",
             Chain::Mantle => "mantle",
