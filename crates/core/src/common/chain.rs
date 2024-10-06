@@ -1,12 +1,10 @@
+use super::config::Config;
+use alloy::transports::http::reqwest::Url;
 use core::fmt;
 use std::{
     error::Error,
     fmt::{Display, Formatter},
 };
-
-use alloy::transports::http::reqwest::Url;
-
-use super::config::Config;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Chain {

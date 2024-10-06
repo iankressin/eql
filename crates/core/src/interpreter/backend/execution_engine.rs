@@ -47,7 +47,7 @@ impl ExecutionEngine {
         &self,
         expr: &GetExpression,
     ) -> Result<ExpressionResult, Box<dyn std::error::Error>> {
-        let rpc_url = expr.chain.rpc_url()?;
+        let rpc_url = expr.chain_or_rpc.rpc_url()?;
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
 
         let result = match expr.entity {
@@ -156,7 +156,7 @@ mod test {
         entity_filter::{BlockRange, EntityFilter},
         entity_id::EntityId,
         query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
-        types::{BlockField, Dump, DumpFormat, Expression, Field, GetExpression},
+        types::{BlockField, ChainOrRpc, Dump, DumpFormat, Expression, Field, GetExpression},
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -169,7 +169,7 @@ mod test {
     async fn test_get_logs() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Log,
             entity_id: None,
             entity_filter: Some(vec![
@@ -238,7 +238,7 @@ mod test {
     async fn test_get_block_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Block,
             entity_id: Some(vec![
                 EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
@@ -362,7 +362,7 @@ mod test {
     async fn test_get_account_fields_using_star_operator() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Account,
             entity_id: Some(vec![
                 EntityId::Account(NameOrAddress::Address(Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap())),
@@ -395,7 +395,7 @@ mod test {
     async fn test_get_account_fields_using_invalid_ens() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Account,
             entity_id: Some(vec![
                 EntityId::Account(NameOrAddress::Name(String::from("thisisinvalid235790123801.eth")))
@@ -413,7 +413,7 @@ mod test {
     async fn test_get_transaction_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Transaction,
             entity_id: Some(vec![
                 EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")),
@@ -501,7 +501,7 @@ mod test {
     async fn test_get_transaction_fields_does_not_exist() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Transaction,
             entity_id: Some(vec![EntityId::Transaction(b256!(
                 "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
@@ -536,7 +536,7 @@ mod test {
     async fn test_dump_results() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             entity: Entity::Block,
             entity_id: Some(vec![
                 EntityId::Block(BlockRange::new(1.into(), None)),

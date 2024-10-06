@@ -1,6 +1,6 @@
-use crate::interpreter::frontend::parser::Rule;
-
 use super::{chain::Chain, entity::Entity, entity_filter::EntityFilter, entity_id::EntityId};
+use crate::interpreter::frontend::parser::Rule;
+use alloy::transports::http::reqwest::Url;
 use eql_macros::EnumVariants;
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
@@ -17,9 +17,24 @@ pub struct GetExpression {
     pub entity_id: Option<Vec<EntityId>>,
     pub entity_filter: Option<Vec<EntityFilter>>,
     pub fields: Vec<Field>,
-    pub chain: Chain,
+    pub chain_or_rpc: ChainOrRpc,
     pub query: String,
     pub dump: Option<Dump>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ChainOrRpc {
+    Chain(Chain),
+    Rpc(Url),
+}
+
+impl ChainOrRpc {
+    pub fn rpc_url(&self) -> Result<Url, Box<dyn Error>> {
+        match self {
+            ChainOrRpc::Chain(chain) => Ok(chain.rpc_url()?.clone()),
+            ChainOrRpc::Rpc(url) => Ok(url.clone()),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -112,7 +127,7 @@ impl Default for GetExpression {
             entity_id: None,
             entity_filter: None,
             fields: vec![],
-            chain: Chain::Ethereum,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             query: "".to_string(),
             dump: None,
         }

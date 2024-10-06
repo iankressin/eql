@@ -13,7 +13,7 @@ get       = {
     WHITESPACE* ~
     "ON" ~
     WHITESPACE* ~
-    chain ~
+    (chain | rpc_url)~
     (WHITESPACE* ~ dump)* ~
     exp_separator* ~
     WHITESPACE*
@@ -175,6 +175,7 @@ chain = {
     "kava" |
     "gnosis"
 }
+rpc_url = { ("http://" | "https://") ~ (ASCII_ALPHANUMERIC | "." | "-" | ":" | "/")+ }
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
