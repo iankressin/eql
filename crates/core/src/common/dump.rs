@@ -34,15 +34,15 @@ impl<'a> TryFrom<Pairs<'a, Rule>> for Dump {
     type Error = Box<dyn Error>;
 
     fn try_from(pairs: Pairs<'a, Rule>) -> Result<Self, Self::Error> {
-        let mut pairs_clone = pairs.clone();
+        let mut pairs = pairs;
 
-        let name = pairs_clone
+        let name = pairs
             .next()
             .ok_or(Box::new(DumpError::FileNameNotFound))?
             .as_str()
             .to_string();
 
-        let format: DumpFormat = pairs_clone
+        let format: DumpFormat = pairs
             .next()
             .ok_or(Box::new(DumpError::FileFormatNotFound))?
             .as_str()
