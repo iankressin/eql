@@ -1,17 +1,16 @@
 use crate::common::{
-    entity_id::EntityId, 
-    query_result::TransactionQueryRes, 
-    types::TransactionField
+    query_result::TransactionQueryRes,
+    transaction::{Transaction, TransactionField},
 };
-use std::error::Error;
 use alloy::{
-    primitives::FixedBytes, 
-    providers::{Provider, RootProvider}, 
-    transports::http::{Client, Http}
+    primitives::FixedBytes,
+    providers::{Provider, RootProvider},
+    transports::http::{Client, Http},
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-
+use std::error::Error;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum TransactionResolverErrors {
@@ -19,34 +18,26 @@ pub enum TransactionResolverErrors {
     MismatchEntityAndEntityId(String),
 }
 
+/// TODO: Handle filter
 /// Resolve the query to get transactions after receiving an transaction entity expression
 /// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results.
 pub async fn resolve_transaction_query(
-    entity_ids: Vec<EntityId>, 
-    fields: Vec<TransactionField>,
-    provider: &RootProvider<Http<Client>>,
+    transaction: &Transaction,
+    provider: Arc<RootProvider<Http<Client>>>,
 ) -> Result<Vec<TransactionQueryRes>, Box<dyn Error>> {
     let mut tx_futures = Vec::new();
-    for entity_id in entity_ids {
-        let fields = fields.clone();
-        let provider = provider.clone();
-        let tx_future = async move {
-        
-            match entity_id {
-                EntityId::Transaction(hash) => { 
-                    get_transaction(hash, fields, &provider).await
-                },
-                id => Err(Box::new(TransactionResolverErrors::MismatchEntityAndEntityId(id.to_string())).into()),
-            }
-        };
 
-    tx_futures.push(tx_future);
+    for tx_id in transaction.ids().unwrap() {
+        let fields = transaction.fields().clone();
+        let provider = provider.clone();
+        let tx_future = async move { get_transaction(*tx_id, fields, &provider).await };
+
+        tx_futures.push(tx_future);
     }
 
     let tx_res = try_join_all(tx_futures).await?;
     Ok(tx_res)
 }
-
 
 async fn get_transaction(
     hash: FixedBytes<32>,

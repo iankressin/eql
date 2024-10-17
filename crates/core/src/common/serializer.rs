@@ -2,8 +2,8 @@ use std::error::Error;
 use std::sync::Arc;
 
 use super::{
+    dump::{Dump, DumpFormat},
     query_result::ExpressionResult,
-    types::{Dump, DumpFormat},
 };
 use arrow::array::{ArrayRef, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
@@ -27,7 +27,6 @@ pub(crate) fn dump_results(result: &ExpressionResult, dump: &Dump) -> Result<(),
                 ExpressionResult::Log(logs) => serialize_csv(logs)?,
             };
 
-            // let content = serialize_csv(result)?;
             std::fs::write(dump.path(), content)?;
         }
         DumpFormat::Parquet => {

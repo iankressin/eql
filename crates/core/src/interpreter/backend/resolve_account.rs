@@ -1,6 +1,8 @@
 use crate::common::{
-    chain::Chain, ens::NameOrAddress, entity_id::EntityId, query_result::AccountQueryRes,
-    types::AccountField,
+    account::{Account, AccountField},
+    chain::Chain,
+    ens::NameOrAddress,
+    query_result::AccountQueryRes,
 };
 use alloy::{
     primitives::Address,
@@ -10,6 +12,7 @@ use alloy::{
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum AccountResolverErrors {
@@ -20,24 +23,24 @@ pub enum AccountResolverErrors {
 /// Resolve the query to get accounts after receiving an account entity expression
 /// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results.
 pub async fn resolve_account_query(
-    entity_ids: Vec<EntityId>,
-    fields: Vec<AccountField>,
-    provider: &RootProvider<Http<Client>>,
+    account: &Account,
+    provider: Arc<RootProvider<Http<Client>>>,
 ) -> Result<Vec<AccountQueryRes>, Box<dyn Error>> {
     let mut account_futures = Vec::new();
-    for entity_id in entity_ids {
-        let fields = fields.clone();
+
+    // TODO: Handle filter
+    // TODO: Remove unwrap
+    for account_id in account.ids().unwrap() {
+        let fields = account.fields().clone();
         let provider = provider.clone();
+
         let account_future = async move {
-            match entity_id {
-                EntityId::Account(name_or_address) => {
-                    let address = to_address(name_or_address).await?;
+            match account_id {
+                NameOrAddress::Address(address) => get_account(address, fields, &provider).await,
+                NameOrAddress::Name(name) => {
+                    let address = to_address(name).await?;
                     get_account(address, fields, &provider).await
                 }
-                id => Err(Box::new(AccountResolverErrors::MismatchEntityAndEntityId(
-                    id.to_string(),
-                ))
-                .into()),
             }
         };
 
@@ -46,18 +49,6 @@ pub async fn resolve_account_query(
 
     let account_res = try_join_all(account_futures).await?;
     Ok(account_res)
-}
-
-async fn to_address(name_or_address: NameOrAddress) -> Result<Address, Box<dyn Error>> {
-    match &name_or_address {
-        NameOrAddress::Address(address) => Ok(*address),
-        NameOrAddress::Name(_) => {
-            let rpc_url = Chain::Ethereum.rpc_url()?;
-            let provider = ProviderBuilder::new().on_http(rpc_url);
-            let address = name_or_address.resolve(&provider).await?;
-            Ok(address)
-        }
-    }
 }
 
 async fn get_account(
@@ -87,3 +78,9 @@ async fn get_account(
     Ok(account)
 }
 
+async fn to_address(name: String) -> Result<Address, Box<dyn Error>> {
+    let rpc_url = Chain::Ethereum.rpc_url()?;
+    let provider = ProviderBuilder::new().on_http(rpc_url);
+    let address = NameOrAddress::Name(name).resolve(&provider).await?;
+    Ok(address)
+}

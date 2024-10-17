@@ -3,13 +3,12 @@ use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct QueryResult {
-    pub query: String,
     pub result: ExpressionResult,
 }
 
 impl QueryResult {
-    pub fn new(query: String, result: ExpressionResult) -> QueryResult {
-        QueryResult { query, result }
+    pub fn new(result: ExpressionResult) -> QueryResult {
+        QueryResult { result }
     }
 }
 

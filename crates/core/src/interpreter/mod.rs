@@ -3,7 +3,7 @@ pub mod frontend;
 
 use crate::common::{query_result::QueryResult, types::Expression};
 use backend::execution_engine::ExecutionEngine;
-use frontend::{parser::Parser, sementic_analyzer::SemanticAnalyzer};
+use frontend::parser::Parser;
 use std::error::Error;
 
 pub struct Interpreter;
@@ -24,16 +24,11 @@ impl Interpreter {
 
     fn run_frontend(source: &str) -> Result<Vec<Expression>, Box<dyn Error>> {
         let expressions = Parser::new(source).parse_expressions()?;
-        let analyzer = SemanticAnalyzer::new(&expressions);
-
-        analyzer.analyze()?;
-
         Ok(expressions)
     }
 
     async fn run_backend(expressions: Vec<Expression>) -> Result<Vec<QueryResult>, Box<dyn Error>> {
         let result = ExecutionEngine::new().run(expressions).await?;
-
         Ok(result)
     }
 }

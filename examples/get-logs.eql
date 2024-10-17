@@ -1,1 +1,2 @@
 GET * FROM log WHERE block 4638657:4638758, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth
+GET * FROM log WHERE event_signature Confirmation(address,uint256), block 4638757 ON eth

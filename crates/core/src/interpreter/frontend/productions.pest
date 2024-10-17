@@ -1,34 +1,70 @@
 program = _{SOI ~ (get){1, } ~ silent_eoi}
 
 get       = {
-    "GET" ~
-    WHITESPACE* ~
-    fields* ~
-    WHITESPACE* ~
-    "FROM" ~
-    WHITESPACE* ~
     entity ~
-    WHITESPACE* ~
-    (entity_id | filter) ~
     WHITESPACE* ~
     "ON" ~
     WHITESPACE* ~
-    (chain | rpc_url)~
+    (chain | rpc_url) ~
     (WHITESPACE* ~ dump)* ~
     exp_separator* ~
     WHITESPACE*
 }
 
-fields    = { (star_operator | account_field_list | block_field_list | tx_field_list | log_field_list) }
-entity    = { "account" | "block" | "tx" | "log" }
-entity_id = { tx_id_list | account_id_list | block_id_list }
+entity = { account_get | block_get | tx_get | log_get }
 
-dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
-file_name = { (ASCII_ALPHANUMERIC | "-" | "_" | "/")+ }
-file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
+account_get = {
+    "GET" ~
+    WHITESPACE* ~
+    account_fields ~
+    WHITESPACE* ~
+    "FROM" ~
+    WHITESPACE* ~
+    "account" ~
+    WHITESPACE* ~
+    (account_id_list | account_filter_list)
+}
 
-filter = _{ "WHERE" ~ WHITESPACE* ~ entity_filter}
-entity_filter = { log_filter_list | block_filter_list}
+block_get = {
+    "GET" ~
+    WHITESPACE* ~
+    block_fields ~
+    WHITESPACE* ~
+    "FROM" ~
+    WHITESPACE* ~
+    "block" ~
+    WHITESPACE* ~
+    (block_id_list | block_filter_list)
+}
+
+tx_get = {
+    "GET" ~
+    WHITESPACE* ~
+    tx_fields ~
+    WHITESPACE* ~
+    "FROM" ~
+    WHITESPACE* ~
+    "tx" ~
+    WHITESPACE* ~
+    (tx_id_list | tx_filter_list)
+}
+
+log_get = {
+    "GET" ~
+    WHITESPACE* ~
+    log_fields ~
+    WHITESPACE* ~
+    "FROM" ~
+    WHITESPACE* ~
+    "log" ~
+    WHITESPACE* ~
+    log_filter_list
+}
+
+account_fields = { (wildcard | account_field_list) }
+block_fields = { (wildcard | block_field_list) }
+tx_fields = { (wildcard | tx_field_list) }
+log_fields = { (wildcard | log_field_list) }
 
 // Account
 account_field_list = _{ account_field ~ ("," ~ WHITESPACE* ~ account_field)* }
@@ -40,10 +76,13 @@ account_field = {
 account_id_list = _{ account_id ~ ("," ~ WHITESPACE* ~ account_id)* }
 account_id = { address | ens }
 
+account_filter_list = _{ "WHERE" ~ WHITESPACE* ~ account_filter ~ ("," ~ WHITESPACE* ~ account_filter)* }
+account_filter = { address_filter }
+
 // Block
 block_field_list = _{ block_field ~ ("," ~ WHITESPACE* ~ block_field_list)* }
 // TODO: Check if we need uncles
-block_field      =  { 
+block_field = { 
     "number" |
     "hash" |
     "parent_hash" |
@@ -64,12 +103,13 @@ block_field      =  {
     "size"
 }
 block_id_list = _{ block_id ~ ("," ~ WHITESPACE* ~ block_id)* }
-block_id    = { block_tag ~ ":" ~ block_tag | block_tag }
-block_tag = _{ "latest" | "earliest" | "pending" | "finalized" | "safe" | integer }
-block_filter_list = _{ block_filter ~ ("," ~ WHITESPACE* ~ block_filter)* }
-block_filter = _{
-    blockrange_filter
-}
+block_id = { block_range | block_tag_or_number }
+block_range = { block_tag_or_number  ~ ":" ~ block_tag_or_number }
+block_tag_or_number = { block_tag | block_number }
+block_tag = _{ "latest" | "earliest" | "pending" | "finalized" | "safe" }
+block_number = _{ integer }
+block_filter_list = _{ "WHERE" ~ WHITESPACE* ~ block_filter ~ ("," ~ WHITESPACE* ~ block_filter)* }
+block_filter = { blockrange_filter }
 
 // Transaction
 tx_field_list = _{ tx_field ~ ("," ~ WHITESPACE* ~ tx_field)* }
@@ -103,10 +143,39 @@ tx_field = {
 }
 tx_id_list = _{ tx_id ~ ("," ~ WHITESPACE* ~ tx_id)* }
 tx_id = { hash } 
+// Transaction filters
+tx_filter_list = _{ "WHERE" ~ WHITESPACE* ~ tx_filter ~ ("," ~ WHITESPACE* ~ tx_filter)* }
+tx_filter = {
+    blockrange_filter |
+    from_filter |
+    to_filter |
+    data_filter |
+    value_filter |
+    gas_price_filter |
+    gas_filter |
+    status_filter |
+    max_fee_per_blob_gas_filter |
+    blob_versioned_hashes_filter |
+    max_fee_per_gas_filter |
+    max_priority_fee_per_gas_filter |
+    y_parity_filter
+}
+from_filter = {"from" ~ address | ens}
+to_filter = {"to" ~ address}
+data_filter = {"data" ~ hex_string}
+value_filter = {"value" ~ number ~ unit}
+gas_price_filter = {"gas_price" ~ number ~ unit}
+gas_filter = {"gas" ~ integer}
+status_filter = {"status" ~ "success" | "failure"}
+max_fee_per_blob_gas_filter = {"max_fee_per_blob_gas" ~ number ~ unit}
+blob_versioned_hashes_filter = {"blob_versioned_hashes" ~ hex_string}
+max_fee_per_gas_filter = {"max_fee_per_gas" ~ number ~ unit}
+max_priority_fee_per_gas_filter = {"max_priority_fee_per_gas" ~ number ~ unit}
+y_parity_filter = {"y_parity" ~ "0x" ~ hex_string}
 
 // Log
 log_field_list = _{ log_field ~ ("," ~ WHITESPACE* ~ log_field)* }
-log_field      =  {
+log_field =  {
     "address" |
     "topic0" |
     "topic1" |
@@ -121,8 +190,8 @@ log_field      =  {
     "log_index" |
     "removed"
 }
-log_filter_list = _{ log_filter ~ ("," ~ WHITESPACE* ~ log_filter)* }
-log_filter = _{
+log_filter_list = _{ "WHERE" ~ WHITESPACE* ~ log_filter ~ ("," ~ WHITESPACE* ~ log_filter)* }
+log_filter = {
     address_filter |
     topic0_filter |
     topic1_filter |
@@ -132,17 +201,21 @@ log_filter = _{
     blockrange_filter |
     event_signature_filter
 }
-
-//Filters
+// Log filters
 address_filter = {"address" ~ address}
 topic0_filter = {"topic0" ~ hash}
 topic1_filter = {"topic1" ~ hash}
 topic2_filter = {"topic2" ~ hash}
 topic3_filter = {"topic3" ~ hash}
 blockhash_filter = {"block_hash" ~ hash}
-blockrange_filter = {"block" ~ block_id}
 event_signature_filter ={"event_signature" ~ function_signature}
-   
+
+// Common filters
+blockrange_filter = {"block" ~ block_id}
+dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
+file_name = { (ASCII_ALPHANUMERIC | "-" | "_" | "/")+ }
+file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
+
 // Terminals
 unit = { "ether" | "gwei" | "wei" }
 number = _{ float | integer }
@@ -178,6 +251,7 @@ chain = {
 rpc_url = { ("http://" | "https://") ~ (ASCII_ALPHANUMERIC | "." | "-" | ":" | "/")+ }
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
+hex_string = { "0x" ~ ASCII_HEX_DIGIT{1,} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
 function_signature = { ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
 solidity_type = _{ 
@@ -194,4 +268,4 @@ size = _{integer ~ "[]"*}
 WHITESPACE = _{ " " | "\t" | NEWLINE }
 exp_separator = _{"," | ";"}
 silent_eoi = _{ !ANY }
-star_operator = { "*" }
+wildcard = { "*" }
