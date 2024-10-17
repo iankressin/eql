@@ -22,8 +22,8 @@ impl Dump {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DumpError {
-    #[error("Invalid dump: {0}")]
-    InvalidDump(String),
+    #[error("Invalid dump format: {0}")]
+    InvalidDumpFormat(String),
     #[error("File name not found")]
     FileNameNotFound,
     #[error("File format not found")]
@@ -31,20 +31,20 @@ pub enum DumpError {
 }
 
 impl<'a> TryFrom<Pairs<'a, Rule>> for Dump {
-    type Error = Box<dyn Error>;
+    type Error = DumpError;
 
     fn try_from(pairs: Pairs<'a, Rule>) -> Result<Self, Self::Error> {
         let mut pairs = pairs;
 
         let name = pairs
             .next()
-            .ok_or(Box::new(DumpError::FileNameNotFound))?
+            .ok_or(DumpError::FileFormatNotFound)?
             .as_str()
             .to_string();
 
         let format: DumpFormat = pairs
             .next()
-            .ok_or(Box::new(DumpError::FileFormatNotFound))?
+            .ok_or(DumpError::FileFormatNotFound)?
             .as_str()
             .try_into()?;
 
@@ -60,14 +60,14 @@ pub enum DumpFormat {
 }
 
 impl TryFrom<&str> for DumpFormat {
-    type Error = Box<dyn Error>;
+    type Error = DumpError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "json" => Ok(DumpFormat::Json),
             "csv" => Ok(DumpFormat::Csv),
             "parquet" => Ok(DumpFormat::Parquet),
-            invalid_format => Err(Box::new(DumpError::InvalidDump(invalid_format.to_string()))),
+            invalid_format => Err(DumpError::InvalidDumpFormat(invalid_format.to_string())),
         }
     }
 }
