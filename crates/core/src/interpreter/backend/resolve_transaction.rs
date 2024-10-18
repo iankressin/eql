@@ -7,9 +7,9 @@ use alloy::{
     providers::{Provider, RootProvider},
     transports::http::{Client, Http},
 };
+use anyhow::Result;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
@@ -24,7 +24,7 @@ pub enum TransactionResolverErrors {
 pub async fn resolve_transaction_query(
     transaction: &Transaction,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<TransactionQueryRes>, Box<dyn Error>> {
+) -> Result<Vec<TransactionQueryRes>> {
     let mut tx_futures = Vec::new();
 
     for tx_id in transaction.ids().unwrap() {
@@ -43,7 +43,7 @@ async fn get_transaction(
     hash: FixedBytes<32>,
     fields: Vec<TransactionField>,
     provider: &RootProvider<Http<Client>>,
-) -> Result<TransactionQueryRes, Box<dyn Error>> {
+) -> Result<TransactionQueryRes> {
     let mut result = TransactionQueryRes::default();
     match provider.get_transaction_by_hash(hash).await? {
         Some(tx) => {

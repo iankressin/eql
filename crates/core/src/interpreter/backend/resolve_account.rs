@@ -9,9 +9,9 @@ use alloy::{
     providers::{Provider, ProviderBuilder, RootProvider},
     transports::http::{Client, Http},
 };
+use anyhow::Result;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
@@ -25,7 +25,7 @@ pub enum AccountResolverErrors {
 pub async fn resolve_account_query(
     account: &Account,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<AccountQueryRes>, Box<dyn Error>> {
+) -> Result<Vec<AccountQueryRes>> {
     let mut account_futures = Vec::new();
 
     // TODO: Handle filter
@@ -55,7 +55,7 @@ async fn get_account(
     address: Address,
     fields: Vec<AccountField>,
     provider: &RootProvider<Http<Client>>,
-) -> Result<AccountQueryRes, Box<dyn Error>> {
+) -> Result<AccountQueryRes> {
     let mut account = AccountQueryRes::default();
 
     for field in &fields {
@@ -78,7 +78,7 @@ async fn get_account(
     Ok(account)
 }
 
-async fn to_address(name: String) -> Result<Address, Box<dyn Error>> {
+async fn to_address(name: String) -> Result<Address> {
     let rpc_url = Chain::Ethereum.rpc_url()?;
     let provider = ProviderBuilder::new().on_http(rpc_url);
     let address = NameOrAddress::Name(name).resolve(&provider).await?;

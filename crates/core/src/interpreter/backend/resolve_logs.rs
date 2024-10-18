@@ -6,8 +6,9 @@ use alloy::{
     providers::{Provider, RootProvider},
     transports::http::{Client, Http},
 };
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum LogResolverErrors {
@@ -18,10 +19,10 @@ pub enum LogResolverErrors {
 pub async fn resolve_log_query(
     logs: &Logs,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<LogQueryRes>, Box<dyn Error>> {
+) -> Result<Vec<LogQueryRes>> {
     let filtered_logs = provider.get_logs(&logs.build_bloom_filter()).await?;
     if filtered_logs.is_empty() {
-        return Err(Box::new(LogResolverErrors::NoLogsFound));
+        return Err(LogResolverErrors::NoLogsFound.into());
     }
 
     let results: Vec<LogQueryRes> = filtered_logs

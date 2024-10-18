@@ -1,7 +1,7 @@
 use crate::common::types::Expression;
+use anyhow::Result;
 use pest::Parser as PestParser;
 use pest_derive::Parser as DeriveParser;
-use std::error::Error;
 
 #[derive(DeriveParser)]
 #[grammar = "src/interpreter/frontend/productions.pest"]
@@ -24,7 +24,7 @@ impl<'a> Parser<'a> {
         Parser { source }
     }
 
-    pub fn parse_expressions(&self) -> Result<Vec<Expression>, Box<dyn Error>> {
+    pub fn parse_expressions(&self) -> Result<Vec<Expression>> {
         let mut expressions: Vec<Expression> = vec![];
         let pairs = Parser::parse(Rule::program, self.source)?;
 
@@ -34,9 +34,7 @@ impl<'a> Parser<'a> {
                     expressions.push(Expression::Get(pair.into_inner().try_into()?));
                 }
                 _ => {
-                    return Err(Box::new(ParserError::UnexpectedToken(
-                        pair.as_str().to_string(),
-                    )))
+                    return Err(ParserError::UnexpectedToken(pair.as_str().to_string()).into());
                 }
             }
         }

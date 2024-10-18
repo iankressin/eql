@@ -1,12 +1,11 @@
+use super::chain::Chain;
 use alloy::transports::http::reqwest::Url;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
-use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
-
-use super::chain::Chain;
 
 const CONFIG_FILE: &str = "eql-config.json";
 
@@ -62,7 +61,7 @@ impl Config {
         Config { file_path: None }
     }
 
-    pub fn get_chain_default_rpc(&self, chain: &Chain) -> Result<Option<Url>, Box<dyn Error>> {
+    pub fn get_chain_default_rpc(&self, chain: &Chain) -> Result<Option<Url>> {
         match &self.file_path {
             Some(file_path) => {
                 let file = fs::read_to_string(file_path)?;
@@ -79,7 +78,7 @@ impl Config {
         }
     }
 
-    pub fn get_chain_rpcs(&self, chain: &Chain) -> Result<Option<Vec<Url>>, Box<dyn Error>> {
+    pub fn get_chain_rpcs(&self, chain: &Chain) -> Result<Option<Vec<Url>>> {
         match &self.file_path {
             Some(file_path) => {
                 let file = fs::read_to_string(file_path)?;

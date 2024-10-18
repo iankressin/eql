@@ -2,9 +2,9 @@ use crate::interpreter::frontend::parser::Rule;
 
 use super::config::Config;
 use alloy::transports::http::reqwest::Url;
+use anyhow::Result;
 use core::fmt;
 use pest::iterators::Pairs;
-use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ChainOrRpc {
@@ -13,7 +13,7 @@ pub enum ChainOrRpc {
 }
 
 impl ChainOrRpc {
-    pub fn rpc_url(&self) -> Result<Url, Box<dyn Error>> {
+    pub fn rpc_url(&self) -> Result<Url> {
         match self {
             ChainOrRpc::Chain(chain) => Ok(chain.rpc_url()?.clone()),
             ChainOrRpc::Rpc(url) => Ok(url.clone()),
@@ -69,7 +69,7 @@ impl TryFrom<Pairs<'_, Rule>> for Chain {
 }
 
 impl Chain {
-    pub fn rpc_url(&self) -> Result<Url, Box<dyn Error>> {
+    pub fn rpc_url(&self) -> Result<Url> {
         match Config::new().get_chain_default_rpc(self) {
             Ok(Some(url)) => Ok(url),
             Ok(None) => Ok(self.rpc_fallback().parse()?),

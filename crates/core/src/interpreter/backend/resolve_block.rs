@@ -7,9 +7,9 @@ use alloy::{
     providers::{Provider, RootProvider},
     transports::http::{Client, Http},
 };
+use anyhow::Result;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, thiserror::Error)]
@@ -29,7 +29,7 @@ pub enum BlockResolverErrors {
 pub async fn resolve_block_query(
     block: &Block,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
+) -> Result<Vec<BlockQueryRes>> {
     let mut block_futures = Vec::new();
 
     let ids = match block.ids() {
@@ -88,7 +88,7 @@ pub async fn resolve_block_query(
 async fn resolve_block_numbers(
     block_numbers: &[BlockNumberOrTag],
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<u64>, Box<dyn Error>> {
+) -> Result<Vec<u64>> {
     let mut block_number_futures = Vec::new();
 
     for block_number in block_numbers {
@@ -106,7 +106,7 @@ async fn batch_get_block(
     block_numbers: Vec<u64>,
     fields: Vec<BlockField>,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
+) -> Result<Vec<BlockQueryRes>> {
     let mut block_futures = Vec::new();
 
     // let x = start_block..=end_block;
@@ -129,7 +129,7 @@ async fn get_block(
     block_id: BlockNumberOrTag,
     fields: Vec<BlockField>,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<BlockQueryRes, Box<dyn Error>> {
+) -> Result<BlockQueryRes> {
     let mut result = BlockQueryRes::default();
 
     match provider.get_block_by_number(block_id, false).await? {
@@ -199,19 +199,15 @@ async fn get_block(
 async fn get_block_number_from_tag(
     provider: Arc<RootProvider<Http<Client>>>,
     number_or_tag: BlockNumberOrTag,
-) -> Result<u64, Box<dyn Error>> {
+) -> Result<u64> {
     match number_or_tag {
         BlockNumberOrTag::Number(number) => Ok(number),
         block_tag => match provider.get_block_by_number(block_tag, false).await? {
             Some(block) => match block.header.number {
                 Some(number) => Ok(number),
-                None => Err(Box::new(BlockResolverErrors::UnableToFetchBlockNumber(
-                    number_or_tag,
-                ))),
+                None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
             },
-            None => Err(Box::new(BlockResolverErrors::UnableToFetchBlockNumber(
-                number_or_tag,
-            ))),
+            None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
         },
     }
 }

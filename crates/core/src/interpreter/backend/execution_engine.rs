@@ -8,7 +8,8 @@ use crate::common::{
     entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression}
 };
 use alloy::providers::ProviderBuilder;
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
+use anyhow::Result;
 
 pub struct ExecutionEngine;
 
@@ -28,7 +29,7 @@ impl ExecutionEngine {
     pub async fn run(
         &self,
         expressions: Vec<Expression>,
-    ) -> Result<Vec<QueryResult>, Box<dyn Error>> {
+    ) -> Result<Vec<QueryResult>> {
         let mut query_results = vec![];
 
         for expression in expressions {
@@ -46,7 +47,7 @@ impl ExecutionEngine {
     async fn run_get_expr(
         &self,
         expr: &GetExpression,
-    ) -> Result<ExpressionResult, Box<dyn std::error::Error>> {
+    ) -> Result<ExpressionResult> {
         let rpc_url = expr.chain_or_rpc.rpc_url()?;
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
 
