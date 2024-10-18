@@ -1,10 +1,13 @@
+pub mod account;
+pub mod block;
 pub mod chain;
 pub mod config;
+pub mod dump;
 pub mod ens;
 pub mod entity;
-pub mod entity_filter;
 pub mod entity_id;
-pub mod query_builder;
+pub mod logs;
 pub mod query_result;
 pub mod serializer;
+pub mod transaction;
 pub mod types;

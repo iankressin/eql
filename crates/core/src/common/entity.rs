@@ -1,50 +1,66 @@
-use std::fmt::Display;
+use super::account::AccountError;
+use super::logs::LogsError;
+use super::transaction::TransactionError;
+use crate::common::{
+    account::Account, block::Block, block::BlockError, logs::Logs, transaction::Transaction,
+};
+use crate::interpreter::frontend::parser::Rule;
+use pest::iterators::Pairs;
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub enum Entity {
-    Block,
-    Transaction,
-    Account,
-    Log,
-}
-
-impl Display for Entity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Entity::Block => write!(f, "block"),
-            Entity::Transaction => write!(f, "transaction"),
-            Entity::Account => write!(f, "account"),
-            Entity::Log => write!(f, "log"),
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
+#[derive(thiserror::Error, Debug)]
 pub enum EntityError {
-    #[error("Invalid entity: {0}")]
-    InvalidEntity(String),
+    #[error("Unexpected token {0}")]
+    UnexpectedToken(String),
+
+    #[error("Missing entity")]
+    MissingEntity,
+
+    #[error(transparent)]
+    TransactionError(#[from] TransactionError),
+
+    #[error(transparent)]
+    LogsError(#[from] LogsError),
+
+    #[error(transparent)]
+    BlockError(#[from] BlockError),
+
+    #[error(transparent)]
+    AccountError(#[from] AccountError),
 }
 
-impl TryFrom<&str> for Entity {
+#[derive(Debug, PartialEq, Eq)]
+pub enum Entity {
+    Account(Account),
+    Block(Block),
+    Transaction(Transaction),
+    Logs(Logs),
+}
+
+impl TryFrom<Pairs<'_, Rule>> for Entity {
     type Error = EntityError;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s {
-            "block" => Ok(Entity::Block),
-            "tx" => Ok(Entity::Transaction),
-            "account" => Ok(Entity::Account),
-            "log" => Ok(Entity::Log),
-            invalid_entity => Err(EntityError::InvalidEntity(invalid_entity.to_string())),
+    fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
+        for pair in pairs {
+            match pair.as_rule() {
+                Rule::account_get => {
+                    let account = Account::try_from(pair.into_inner())?;
+                    return Ok(Entity::Account(account));
+                }
+                Rule::block_get => {
+                    let block = Block::try_from(pair.into_inner())?;
+                    return Ok(Entity::Block(block));
+                }
+                Rule::tx_get => {
+                    let tx = Transaction::try_from(pair.into_inner())?;
+                    return Ok(Entity::Transaction(tx));
+                }
+                Rule::log_get => {
+                    let logs = Logs::try_from(pair.into_inner())?;
+                    return Ok(Entity::Logs(logs));
+                }
+                _ => return Err(EntityError::UnexpectedToken(pair.as_str().to_string())),
+            }
         }
-    }
-}
-
-impl TryFrom<String> for Entity {
-    type Error = EntityError;
-
-    fn try_from(entity: String) -> Result<Self, Self::Error> {
-        Entity::try_from(entity.as_str())
+        Err(EntityError::MissingEntity)
     }
 }

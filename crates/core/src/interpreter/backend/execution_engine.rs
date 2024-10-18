@@ -5,7 +5,7 @@ use super::{
     resolve_transaction::resolve_transaction_query,
 };
 use crate::common::{
-    entity::Entity, entity_filter::EntityFilter, entity_id::EntityId, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{AccountField, BlockField, Expression, Field, GetExpression, LogField, TransactionField}
+    entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression}
 };
 use alloy::providers::ProviderBuilder;
 use std::{error::Error, sync::Arc};
@@ -35,7 +35,7 @@ impl ExecutionEngine {
             match expression {
                 Expression::Get(get_expr) => {
                     let result = self.run_get_expr(&get_expr).await?;
-                    query_results.push(QueryResult::new(get_expr.query, result));
+                    query_results.push(QueryResult::new(result));
                 }
             }
         }
@@ -50,94 +50,11 @@ impl ExecutionEngine {
         let rpc_url = expr.chain_or_rpc.rpc_url()?;
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
 
-        let result = match expr.entity {
-            Entity::Block => {
-                let fields = match &expr.fields[0] {
-                    Field::Star => BlockField::all_variants().to_vec(),
-                    _ => expr
-                        .fields
-                        .iter()
-                        .map(|field| field.try_into())
-                        .collect::<Result<Vec<BlockField>, _>>()?,
-                };
-
-                let block_query_res = if let Some(entity_ids) = &expr.entity_id {
-                    resolve_block_query(entity_ids.to_vec(), fields, provider).await?
-                } 
-                else if let Some(entity_filter) = &expr.entity_filter {
-                    match entity_filter.as_slice() {
-                        [EntityFilter::LogBlockRange(range)] => {
-                            let entity_ids = vec![EntityId::Block(range.clone())];
-                            resolve_block_query(entity_ids.to_vec(), fields, provider).await?
-                        }
-                        _ => {
-                            return Err(Box::new(ExecutionEngineError::MultipleFiltersNotSupported));
-                        }
-                    }
-                } 
-                else {
-                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
-                };
-
-                Ok(ExpressionResult::Block(block_query_res))
-            }
-
-            Entity::Account => {
-                let fields = match expr.fields[0] {
-                    Field::Star => AccountField::all_variants().to_vec(),
-                    _ => expr
-                        .fields
-                        .iter()
-                        .map(|field| field.try_into())
-                        .collect::<Result<Vec<AccountField>, _>>()?,
-                };             
-                
-                let account_query_res = if let Some(entity_ids) = &expr.entity_id {
-                    resolve_account_query(entity_ids.to_vec(), fields, &provider).await?
-                } else {
-                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
-                };
-
-                Ok(ExpressionResult::Account(account_query_res))
-            }
-
-            Entity::Transaction => {                
-                let fields = match expr.fields[0] {
-                    Field::Star => TransactionField::all_variants().to_vec(),
-                    _ => expr
-                        .fields
-                        .iter()
-                        .map(|field| field.try_into())
-                        .collect::<Result<Vec<TransactionField>, _>>()?,
-                };
-                
-                let tx_query_res = if let Some(entity_ids) = &expr.entity_id {
-                    resolve_transaction_query(entity_ids.to_vec(), fields, &provider).await?   
-                } else {
-                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
-                };
-
-                Ok(ExpressionResult::Transaction(tx_query_res))
-            }
-            
-            Entity::Log => {                
-                let fields = match expr.fields[0] {
-                    Field::Star => LogField::all_variants().to_vec(),
-                    _ => expr
-                        .fields
-                        .iter()
-                        .map(|field| field.try_into())
-                        .collect::<Result<Vec<LogField>, _>>()?,
-                };
-
-                let filter = if let Some(entity_filter) = &expr.entity_filter {
-                    EntityFilter::build_filter(entity_filter)
-                } else {
-                    return Err(Box::new(ExecutionEngineError::NoEntityIdOrFilter));
-                };
-
-                Ok(ExpressionResult::Log(resolve_log_query(filter, fields, &provider).await?))
-            }
+        let result = match &expr.entity {
+            Entity::Block(block) => Ok(ExpressionResult::Block(resolve_block_query(block, provider.clone()).await?)),
+            Entity::Account(account) => Ok(ExpressionResult::Account(resolve_account_query(account, provider.clone()).await?)),
+            Entity::Transaction(transaction) => Ok(ExpressionResult::Transaction(resolve_transaction_query(transaction, provider.clone()).await?)),
+            Entity::Logs(logs) => Ok(ExpressionResult::Log(resolve_log_query(logs, provider.clone()).await?)),
         };
 
         result.and_then(|result| {
@@ -151,16 +68,19 @@ impl ExecutionEngine {
 mod test {
     use super::*;
     use crate::common::{
-        chain::Chain,
+        account::{Account, AccountField},
+        block::{Block, BlockField, BlockId, BlockRange},
+        chain::{Chain, ChainOrRpc},
+        dump::{Dump, DumpFormat},
         ens::NameOrAddress,
-        entity_filter::{BlockRange, EntityFilter},
-        entity_id::EntityId,
+        logs::{LogField, LogFilter, Logs},
         query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
-        types::{BlockField, ChainOrRpc, Dump, DumpFormat, Expression, Field, GetExpression},
+        transaction::{Transaction, TransactionField},
+        types::{Expression, GetExpression},
     };
     use alloy::{
         eips::BlockNumberOrTag,
-        primitives::{address, b256, bloom, bytes, Address, U256},
+        primitives::{address, b256, bloom, bytes, U256},
     };
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
@@ -169,36 +89,35 @@ mod test {
     async fn test_get_logs() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Logs(Logs::new(
+                vec![
+                    LogFilter::BlockRange(BlockRange::new(
+                        BlockNumberOrTag::Number(4638757),
+                        Some(BlockNumberOrTag::Number(4638758)),
+                    )),
+                    LogFilter::EmitterAddress(address!(
+                        "dac17f958d2ee523a2206206994597c13d831ec7"
+                    )),
+                    LogFilter::Topic0(b256!(
+                        "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
+                    )),
+                ],
+                vec![
+                    LogField::Address,
+                    LogField::Topic0,
+                    LogField::Topic1,
+                    LogField::Topic2,
+                    LogField::Topic3,
+                    LogField::Data,
+                    LogField::BlockHash,
+                    LogField::BlockNumber,
+                    LogField::BlockTimestamp,
+                    LogField::TransactionHash,
+                    LogField::TransactionIndex,
+                    LogField::LogIndex,
+                ],
+            )),
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Log,
-            entity_id: None,
-            entity_filter: Some(vec![
-                EntityFilter::LogBlockRange(BlockRange::new(
-                    BlockNumberOrTag::Number(4638757),
-                    Some(BlockNumberOrTag::Number(4638758)),
-                )),
-                EntityFilter::LogEmitterAddress(address!(
-                    "dac17f958d2ee523a2206206994597c13d831ec7"
-                )),
-                EntityFilter::LogTopic0(b256!(
-                    "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
-                )),
-            ]),
-            fields: vec![
-                Field::Log(LogField::Address),
-                Field::Log(LogField::Topic0),
-                Field::Log(LogField::Topic1),
-                Field::Log(LogField::Topic2),
-                Field::Log(LogField::Topic3),
-                Field::Log(LogField::Data),
-                Field::Log(LogField::BlockHash),
-                Field::Log(LogField::BlockNumber),
-                Field::Log(LogField::BlockTimestamp),
-                Field::Log(LogField::TransactionHash),
-                Field::Log(LogField::TransactionIndex),
-                Field::Log(LogField::LogIndex),
-            ],
-            query: String::from(""),
             dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
@@ -217,7 +136,7 @@ mod test {
                 "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
             )),
             block_number: Some(4638757),
-            block_timestamp: None,
+            block_timestamp: Some(1511886266),
             transaction_hash: Some(b256!(
                 "8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"
             )),
@@ -238,33 +157,37 @@ mod test {
     async fn test_get_block_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Block,
-            entity_id: Some(vec![
-                EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None)),
-                EntityId::Block(BlockRange::new(BlockNumberOrTag::Number(1), None))
-                ]),
-            entity_filter: None,
-            fields: vec![
-                Field::Block(BlockField::Timestamp),
-                Field::Block(BlockField::Hash),
-                Field::Block(BlockField::ParentHash),
-                Field::Block(BlockField::Size),
-                Field::Block(BlockField::StateRoot),
-                Field::Block(BlockField::TransactionsRoot),
-                Field::Block(BlockField::ReceiptsRoot),
-                Field::Block(BlockField::LogsBloom),
-                Field::Block(BlockField::ExtraData),
-                Field::Block(BlockField::MixHash),
-                Field::Block(BlockField::TotalDifficulty),
-                Field::Block(BlockField::BaseFeePerGas),
-                Field::Block(BlockField::WithdrawalsRoot),
-                Field::Block(BlockField::BlobGasUsed),
-                Field::Block(BlockField::ExcessBlobGas),
-                Field::Block(BlockField::ParentBeaconBlockRoot),
-            ],
-            query: String::from(""),
+            entity: Entity::Block(
+                Block::new(
+                    Some(vec![
+                        BlockId::Range(BlockRange::new(
+                            BlockNumberOrTag::Number(1),
+                            None,
+                        )),
+                    ]),
+                    None,
+                    vec![
+                        BlockField::Timestamp,
+                        BlockField::Hash,
+                        BlockField::ParentHash,
+                        BlockField::Size,
+                        BlockField::StateRoot,
+                        BlockField::TransactionsRoot,
+                        BlockField::ReceiptsRoot,
+                        BlockField::LogsBloom,
+                        BlockField::ExtraData,
+                        BlockField::MixHash,
+                        BlockField::TotalDifficulty,
+                        BlockField::BaseFeePerGas,
+                        BlockField::WithdrawalsRoot,
+                        BlockField::BlobGasUsed,
+                        BlockField::ExcessBlobGas,
+                        BlockField::ParentBeaconBlockRoot,
+                    ],
+                )
+            ),
             dump: None,
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
         })];
         let expected = ExpressionResult::Block(vec![
             BlockQueryRes {
@@ -296,37 +219,7 @@ mod test {
                 blob_gas_used: None,
                 excess_blob_gas: None,
                 parent_beacon_block_root: None,
-        },
-        BlockQueryRes {
-            timestamp: Some(1438269988),
-            number: None,
-            hash: Some(b256!(
-                "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
-            )),
-            parent_hash: Some(b256!(
-                "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-            )),
-            size: Some(U256::from(537)),
-            state_root: Some(b256!(
-                "d67e4d450343046425ae4271474353857ab860dbc0a1dde64b41b5cd3a532bf3"
-            )),
-            transactions_root: Some(b256!(
-                "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-            )),
-            receipts_root: Some(b256!(
-                "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-            )),
-            logs_bloom: Some(bloom!("00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
-            extra_data: Some(bytes!("476574682f76312e302e302f6c696e75782f676f312e342e32")),
-            mix_hash: Some(b256!("969b900de27b6ac6a67742365dd65f55a0526c41fd18e1b16f1a1215c2e66f59")),
-            total_difficulty: Some(U256::from(34351349760_u128)),
-            // The fields below were implemented by EIPs, 1st block doesn't have these
-            base_fee_per_gas: None,
-            withdrawals_root: None,
-            blob_gas_used: None,
-            excess_blob_gas: None,
-            parent_beacon_block_root: None,
-    },
+            },
         ]);
         let execution_result = execution_engine.run(expressions).await;
 
@@ -339,70 +232,17 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_error_when_id_doesnt_match_transaction() {
-        let fields = vec![]; // Empty fields for simplicity
-        let provider = ProviderBuilder::new().on_http(Chain::Sepolia.rpc_url().unwrap());
-        let entity_id = EntityId::Block(BlockRange::new(
-            10.into(),
-            Some(BlockNumberOrTag::from_str("latest").unwrap()),
-        ));
-
-        let result = resolve_transaction_query(vec![entity_id], fields, &provider)
-            .await
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(
-            result,
-            "Mismatch between Entity and EntityId, 10:latest can't be resolved as a transaction id"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_get_account_fields_using_star_operator() {
-        let execution_engine = ExecutionEngine::new();
-        let expressions = vec![Expression::Get(GetExpression {
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Account,
-            entity_id: Some(vec![
-                EntityId::Account(NameOrAddress::Address(Address::from_str("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045").unwrap())),
-                EntityId::Account(NameOrAddress::Name(String::from("vitalik.eth")))
-                ]),
-            entity_filter: None,
-            fields: vec![Field::Star],
-            query: String::from(""),
-            dump: None,
-        })];
-        let execution_result = execution_engine.run(expressions).await;
-
-        match execution_result {
-            Ok(results) => match &results[0] {
-                QueryResult { query, result, .. } => {
-                    assert_eq!(query, "");
-                    match result {
-                        ExpressionResult::Account(account) => {
-                            assert!(account[0].balance.is_some());
-                        }
-                        _ => panic!("Invalid result"),
-                    }
-                }
-            },
-            Err(e) => panic!("Error: {}", e),
-        }
-    }
-
-    #[tokio::test]
     async fn test_get_account_fields_using_invalid_ens() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Account(
+                Account::new(
+                    Some(vec![NameOrAddress::Name(String::from("thisisinvalid235790123801.eth"))]),
+                    None,
+                    vec![AccountField::Balance],
+                )
+            ),
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Account,
-            entity_id: Some(vec![
-                EntityId::Account(NameOrAddress::Name(String::from("thisisinvalid235790123801.eth")))
-                ]),
-            entity_filter: None,
-            fields: vec![Field::Account(AccountField::Balance)],
-            query: String::from(""),
             dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
@@ -413,33 +253,35 @@ mod test {
     async fn test_get_transaction_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Transaction(
+                Transaction::new(
+                    Some(vec![
+                        b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"),
+                        b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")
+                    ]),
+                    None,
+                    vec![
+                        TransactionField::TransactionType,
+                        TransactionField::Hash,
+                        TransactionField::From,
+                        TransactionField::To,
+                        TransactionField::Data,
+                        TransactionField::Value,
+                        TransactionField::GasPrice,
+                        TransactionField::Gas,
+                        TransactionField::Status,
+                        TransactionField::ChainId,
+                        TransactionField::V,
+                        TransactionField::R,
+                        TransactionField::S,
+                        TransactionField::MaxFeePerBlobGas,
+                        TransactionField::MaxFeePerGas,
+                        TransactionField::MaxPriorityFeePerGas,
+                        TransactionField::YParity,
+                    ]
+                )
+            ),
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Transaction,
-            entity_id: Some(vec![
-                EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")),
-                EntityId::Transaction(b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"))
-                ]),
-            entity_filter: None,
-            fields: vec![
-                Field::Transaction(TransactionField::TransactionType),
-                Field::Transaction(TransactionField::Hash),
-                Field::Transaction(TransactionField::From),
-                Field::Transaction(TransactionField::To),
-                Field::Transaction(TransactionField::Data),
-                Field::Transaction(TransactionField::Value),
-                Field::Transaction(TransactionField::GasPrice),
-                Field::Transaction(TransactionField::Gas),
-                Field::Transaction(TransactionField::Status),
-                Field::Transaction(TransactionField::ChainId),
-                Field::Transaction(TransactionField::V),
-                Field::Transaction(TransactionField::R),
-                Field::Transaction(TransactionField::S),
-                Field::Transaction(TransactionField::MaxFeePerBlobGas),
-                Field::Transaction(TransactionField::MaxFeePerGas),
-                Field::Transaction(TransactionField::MaxPriorityFeePerGas),
-                Field::Transaction(TransactionField::YParity),
-            ],
-            query: String::from(""),
             dump: None,
         })];
         let expected = vec![ExpressionResult::Transaction(vec![
@@ -501,32 +343,34 @@ mod test {
     async fn test_get_transaction_fields_does_not_exist() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Transaction(
+                Transaction::new(
+                    Some(vec![b256!(
+                        "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
+                    )]),
+                    None,
+                    vec![
+                        TransactionField::TransactionType,
+                        TransactionField::Hash,
+                        TransactionField::From,
+                        TransactionField::To,
+                        TransactionField::Data,
+                        TransactionField::Value,
+                        TransactionField::GasPrice,
+                        TransactionField::Gas,
+                        TransactionField::Status,
+                        TransactionField::ChainId,
+                        TransactionField::V,
+                        TransactionField::R,
+                        TransactionField::S,
+                        TransactionField::MaxFeePerBlobGas,
+                        TransactionField::MaxFeePerGas,
+                        TransactionField::MaxPriorityFeePerGas,
+                        TransactionField::YParity,
+                    ]
+                )
+            ),
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Transaction,
-            entity_id: Some(vec![EntityId::Transaction(b256!(
-                "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
-            ))]),
-            entity_filter: None,
-            fields: vec![
-                Field::Transaction(TransactionField::TransactionType),
-                Field::Transaction(TransactionField::Hash),
-                Field::Transaction(TransactionField::From),
-                Field::Transaction(TransactionField::To),
-                Field::Transaction(TransactionField::Data),
-                Field::Transaction(TransactionField::Value),
-                Field::Transaction(TransactionField::GasPrice),
-                Field::Transaction(TransactionField::Gas),
-                Field::Transaction(TransactionField::Status),
-                Field::Transaction(TransactionField::ChainId),
-                Field::Transaction(TransactionField::V),
-                Field::Transaction(TransactionField::R),
-                Field::Transaction(TransactionField::S),
-                Field::Transaction(TransactionField::MaxFeePerBlobGas),
-                Field::Transaction(TransactionField::MaxFeePerGas),
-                Field::Transaction(TransactionField::MaxPriorityFeePerGas),
-                Field::Transaction(TransactionField::YParity),
-            ],
-            query: String::from(""),
             dump: None,
         })];
         let _result = execution_engine.run(expressions).await;
@@ -536,14 +380,19 @@ mod test {
     async fn test_dump_results() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(
+                Block::new(
+                    Some(vec![
+                        BlockId::Range(BlockRange::new(
+                            1.into(),
+                            None,
+                        ))
+                    ]),
+                    None,
+                    vec![BlockField::Timestamp],
+                )
+            ),
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            entity: Entity::Block,
-            entity_id: Some(vec![
-                EntityId::Block(BlockRange::new(1.into(), None)),
-            ]),
-            entity_filter: None,
-            fields: vec![Field::Block(BlockField::Timestamp)],
-            query: String::from(""),
             dump: Some(Dump::new(String::from("test"), DumpFormat::Json)),
         })];
         execution_engine.run(expressions).await.unwrap();

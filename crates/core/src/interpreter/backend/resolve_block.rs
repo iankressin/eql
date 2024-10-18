@@ -1,4 +1,7 @@
-use crate::common::{entity_id::EntityId, query_result::BlockQueryRes, types::BlockField};
+use crate::common::{
+    block::{Block, BlockField, BlockId},
+    query_result::BlockQueryRes,
+};
 use alloy::{
     eips::BlockNumberOrTag,
     providers::{Provider, RootProvider},
@@ -17,23 +20,29 @@ pub enum BlockResolverErrors {
     StartBlockMustBeGreaterThanEndBlock,
     #[error("Mismatch between Entity and EntityId, {0} can't be resolved as a block id")]
     MismatchEntityAndEntityId(String),
+    #[error("Missing block ids")]
+    IdsNotSet,
 }
 
 /// Resolve the query to get blocks after receiving a block entity expression.
 /// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results, flattening them into a single vec.
 pub async fn resolve_block_query(
-    entity_ids: Vec<EntityId>,
-    fields: Vec<BlockField>,
+    block: &Block,
     provider: Arc<RootProvider<Http<Client>>>,
 ) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
     let mut block_futures = Vec::new();
 
-    for entity_id in entity_ids {
-        let fields = fields.clone();
+    let ids = match block.ids() {
+        Some(ids) => ids,
+        None => return Err(BlockResolverErrors::IdsNotSet.into()),
+    };
+
+    for id in ids {
         let provider = Arc::clone(&provider);
+        let fields = block.fields().clone();
         let block_future = async move {
-            match entity_id {
-                EntityId::Block(block_range) => {
+            match id {
+                BlockId::Range(block_range) => {
                     let (start_block, end_block) = block_range.range();
                     let start_block_number =
                         get_block_number_from_tag(provider.clone(), start_block).await?;
@@ -49,22 +58,23 @@ pub async fn resolve_block_query(
                             );
                         }
 
-                        batch_get_block(start_block_number, end_number, fields, provider.clone())
-                            .await
-                    } else {
                         batch_get_block(
-                            start_block_number,
-                            start_block_number,
-                            fields,
+                            (start_block_number..=end_number).collect(),
+                            fields.clone(),
                             provider.clone(),
                         )
                         .await
+                    } else {
+                        batch_get_block(vec![start_block_number], fields.clone(), provider.clone())
+                            .await
                     }
                 }
-                id => Err(Box::new(BlockResolverErrors::MismatchEntityAndEntityId(
-                    id.to_string(),
-                ))
-                .into()),
+                BlockId::Number(block_number) => {
+                    let block_numbers = vec![block_number.clone()];
+                    let block_numbers =
+                        resolve_block_numbers(&block_numbers, provider.clone()).await?;
+                    batch_get_block(block_numbers, fields.clone(), provider.clone()).await
+                }
             }
         };
 
@@ -75,15 +85,32 @@ pub async fn resolve_block_query(
     Ok(block_res.into_iter().flatten().collect())
 }
 
+async fn resolve_block_numbers(
+    block_numbers: &[BlockNumberOrTag],
+    provider: Arc<RootProvider<Http<Client>>>,
+) -> Result<Vec<u64>, Box<dyn Error>> {
+    let mut block_number_futures = Vec::new();
+
+    for block_number in block_numbers {
+        let provider = Arc::clone(&provider);
+        let block_number_future =
+            async move { get_block_number_from_tag(provider, block_number.clone()).await };
+        block_number_futures.push(block_number_future);
+    }
+
+    let block_numbers = try_join_all(block_number_futures).await?;
+    Ok(block_numbers)
+}
+
 async fn batch_get_block(
-    start_block: u64,
-    end_block: u64,
+    block_numbers: Vec<u64>,
     fields: Vec<BlockField>,
     provider: Arc<RootProvider<Http<Client>>>,
 ) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
     let mut block_futures = Vec::new();
 
-    for block_number in start_block..=end_block {
+    // let x = start_block..=end_block;
+    for block_number in block_numbers {
         let fields = fields.clone();
         let provider = Arc::clone(&provider);
 
@@ -107,7 +134,7 @@ async fn get_block(
 
     match provider.get_block_by_number(block_id, false).await? {
         Some(block) => {
-            for field in &fields {
+            for field in fields {
                 match field {
                     BlockField::Timestamp => {
                         result.timestamp = Some(block.header.timestamp);
@@ -163,7 +190,7 @@ async fn get_block(
                 }
             }
         }
-        None => return Err(BlockResolverErrors::UnableToFetchBlockNumber(block_id).into()),
+        None => return Err(BlockResolverErrors::UnableToFetchBlockNumber(block_id.clone()).into()),
     }
 
     Ok(result)
@@ -192,7 +219,7 @@ async fn get_block_number_from_tag(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::entity_filter::BlockRange;
+    use crate::common::block::BlockRange;
     use alloy::providers::ProviderBuilder;
 
     #[tokio::test]
@@ -204,10 +231,16 @@ mod tests {
         let provider = Arc::new(
             ProviderBuilder::new().on_http("https://rpc.ankr.com/eth_sepolia".parse().unwrap()),
         );
-        let entity_id =
-            EntityId::Block(BlockRange::new(start_block.into(), Some(end_block.into())));
+        let block = Block::new(
+            Some(vec![BlockId::Range(BlockRange::new(
+                start_block.into(),
+                Some(end_block.into()),
+            ))]),
+            None,
+            fields,
+        );
 
-        let result = resolve_block_query(vec![entity_id], fields, provider)
+        let result = resolve_block_query(&block, provider)
             .await
             .unwrap_err()
             .to_string();
