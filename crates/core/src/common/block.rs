@@ -28,6 +28,8 @@ pub enum BlockId {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block {
+    // TODO: ids should be mandatory
+    // TODO: ids should be a HashSet
     ids: Option<Vec<BlockId>>,
     filter: Option<Vec<BlockFilter>>,
     fields: Vec<BlockField>,
