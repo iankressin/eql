@@ -1,14 +1,17 @@
-use super::{block::BlockRange, entity_id::parse_block_number_or_tag};
+use super::{
+    block::BlockRange,
+    entity_id::{parse_block_number_or_tag, EntityIdError},
+};
 use crate::interpreter::frontend::parser::{ParserError, Rule};
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Address, B256},
+    hex::FromHexError,
+    primitives::{Address, AddressError, B256},
     rpc::types::Filter,
 };
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 
 #[derive(Debug)]
 pub enum LogEntityError {
@@ -46,13 +49,28 @@ impl Logs {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum LogsError {
+pub enum LogsError {
     #[error("Invalid log filter {0}")]
     InvalidLogFilter(String),
+
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
+
+    #[error(transparent)]
+    ParserError(#[from] ParserError),
+
+    #[error(transparent)]
+    EntityIdError(#[from] EntityIdError),
+
+    #[error(transparent)]
+    AddressError(#[from] AddressError),
+
+    #[error(transparent)]
+    LogFieldError(#[from] LogFieldError),
 }
 
 impl TryFrom<Pairs<'_, Rule>> for Logs {
-    type Error = Box<dyn Error>;
+    type Error = LogsError;
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         let mut filter: Vec<LogFilter> = Vec::new();
@@ -67,9 +85,9 @@ impl TryFrom<Pairs<'_, Rule>> for Logs {
                     if let Some(pair) = pair {
                         filter.push(LogFilter::try_from(pair)?);
                     } else {
-                        return Err(Box::new(LogsError::InvalidLogFilter(
+                        return Err(LogsError::InvalidLogFilter(
                             inner_pairs.as_str().to_string(),
-                        )));
+                        ));
                     }
                 }
                 Rule::log_fields => {
@@ -84,12 +102,10 @@ impl TryFrom<Pairs<'_, Rule>> for Logs {
 
                     fields = inner_pairs
                         .map(|pair| LogField::try_from(pair.as_str()))
-                        .collect::<Result<Vec<LogField>, Box<dyn Error>>>()?;
+                        .collect::<Result<Vec<LogField>, LogFieldError>>()?;
                 }
                 _ => {
-                    return Err(Box::new(LogsError::InvalidLogFilter(
-                        pair.as_str().to_string(),
-                    )));
+                    return Err(LogsError::InvalidLogFilter(pair.as_str().to_string()));
                 }
             }
         }
@@ -111,14 +127,13 @@ pub enum LogFilter {
 }
 
 impl TryFrom<Pair<'_, Rule>> for LogFilter {
-    type Error = Box<dyn Error>;
+    type Error = LogsError;
 
     fn try_from(pair: Pair<'_, Rule>) -> Result<Self, Self::Error> {
         match pair.as_rule() {
             Rule::address_filter => {
                 let tochecksum = pair.as_str().trim_start_matches("address ").trim();
-                let address = Address::parse_checksummed(tochecksum, None)
-                    .map_err(|e| format!("{}: {}", e, tochecksum))?;
+                let address = Address::parse_checksummed(tochecksum, None)?;
                 Ok(LogFilter::EmitterAddress(address))
             }
             Rule::blockrange_filter => {
@@ -167,14 +182,13 @@ impl TryFrom<Pair<'_, Rule>> for LogFilter {
                 let topic = topic.parse::<B256>()?;
                 Ok(LogFilter::Topic3(topic))
             }
-            _ => Err(Box::new(ParserError::UnexpectedToken(
-                pair.as_str().to_string(),
-            ))),
+            _ => Err(LogsError::InvalidLogFilter(pair.as_str().to_string())),
         }
     }
 }
 
 impl LogFilter {
+    // TODO: remove this method
     pub fn to_block_range(
         &self,
     ) -> Result<(BlockNumberOrTag, Option<BlockNumberOrTag>), EntityFilterError> {
@@ -249,13 +263,13 @@ impl std::fmt::Display for LogField {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum LogFieldError {
+pub enum LogFieldError {
     #[error("Invalid log field: {0}")]
     InvalidLogField(String),
 }
 
 impl TryFrom<&str> for LogField {
-    type Error = Box<dyn Error>;
+    type Error = LogFieldError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
@@ -272,9 +286,7 @@ impl TryFrom<&str> for LogField {
             "transaction_index" => Ok(LogField::TransactionIndex),
             "log_index" => Ok(LogField::LogIndex),
             "removed" => Ok(LogField::Removed),
-            invalid_field => Err(Box::new(LogFieldError::InvalidLogField(
-                invalid_field.to_string(),
-            ))),
+            invalid_field => Err(LogFieldError::InvalidLogField(invalid_field.to_string())),
         }
     }
 }

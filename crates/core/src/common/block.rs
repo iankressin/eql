@@ -1,18 +1,23 @@
-use super::entity_id::parse_block_number_or_tag;
+use super::entity_id::{parse_block_number_or_tag, EntityIdError};
 use crate::interpreter::frontend::parser::Rule;
 use alloy::eips::BlockNumberOrTag;
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
 use serde::{Deserialize, Serialize};
-use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
-};
+use std::fmt::{self, Display, Formatter};
 
 #[derive(thiserror::Error, Debug)]
-enum BlockError {
+pub enum BlockError {
     #[error("Unexpected token {0} for block")]
     UnexpectedToken(String),
+
+    #[error(transparent)]
+    EntityIdError(#[from] EntityIdError),
+    #[error(transparent)]
+    BlockFilterError(#[from] BlockFilterError),
+
+    #[error(transparent)]
+    BlockFieldError(#[from] BlockFieldError),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -55,7 +60,7 @@ impl Block {
 }
 
 impl TryFrom<Pairs<'_, Rule>> for Block {
-    type Error = Box<dyn Error>;
+    type Error = BlockError;
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         let mut fields: Vec<BlockField> = vec![];
@@ -76,7 +81,7 @@ impl TryFrom<Pairs<'_, Rule>> for Block {
 
                     fields = inner_pairs
                         .map(|pair| BlockField::try_from(pair.as_str()))
-                        .collect::<Result<Vec<BlockField>, Box<dyn Error>>>()?;
+                        .collect::<Result<Vec<BlockField>, BlockFieldError>>()?;
                 }
                 // TODO: handle block number list
                 Rule::block_id => {
@@ -101,9 +106,9 @@ impl TryFrom<Pairs<'_, Rule>> for Block {
                                 )?));
                             }
                             _ => {
-                                return Err(Box::new(BlockError::UnexpectedToken(
+                                return Err(BlockError::UnexpectedToken(
                                     inner_pair.as_str().to_string(),
-                                )));
+                                ));
                             }
                         }
                     }
@@ -112,13 +117,11 @@ impl TryFrom<Pairs<'_, Rule>> for Block {
                     filter = Some(
                         pair.into_inner()
                             .map(|pair| BlockFilter::try_from(pair))
-                            .collect::<Result<Vec<BlockFilter>, Box<dyn Error>>>()?,
+                            .collect::<Result<Vec<BlockFilter>, BlockFilterError>>()?,
                     );
                 }
                 _ => {
-                    return Err(Box::new(BlockError::UnexpectedToken(
-                        pair.as_str().to_string(),
-                    )));
+                    return Err(BlockError::UnexpectedToken(pair.as_str().to_string()));
                 }
             }
         }
@@ -132,9 +135,12 @@ impl TryFrom<Pairs<'_, Rule>> for Block {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum BlockFilterError {
+pub enum BlockFilterError {
     #[error("Invalid block filter property: {0}")]
     InvalidBlockFilterProperty(String),
+
+    #[error(transparent)]
+    EntityIdError(#[from] EntityIdError),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -143,7 +149,7 @@ pub enum BlockFilter {
 }
 
 impl TryFrom<Pair<'_, Rule>> for BlockFilter {
-    type Error = Box<dyn Error>;
+    type Error = BlockFilterError;
 
     fn try_from(value: Pair<'_, Rule>) -> Result<Self, Self::Error> {
         match value.as_rule() {
@@ -160,15 +166,15 @@ impl TryFrom<Pair<'_, Rule>> for BlockFilter {
                 };
                 Ok(BlockFilter::Range(BlockRange { start, end }))
             }
-            _ => Err(Box::new(BlockFilterError::InvalidBlockFilterProperty(
+            _ => Err(BlockFilterError::InvalidBlockFilterProperty(
                 value.as_str().to_string(),
-            ))),
+            )),
         }
     }
 }
 
 #[derive(thiserror::Error, Debug)]
-enum BlockFieldError {
+pub enum BlockFieldError {
     #[error("Invalid property for entity block: {0}")]
     InvalidBlockField(String),
 }
@@ -220,7 +226,7 @@ impl Display for BlockField {
 }
 
 impl TryFrom<&str> for BlockField {
-    type Error = Box<dyn Error>;
+    type Error = BlockFieldError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
@@ -241,9 +247,9 @@ impl TryFrom<&str> for BlockField {
             "blob_gas_used" => Ok(BlockField::BlobGasUsed),
             "excess_blob_gas" => Ok(BlockField::ExcessBlobGas),
             "parent_beacon_block_root" => Ok(BlockField::ParentBeaconBlockRoot),
-            invalid_field => Err(Box::new(BlockFieldError::InvalidBlockField(
+            invalid_field => Err(BlockFieldError::InvalidBlockField(
                 invalid_field.to_string(),
-            ))),
+            )),
         }
     }
 }

@@ -1,6 +1,12 @@
-use super::{block::BlockRange, ens::NameOrAddress, entity_id::parse_block_number_or_tag};
-use crate::interpreter::frontend::parser::Rule;
-use alloy::primitives::{bytes::Bytes, B256, U256};
+use super::{
+    block::BlockRange, ens::NameOrAddress, entity_id::parse_block_number_or_tag,
+    entity_id::EntityIdError,
+};
+use crate::interpreter::frontend::parser::{ParserError, Rule};
+use alloy::{
+    hex::FromHexError,
+    primitives::{bytes::Bytes, AddressError, B256, U256},
+};
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
 use serde::{Deserialize, Serialize};
@@ -36,13 +42,28 @@ impl Transaction {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum TransactionError {
+pub enum TransactionError {
     #[error("Unexpected token {0} for transaction")]
     UnexpectedToken(String),
+
+    #[error(transparent)]
+    EntityIdError(#[from] EntityIdError),
+
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
+
+    #[error(transparent)]
+    AddressError(#[from] AddressError),
+
+    #[error(transparent)]
+    TransactionFieldError(#[from] TransactionFieldError),
+
+    #[error(transparent)]
+    TransactionFilterError(#[from] TransactionFilterError),
 }
 
 impl TryFrom<Pairs<'_, Rule>> for Transaction {
-    type Error = Box<dyn Error>;
+    type Error = TransactionError;
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         let mut ids: Option<Vec<B256>> = None;
@@ -62,7 +83,7 @@ impl TryFrom<Pairs<'_, Rule>> for Transaction {
                     filter = Some(
                         pair.into_inner()
                             .map(|pair| TransactionFilter::try_from(pair))
-                            .collect::<Result<Vec<TransactionFilter>, Box<dyn Error>>>()?,
+                            .collect::<Result<Vec<TransactionFilter>, TransactionFilterError>>()?,
                     );
                 }
                 Rule::tx_fields => {
@@ -76,12 +97,10 @@ impl TryFrom<Pairs<'_, Rule>> for Transaction {
                     }
                     fields = inner_pairs
                         .map(|pair| TransactionField::try_from(pair.as_str()))
-                        .collect::<Result<Vec<TransactionField>, Box<dyn Error>>>()?;
+                        .collect::<Result<Vec<TransactionField>, TransactionFieldError>>()?;
                 }
                 _ => {
-                    return Err(Box::new(TransactionError::UnexpectedToken(
-                        pair.as_str().to_string(),
-                    )));
+                    return Err(TransactionError::UnexpectedToken(pair.as_str().to_string()));
                 }
             }
         }
@@ -140,14 +159,14 @@ impl std::fmt::Display for TransactionField {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum TransactionFieldError {
+pub enum TransactionFieldError {
     #[error("Invalid transaction field: {0}")]
     InvalidTransactionField(String),
 }
 
 // TODO: this can possibly be removed as we're using TryFrom<Pair<'_, Rule>> for TransactionField
 impl TryFrom<&str> for TransactionField {
-    type Error = Box<dyn Error>;
+    type Error = TransactionFieldError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
@@ -168,9 +187,9 @@ impl TryFrom<&str> for TransactionField {
             "max_fee_per_gas" => Ok(TransactionField::MaxFeePerGas),
             "max_priority_fee_per_gas" => Ok(TransactionField::MaxPriorityFeePerGas),
             "y_parity" => Ok(TransactionField::YParity),
-            invalid_field => Err(Box::new(TransactionFieldError::InvalidTransactionField(
+            invalid_field => Err(TransactionFieldError::InvalidTransactionField(
                 invalid_field.to_string(),
-            ))),
+            )),
         }
     }
 }
@@ -198,13 +217,19 @@ pub enum TransactionFilter {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum TransactionFilterError {
+pub enum TransactionFilterError {
     #[error("Invalid transaction filter property: {0}")]
     InvalidTransactionFilterProperty(String),
+
+    #[error(transparent)]
+    EntityIdError(#[from] EntityIdError),
+
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
 }
 
 impl TryFrom<Pair<'_, Rule>> for TransactionFilter {
-    type Error = Box<dyn Error>;
+    type Error = TransactionFilterError;
 
     fn try_from(pair: Pair<'_, Rule>) -> Result<Self, Self::Error> {
         match pair.as_rule() {
@@ -232,10 +257,8 @@ impl TryFrom<Pair<'_, Rule>> for TransactionFilter {
                 pair.as_str().to_string(),
             ))),
             _ => {
-                return Err(Box::new(
-                    TransactionFilterError::InvalidTransactionFilterProperty(
-                        pair.as_str().to_string(),
-                    ),
+                return Err(TransactionFilterError::InvalidTransactionFilterProperty(
+                    pair.as_str().to_string(),
                 ));
             }
         }

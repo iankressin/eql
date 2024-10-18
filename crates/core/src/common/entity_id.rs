@@ -6,17 +6,17 @@ pub enum EntityIdError {
     InvalidAddress,
     #[error("Invalid tx hash")]
     InvalidTxHash,
-    #[error("Invalid block number")]
-    InvalidBlockNumber,
+    #[error("Invalid block number or tag: {0}")]
+    InvalidBlockNumberOrTag(String),
     #[error("Unable resolve ENS name")]
     EnsResolution,
 }
 
 pub fn parse_block_number_or_tag(id: &str) -> Result<BlockNumberOrTag, EntityIdError> {
-    match id.parse::<u64>() {
+    match id.trim().parse::<u64>() {
         Ok(id) => Ok(BlockNumberOrTag::Number(id)),
         Err(_) => id
             .parse::<BlockNumberOrTag>()
-            .map_err(|_| EntityIdError::InvalidBlockNumber),
+            .map_err(|_| EntityIdError::InvalidBlockNumberOrTag(id.to_string())),
     }
 }

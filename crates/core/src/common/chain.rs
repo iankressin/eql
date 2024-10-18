@@ -2,8 +2,8 @@ use crate::interpreter::frontend::parser::Rule;
 
 use super::config::Config;
 use alloy::transports::http::reqwest::Url;
-use pest::iterators::Pairs;
 use core::fmt;
+use pest::iterators::Pairs;
 use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -49,19 +49,19 @@ pub enum Chain {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum ChainError {
+pub enum ChainError {
     #[error("Invalid chain {0}")]
     InvalidChain(String),
 }
 
 impl TryFrom<Pairs<'_, Rule>> for Chain {
-    type Error = Box<dyn Error>;
+    type Error = ChainError;
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         for pair in pairs {
             match pair.as_rule() {
                 Rule::chain => return Ok(Chain::try_from(pair.as_str())?),
-                _ => return Err(Box::new(ChainError::InvalidChain(pair.as_str().to_string()))),
+                _ => return Err(ChainError::InvalidChain(pair.as_str().to_string())),
             }
         }
         Ok(Chain::default())
@@ -113,7 +113,7 @@ impl Default for Chain {
 }
 
 impl TryFrom<&str> for Chain {
-    type Error = &'static str;
+    type Error = ChainError;
 
     fn try_from(chain: &str) -> Result<Self, Self::Error> {
         match chain {
@@ -140,7 +140,7 @@ impl TryFrom<&str> for Chain {
             "fantom" => Ok(Chain::Fantom),
             "kava" => Ok(Chain::Kava),
             "gnosis" => Ok(Chain::Gnosis),
-            _ => Err("Invalid chain"),
+            _ => Err(ChainError::InvalidChain(chain.to_string())),
         }
     }
 }

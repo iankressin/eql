@@ -1,14 +1,24 @@
-use super::ens::NameOrAddress;
+use super::{ens::NameOrAddress, entity_id::EntityIdError};
 use crate::interpreter::frontend::parser::Rule;
+use alloy::hex::FromHexError;
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Display, str::FromStr};
+use std::{fmt::Display, str::FromStr};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AccountError {
     #[error("Unexpected token {0}")]
     UnexpectedToken(String),
+
+    #[error(transparent)]
+    AccountFieldError(#[from] AccountFieldError),
+
+    #[error(transparent)]
+    AccountFilterError(#[from] AccountFilterError),
+
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -41,7 +51,7 @@ impl Account {
 }
 
 impl TryFrom<Pairs<'_, Rule>> for Account {
-    type Error = Box<dyn Error>;
+    type Error = AccountError;
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         let mut fields: Vec<AccountField> = vec![];
@@ -62,7 +72,7 @@ impl TryFrom<Pairs<'_, Rule>> for Account {
 
                     fields = inner_pairs
                         .map(|pair| AccountField::try_from(pair))
-                        .collect::<Result<Vec<AccountField>, Box<dyn Error>>>()?;
+                        .collect::<Result<Vec<AccountField>, AccountFieldError>>()?;
                 }
                 Rule::account_id => {
                     if let Some(id) = id.as_mut() {
@@ -75,13 +85,11 @@ impl TryFrom<Pairs<'_, Rule>> for Account {
                     filter = Some(
                         pair.into_inner()
                             .map(|pair| AccountFilter::try_from(pair))
-                            .collect::<Result<Vec<AccountFilter>, Box<dyn Error>>>()?,
+                            .collect::<Result<Vec<AccountFilter>, AccountFilterError>>()?,
                     );
                 }
                 _ => {
-                    return Err(Box::new(AccountError::UnexpectedToken(
-                        pair.as_str().to_string(),
-                    )));
+                    return Err(AccountError::UnexpectedToken(pair.as_str().to_string()));
                 }
             }
         }
@@ -94,6 +102,9 @@ impl TryFrom<Pairs<'_, Rule>> for Account {
 pub enum AccountFilterError {
     #[error("Unexpected token {0} for account filter")]
     UnexpectedToken(String),
+
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -102,17 +113,18 @@ pub enum AccountFilter {
 }
 
 impl TryFrom<Pair<'_, Rule>> for AccountFilter {
-    type Error = Box<dyn Error>;
+    type Error = AccountFilterError;
 
     fn try_from(pair: Pair<'_, Rule>) -> Result<Self, Self::Error> {
         match pair.as_rule() {
-            Rule::address_filter => Ok(AccountFilter::Address(NameOrAddress::from_str(
-                pair.as_str(),
-            )?)),
+            Rule::address_filter => {
+                let address = NameOrAddress::from_str(pair.as_str())?;
+                Ok(AccountFilter::Address(address))
+            }
             _ => {
-                return Err(Box::new(AccountFilterError::UnexpectedToken(
+                return Err(AccountFilterError::UnexpectedToken(
                     pair.as_str().to_string(),
-                )));
+                ));
             }
         }
     }
@@ -141,10 +153,13 @@ impl Display for AccountField {
 pub enum AccountFieldError {
     #[error("Invalid field for entity Account: {0}")]
     InvalidField(String),
+
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
 }
 
 impl<'a> TryFrom<Pair<'a, Rule>> for AccountField {
-    type Error = Box<dyn Error>;
+    type Error = AccountFieldError;
 
     fn try_from(pair: Pair<'a, Rule>) -> Result<Self, Self::Error> {
         AccountField::try_from(pair.as_str())
@@ -152,17 +167,15 @@ impl<'a> TryFrom<Pair<'a, Rule>> for AccountField {
 }
 
 impl TryFrom<&str> for AccountField {
-    type Error = Box<dyn Error>;
+    type Error = AccountFieldError;
 
-    fn try_from(value: &str) -> Result<Self, Box<dyn Error>> {
+    fn try_from(value: &str) -> Result<Self, AccountFieldError> {
         match value {
             "address" => Ok(AccountField::Address),
             "nonce" => Ok(AccountField::Nonce),
             "balance" => Ok(AccountField::Balance),
             "code" => Ok(AccountField::Code),
-            invalid_field => Err(Box::new(AccountFieldError::InvalidField(
-                invalid_field.to_string(),
-            ))),
+            invalid_field => Err(AccountFieldError::InvalidField(invalid_field.to_string())),
         }
     }
 }

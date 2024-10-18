@@ -1,12 +1,11 @@
 use super::{
-    chain::{Chain, ChainOrRpc},
-    dump::Dump,
-    entity::Entity,
+    chain::{Chain, ChainError, ChainOrRpc},
+    dump::{Dump, DumpError},
+    entity::{Entity, EntityError},
 };
 use crate::interpreter::frontend::parser::Rule;
 use alloy::transports::http::reqwest::Url;
 use pest::iterators::Pairs;
-use std::error::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expression {
@@ -29,21 +28,32 @@ impl GetExpression {
         }
     }
 }
-
 #[derive(thiserror::Error, Debug)]
 pub enum GetExpressionError {
-    #[error("Unexpected token {0}")]
+    #[error("Unexpected token: {0}")]
     UnexpectedToken(String),
+
     #[error("Missing entity")]
     MissingEntity,
+
     #[error("Missing chain or RPC")]
     MissingChainOrRpc,
-    #[error("Missing query")]
-    MissingQuery,
+
+    #[error("URL parse error: {0}")]
+    UrlParseError(String),
+
+    #[error(transparent)]
+    EntityError(#[from] EntityError),
+
+    #[error(transparent)]
+    ChainError(#[from] ChainError),
+
+    #[error(transparent)]
+    DumpError(#[from] DumpError),
 }
 
 impl TryFrom<Pairs<'_, Rule>> for GetExpression {
-    type Error = Box<dyn Error>;
+    type Error = GetExpressionError;
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         let mut entity: Option<Entity> = None;
@@ -59,25 +69,24 @@ impl TryFrom<Pairs<'_, Rule>> for GetExpression {
                     let chain = Chain::try_from(pair.into_inner())?;
                     chain_or_rpc = Some(ChainOrRpc::Chain(chain));
                 }
-                Rule::rpc_url => {
-                    let url = Url::parse(&pair.as_str().to_string())?;
-                    chain_or_rpc = Some(ChainOrRpc::Rpc(url));
-                }
+                Rule::rpc_url => match Url::parse(&pair.as_str().to_string()) {
+                    Ok(url) => chain_or_rpc = Some(ChainOrRpc::Rpc(url)),
+                    Err(e) => return Err(GetExpressionError::UrlParseError(e.to_string())),
+                },
                 Rule::dump => {
                     dump = Some(Dump::try_from(pair.into_inner())?);
                 }
                 _ => {
-                    return Err(Box::new(GetExpressionError::UnexpectedToken(
+                    return Err(GetExpressionError::UnexpectedToken(
                         pair.as_str().to_string(),
-                    )))
+                    ))
                 }
             }
         }
 
         // Ensure all required fields are initialized
-        let entity = entity.ok_or_else(|| Box::new(GetExpressionError::MissingEntity))?;
-        let chain_or_rpc =
-            chain_or_rpc.ok_or_else(|| Box::new(GetExpressionError::MissingChainOrRpc))?;
+        let entity = entity.ok_or_else(|| GetExpressionError::MissingEntity)?;
+        let chain_or_rpc = chain_or_rpc.ok_or_else(|| GetExpressionError::MissingChainOrRpc)?;
 
         Ok(GetExpression::new(entity, chain_or_rpc, dump))
     }
