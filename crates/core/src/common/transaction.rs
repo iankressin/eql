@@ -137,7 +137,7 @@ pub enum TransactionField {
 impl std::fmt::Display for TransactionField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransactionField::TransactionType => write!(f, "type"),
+            TransactionField::TransactionType => write!(f, "transaction_type"),
             TransactionField::Hash => write!(f, "hash"),
             TransactionField::From => write!(f, "from"),
             TransactionField::To => write!(f, "to"),
