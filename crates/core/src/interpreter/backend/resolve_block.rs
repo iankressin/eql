@@ -20,6 +20,8 @@ pub enum BlockResolverErrors {
     StartBlockMustBeGreaterThanEndBlock,
     #[error("Mismatch between Entity and EntityId, {0} can't be resolved as a block id")]
     MismatchEntityAndEntityId(String),
+    #[error("Missing block ids")]
+    IdsNotSet,
 }
 
 /// Resolve the query to get blocks after receiving a block entity expression.
@@ -30,7 +32,10 @@ pub async fn resolve_block_query(
 ) -> Result<Vec<BlockQueryRes>, Box<dyn Error>> {
     let mut block_futures = Vec::new();
 
-    let ids = block.ids().unwrap();
+    let ids = match block.ids() {
+        Some(ids) => ids,
+        None => return Err(BlockResolverErrors::IdsNotSet.into()),
+    };
 
     for id in ids {
         let provider = Arc::clone(&provider);
