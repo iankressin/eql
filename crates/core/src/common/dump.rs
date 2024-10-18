@@ -1,7 +1,6 @@
 use crate::interpreter::frontend::parser::Rule;
 use pest::iterators::Pairs;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::fmt::Display;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]

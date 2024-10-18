@@ -1,4 +1,4 @@
-use super::{ens::NameOrAddress, entity_id::EntityIdError};
+use super::ens::NameOrAddress;
 use crate::interpreter::frontend::parser::Rule;
 use alloy::hex::FromHexError;
 use eql_macros::EnumVariants;

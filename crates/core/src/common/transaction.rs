@@ -2,7 +2,7 @@ use super::{
     block::BlockRange, ens::NameOrAddress, entity_id::parse_block_number_or_tag,
     entity_id::EntityIdError,
 };
-use crate::interpreter::frontend::parser::{ParserError, Rule};
+use crate::interpreter::frontend::parser::Rule;
 use alloy::{
     hex::FromHexError,
     primitives::{bytes::Bytes, AddressError, B256, U256},
@@ -10,7 +10,7 @@ use alloy::{
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
 use serde::{Deserialize, Serialize};
-use std::{error::Error, str::FromStr};
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Transaction {
