@@ -165,7 +165,6 @@ from_filter_type = { address | ens}
 to_filter_type = { address }
 data_filter_type = { hex_string }
 value_filter_type = { number }
-gas_price_filter_value = { number}
 gas_filter_type = { integer }
 status_filter_type = { ("success" | "failure") }
 max_fee_per_blob_gas_filter_type = { number }

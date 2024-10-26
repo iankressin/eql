@@ -59,7 +59,7 @@ mod tests {
     };
     use alloy::{
         eips::BlockNumberOrTag,
-        primitives::{address, b256, Address, U128, U256},
+        primitives::{address, b256, Address, U256},
     };
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
