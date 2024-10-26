@@ -340,14 +340,13 @@ mod test {
     }
 
     #[tokio::test]
-    #[should_panic]
-    async fn test_get_transaction_fields_does_not_exist() {
+    async fn test_get_inexistent_transaction() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction(
                 Transaction::new(
                     Some(vec![b256!(
-                        "bebd3baab326f895289ecbd4210cf886ce41952316441ae4cac35f00f0e882a6"
+                        "0000000000000000000000000000000000000000000000000000000000000000"
                     )]),
                     None,
                     vec![
@@ -374,7 +373,9 @@ mod test {
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             dump: None,
         })];
-        let _result = execution_engine.run(expressions).await;
+        let result = execution_engine.run(expressions).await.unwrap();
+
+        assert_eq!(result[0].result, ExpressionResult::Transaction(vec![]));
     }
 
     #[tokio::test]

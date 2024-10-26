@@ -59,7 +59,7 @@ mod tests {
     };
     use alloy::{
         eips::BlockNumberOrTag,
-        primitives::{address, b256, Address},
+        primitives::{address, b256, Address, U128, U256},
     };
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_transaction_fields() {
-        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, chain_id, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
+        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction(Transaction::new(
@@ -239,9 +239,11 @@ mod tests {
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction(Transaction::new(
                 None,
-                Some(vec![TransactionFilter::BlockRange(BlockRange::new(
-                    BlockNumberOrTag::Number(1),
-                    Some(BlockNumberOrTag::Number(10)),
+                Some(vec![TransactionFilter::BlockId(BlockId::Range(
+                    BlockRange::new(
+                        BlockNumberOrTag::Number(1),
+                        Some(BlockNumberOrTag::Number(10)),
+                    ),
                 ))]),
                 vec![TransactionField::Hash],
             )),
@@ -379,6 +381,47 @@ mod tests {
                 vec![AccountField::Nonce, AccountField::Balance],
             )),
             chain_or_rpc: ChainOrRpc::Rpc("http://localhost:8545".parse().unwrap()),
+            dump: None,
+        })];
+
+        match Parser::new(source).parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_with_transaction_filter_from_ens() {
+        let source = "GET * FROM tx WHERE \
+            value 10000000, \
+            block 10000000, \
+            gas 10000000, \
+            gas_price 10000000, \
+            max_fee_per_blob_gas 10000000, \
+            max_fee_per_gas 10000000, \
+            max_priority_fee_per_gas 10000000, \
+            y_parity false \
+            ON eth";
+
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Transaction(Transaction::new(
+                None,
+                Some(vec![
+                    TransactionFilter::Value(U256::from(10000000)),
+                    TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                        BlockNumberOrTag::Number(10000000),
+                        None,
+                    ))),
+                    TransactionFilter::Gas(10000000.try_into().unwrap()),
+                    TransactionFilter::GasPrice(10000000.try_into().unwrap()),
+                    TransactionFilter::MaxFeePerBlobGas(10000000.try_into().unwrap()),
+                    TransactionFilter::MaxFeePerGas(10000000.try_into().unwrap()),
+                    TransactionFilter::MaxPriorityFeePerGas(10000000.try_into().unwrap()),
+                    TransactionFilter::YParity(false),
+                ]),
+                TransactionField::all_variants().to_vec(),
+            )),
+            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             dump: None,
         })];
 

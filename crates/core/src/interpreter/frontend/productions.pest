@@ -160,18 +160,34 @@ tx_filter = {
     max_priority_fee_per_gas_filter |
     y_parity_filter
 }
-from_filter = {"from" ~ address | ens}
-to_filter = {"to" ~ address}
-data_filter = {"data" ~ hex_string}
-value_filter = {"value" ~ number ~ unit}
-gas_price_filter = {"gas_price" ~ number ~ unit}
-gas_filter = {"gas" ~ integer}
-status_filter = {"status" ~ "success" | "failure"}
-max_fee_per_blob_gas_filter = {"max_fee_per_blob_gas" ~ number ~ unit}
-blob_versioned_hashes_filter = {"blob_versioned_hashes" ~ hex_string}
-max_fee_per_gas_filter = {"max_fee_per_gas" ~ number ~ unit}
-max_priority_fee_per_gas_filter = {"max_priority_fee_per_gas" ~ number ~ unit}
-y_parity_filter = {"y_parity" ~ "0x" ~ hex_string}
+
+from_filter_type = { address | ens}
+to_filter_type = { address }
+data_filter_type = { hex_string }
+value_filter_type = { number }
+gas_price_filter_value = { number}
+gas_filter_type = { integer }
+status_filter_type = { ("success" | "failure") }
+max_fee_per_blob_gas_filter_type = { number }
+blob_versioned_hashes_filter_type = { hex_string }
+max_fee_per_gas_filter_type = { number }
+max_priority_fee_per_gas_filter_type = { number }
+y_parity_filter_type = { ("true" | "false") }
+gas_price_filter_type = { number }
+
+// TODO: add support for different ether units (ether, gwei, wei)
+from_filter = _{"from" ~ from_filter_type}
+to_filter = _{"to" ~ to_filter_type}
+data_filter = _{"data" ~ data_filter_type}
+value_filter = _{"value" ~ value_filter_type}
+gas_price_filter = _{"gas_price" ~ gas_price_filter_type}
+gas_filter = _{"gas" ~ gas_filter_type}
+status_filter = _{"status" ~ status_filter_type}
+max_fee_per_blob_gas_filter = _{"max_fee_per_blob_gas" ~ max_fee_per_blob_gas_filter_type}
+blob_versioned_hashes_filter = _{"blob_versioned_hashes" ~ blob_versioned_hashes_filter_type}
+max_fee_per_gas_filter = _{"max_fee_per_gas" ~ max_fee_per_gas_filter_type}
+max_priority_fee_per_gas_filter = _{"max_priority_fee_per_gas" ~ max_priority_fee_per_gas_filter_type}
+y_parity_filter = _{"y_parity" ~ y_parity_filter_type}
 
 // Log
 log_field_list = _{ log_field ~ ("," ~ WHITESPACE* ~ log_field)* }

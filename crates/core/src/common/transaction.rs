@@ -1,11 +1,13 @@
 use super::{
-    block::BlockRange, ens::NameOrAddress, entity_id::parse_block_number_or_tag,
-    entity_id::EntityIdError,
+    block::{BlockId, BlockRange},
+    ens::NameOrAddress,
+    entity_id::{parse_block_number_or_tag, EntityIdError},
+    query_result::TransactionQueryRes,
 };
 use crate::interpreter::frontend::parser::Rule;
 use alloy::{
     hex::FromHexError,
-    primitives::{bytes::Bytes, AddressError, B256, U256},
+    primitives::{AddressError, B256, U256},
 };
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
@@ -15,19 +17,19 @@ use std::str::FromStr;
 #[derive(Debug, PartialEq, Eq)]
 pub struct Transaction {
     ids: Option<Vec<B256>>,
-    filter: Option<Vec<TransactionFilter>>,
+    filters: Option<Vec<TransactionFilter>>,
     fields: Vec<TransactionField>,
 }
 
 impl Transaction {
     pub fn new(
         ids: Option<Vec<B256>>,
-        filter: Option<Vec<TransactionFilter>>,
+        filters: Option<Vec<TransactionFilter>>,
         fields: Vec<TransactionField>,
     ) -> Self {
         Self {
             ids,
-            filter,
+            filters,
             fields,
         }
     }
@@ -39,25 +41,74 @@ impl Transaction {
     pub fn fields(&self) -> &Vec<TransactionField> {
         &self.fields
     }
+
+    pub fn filters(&self) -> Option<&Vec<TransactionFilter>> {
+        self.filters.as_ref()
+    }
+
+    pub fn get_block_id_filter(&self) -> Result<&BlockId, TransactionFilterError> {
+        self.filters
+            .as_ref()
+            .and_then(|filters| {
+                filters
+                    .iter()
+                    .find(|f| matches!(f, TransactionFilter::BlockId(_)))
+                    .and_then(|filter| filter.as_block_id().ok())
+            })
+            .ok_or(TransactionFilterError::InvalidBlockIdFilter)
+    }
+
+    pub fn filter(&self, tx: &TransactionQueryRes) -> bool {
+        if let Some(filters) = &self.filters {
+            filters.iter().all(|filter| match filter {
+                TransactionFilter::TransactionType(t) => tx.transaction_type == Some(*t),
+                TransactionFilter::Hash(h) => tx.hash == Some(*h),
+                TransactionFilter::From(f) => match f {
+                    NameOrAddress::Address(a) => tx.from == Some(*a),
+                    // TODO: Support ENS names for WHERE clauses
+                    _ => false,
+                },
+                TransactionFilter::To(t) => match t {
+                    NameOrAddress::Address(a) => tx.to == Some(*a),
+                    // TODO: Support ENS names for WHERE clauses
+                    _ => false,
+                },
+                TransactionFilter::Data(d) => tx.data == Some(d.clone()),
+                TransactionFilter::Value(v) => tx.value == Some(*v),
+                TransactionFilter::GasPrice(gp) => tx.gas_price == Some(*gp),
+                TransactionFilter::Gas(g) => tx.gas == Some(*g),
+                TransactionFilter::ChainId(cid) => tx.chain_id == Some(*cid),
+                TransactionFilter::Status(s) => tx.status == Some(*s),
+                TransactionFilter::V(v) => tx.v == Some(*v),
+                TransactionFilter::R(r) => tx.r == Some(*r),
+                TransactionFilter::S(s) => tx.s == Some(*s),
+                TransactionFilter::MaxFeePerBlobGas(mfbg) => tx.max_fee_per_blob_gas == Some(*mfbg),
+                TransactionFilter::MaxFeePerGas(mfg) => tx.max_fee_per_gas == Some(*mfg),
+                TransactionFilter::MaxPriorityFeePerGas(mpfpg) => {
+                    tx.max_priority_fee_per_gas == Some(*mpfpg)
+                }
+                TransactionFilter::YParity(yp) => tx.y_parity == Some(*yp),
+                // TODO: once we have implemented the transaction receipt fields, should validate the block id
+                TransactionFilter::BlockId(_) => true,
+            })
+        } else {
+            true
+        }
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum TransactionError {
     #[error("Unexpected token {0} for transaction")]
     UnexpectedToken(String),
-
     #[error(transparent)]
     EntityIdError(#[from] EntityIdError),
-
     #[error(transparent)]
     FromHexError(#[from] FromHexError),
-
     #[error(transparent)]
     AddressError(#[from] AddressError),
-
     #[error(transparent)]
     TransactionFieldError(#[from] TransactionFieldError),
-
     #[error(transparent)]
     TransactionFilterError(#[from] TransactionFilterError),
 }
@@ -80,11 +131,12 @@ impl TryFrom<Pairs<'_, Rule>> for Transaction {
                     }
                 }
                 Rule::tx_filter => {
-                    filter = Some(
-                        pair.into_inner()
-                            .map(|pair| TransactionFilter::try_from(pair))
-                            .collect::<Result<Vec<TransactionFilter>, TransactionFilterError>>()?,
-                    );
+                    let next_filter = pair.into_inner().next().unwrap();
+                    if let Some(filter) = filter.as_mut() {
+                        filter.push(TransactionFilter::try_from(next_filter)?);
+                    } else {
+                        filter = Some(vec![TransactionFilter::try_from(next_filter)?]);
+                    }
                 }
                 Rule::tx_fields => {
                     let inner_pairs = pair.into_inner();
@@ -107,7 +159,7 @@ impl TryFrom<Pairs<'_, Rule>> for Transaction {
 
         Ok(Transaction {
             ids,
-            filter,
+            filters: filter,
             fields,
         })
     }
@@ -194,18 +246,30 @@ impl TryFrom<&str> for TransactionField {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum TransactionFilterError {
+    #[error("Invalid transaction filter property: {0}")]
+    InvalidTransactionFilterProperty(String),
+    #[error(transparent)]
+    EntityIdError(#[from] EntityIdError),
+    #[error(transparent)]
+    FromHexError(#[from] FromHexError),
+    #[error("BlockId filter is not valid")]
+    InvalidBlockIdFilter,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TransactionFilter {
     TransactionType(u8),
     Hash(B256),
     From(NameOrAddress),
     To(NameOrAddress),
-    Data(Bytes),
+    Data(alloy::primitives::Bytes),
     Value(U256),
     GasPrice(u128),
     Gas(u128),
     ChainId(u64),
-    BlockRange(BlockRange),
+    BlockId(BlockId),
     Status(bool),
     V(U256),
     R(U256),
@@ -216,16 +280,14 @@ pub enum TransactionFilter {
     YParity(bool),
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum TransactionFilterError {
-    #[error("Invalid transaction filter property: {0}")]
-    InvalidTransactionFilterProperty(String),
-
-    #[error(transparent)]
-    EntityIdError(#[from] EntityIdError),
-
-    #[error(transparent)]
-    FromHexError(#[from] FromHexError),
+impl TransactionFilter {
+    pub fn as_block_id(&self) -> Result<&BlockId, TransactionFilterError> {
+        if let TransactionFilter::BlockId(block_id) = self {
+            Ok(block_id)
+        } else {
+            Err(TransactionFilterError::InvalidBlockIdFilter)
+        }
+    }
 }
 
 impl TryFrom<Pair<'_, Rule>> for TransactionFilter {
@@ -245,22 +307,83 @@ impl TryFrom<Pair<'_, Rule>> for TransactionFilter {
                     //else we only have start.
                     None => (parse_block_number_or_tag(range)?, None),
                 };
-                Ok(TransactionFilter::BlockRange(BlockRange::new(start, end)))
+                Ok(TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                    start, end,
+                ))))
             }
-            Rule::from_filter => Ok(TransactionFilter::From(NameOrAddress::from_str(
+            Rule::gas_price_filter_type => Ok(TransactionFilter::GasPrice(
+                pair.as_str().parse::<u128>().unwrap(),
+            )),
+            Rule::gas_filter_type => Ok(TransactionFilter::Gas(
+                pair.as_str().parse::<u128>().unwrap(),
+            )),
+            Rule::status_filter_type => Ok(TransactionFilter::Status(pair.as_str() == "success")),
+            Rule::from_filter_type => Ok(TransactionFilter::From(NameOrAddress::from_str(
                 pair.as_str(),
             )?)),
-            Rule::to_filter => Ok(TransactionFilter::To(NameOrAddress::from_str(
+            Rule::to_filter_type => Ok(TransactionFilter::To(NameOrAddress::from_str(
                 pair.as_str(),
             )?)),
-            Rule::data_filter => Ok(TransactionFilter::Data(Bytes::from(
+            Rule::data_filter_type => Ok(TransactionFilter::Data(alloy::primitives::Bytes::from(
                 pair.as_str().to_string(),
             ))),
+            Rule::value_filter_type => Ok(TransactionFilter::Value(
+                U256::from_str(pair.as_str()).unwrap(),
+            )),
+            Rule::y_parity_filter_type => Ok(TransactionFilter::YParity(pair.as_str() == "true")),
+            Rule::max_fee_per_blob_gas_filter_type => Ok(TransactionFilter::MaxFeePerBlobGas(
+                pair.as_str().parse::<u128>().unwrap(),
+            )),
+            Rule::max_fee_per_gas_filter_type => Ok(TransactionFilter::MaxFeePerGas(
+                pair.as_str().parse::<u128>().unwrap(),
+            )),
+            Rule::max_priority_fee_per_gas_filter_type => Ok(
+                TransactionFilter::MaxPriorityFeePerGas(pair.as_str().parse::<u128>().unwrap()),
+            ),
             _ => {
                 return Err(TransactionFilterError::InvalidTransactionFilterProperty(
                     pair.as_str().to_string(),
                 ));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_return_true_if_tx_passes_all_filters() {
+        let value = U256::from(1000000000);
+
+        let tx_query_res = TransactionQueryRes {
+            value: Some(value),
+            ..Default::default()
+        };
+
+        let transaction = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::Value(value)]),
+            vec![TransactionField::Hash],
+        );
+
+        assert_eq!(true, transaction.filter(&tx_query_res));
+    }
+
+    #[test]
+    fn test_return_false_if_tx_does_not_pass_any_filters() {
+        let tx_query_res = TransactionQueryRes {
+            value: Some(U256::from(1)),
+            ..Default::default()
+        };
+
+        let transaction = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::Value(U256::from(1000000000))]),
+            TransactionField::all_variants().to_vec(),
+        );
+
+        assert_eq!(false, transaction.filter(&tx_query_res));
     }
 }

@@ -1,10 +1,18 @@
 use super::entity_id::{parse_block_number_or_tag, EntityIdError};
 use crate::interpreter::frontend::parser::Rule;
-use alloy::eips::BlockNumberOrTag;
+use alloy::{
+    eips::BlockNumberOrTag,
+    providers::{Provider, RootProvider},
+    transports::http::{Client, Http},
+};
+use anyhow::Result;
 use eql_macros::EnumVariants;
 use pest::iterators::{Pair, Pairs};
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    sync::Arc,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum BlockError {
@@ -256,6 +264,12 @@ impl TryFrom<&str> for BlockField {
     }
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum BlockRangeError {
+    #[error("Unable to fetch block number {0}")]
+    UnableToFetchBlockNumber(BlockNumberOrTag),
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct BlockRange {
     start: BlockNumberOrTag,
@@ -277,6 +291,49 @@ impl BlockRange {
 
     pub fn end(&self) -> Option<BlockNumberOrTag> {
         self.end
+    }
+
+    pub async fn resolve_block_numbers(
+        &self,
+        provider: &Arc<RootProvider<Http<Client>>>,
+    ) -> Result<Vec<u64>> {
+        let (start_block, end_block) = self.range();
+        let start_block_number = self
+            .get_block_number_from_tag(provider.clone(), start_block)
+            .await?;
+
+        let end_block_number = match end_block {
+            Some(end) => Some(
+                self.get_block_number_from_tag(provider.clone(), end)
+                    .await?,
+            ),
+            None => None,
+        };
+
+        match end_block_number {
+            Some(end) => {
+                let range = start_block_number..=end;
+                return Ok(range.collect());
+            }
+            None => Ok(vec![start_block_number]),
+        }
+    }
+
+    async fn get_block_number_from_tag(
+        &self,
+        provider: Arc<RootProvider<Http<Client>>>,
+        number_or_tag: BlockNumberOrTag,
+    ) -> Result<u64> {
+        match number_or_tag {
+            BlockNumberOrTag::Number(number) => Ok(number),
+            block_tag => match provider.get_block_by_number(block_tag, false).await? {
+                Some(block) => match block.header.number {
+                    Some(number) => Ok(number),
+                    None => Err(BlockRangeError::UnableToFetchBlockNumber(number_or_tag).into()),
+                },
+                None => Err(BlockRangeError::UnableToFetchBlockNumber(number_or_tag).into()),
+            },
+        }
     }
 }
 

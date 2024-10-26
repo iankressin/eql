@@ -19,7 +19,7 @@
 - [ ] REPL improvements: Save query history, fix minor bugs
 
 ### v0.1.5-alpha
-- [ ] User configurable RPC list
+- [x] User configurable RPC list
 - [ ] Support to transaction receipt fields under transaction entity
 - [ ] Smart-contract support:
  `GET balanceOf(0x...) FROM contract 0x... ON polygon`
