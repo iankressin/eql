@@ -2,7 +2,7 @@ mod repl;
 
 use crate::repl::Repl;
 use clap::{Parser, Subcommand};
-use csv::{ReaderBuilder, Writer};
+use csv::ReaderBuilder;
 use eql_core::{
     common::query_result::{ExpressionResult, QueryResult},
     interpreter::Interpreter,
@@ -65,8 +65,10 @@ impl ResultHandler {
     }
 }
 
-pub fn to_table<S: Serialize>(data: Vec<S>) -> Result<Table, Box<dyn Error>> {
-    let mut writer = Writer::from_writer(vec![]);
+pub fn to_table<S: Serialize + core::fmt::Debug>(data: Vec<S>) -> Result<Table, Box<dyn Error>> {
+    let mut writer = csv::WriterBuilder::new()
+        .flexible(true) // Enable flexible mode
+        .from_writer(vec![]);
 
     for entry in data {
         writer.serialize(entry).unwrap();
@@ -76,6 +78,7 @@ pub fn to_table<S: Serialize>(data: Vec<S>) -> Result<Table, Box<dyn Error>> {
     let mut builder = Builder::default();
     let reader = ReaderBuilder::new()
         .has_headers(false)
+        .flexible(true)
         .from_reader(data.as_bytes());
 
     for record in reader.into_records() {
@@ -114,4 +117,27 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_to_table_tx_query_using_block_filters() {
+        let result = Interpreter::run_program("GET * FROM tx WHERE block 10000003 ON eth")
+            .await
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone();
+
+        match result.result {
+            ExpressionResult::Transaction(query_res) => {
+                let table = to_table(query_res).unwrap();
+                println!("TABLE: {:#?}", table);
+            }
+            _ => panic!("Expected transaction result"),
+        }
+    }
 }

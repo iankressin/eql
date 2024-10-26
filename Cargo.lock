@@ -1628,6 +1628,7 @@ dependencies = [
  "csv",
  "eql_core",
  "serde",
+ "serde_json",
  "tabled",
  "tokio",
 ]

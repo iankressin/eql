@@ -84,7 +84,7 @@ impl Chain {
             Chain::Arbitrum => "https://rpc.ankr.com/arbitrum",
             Chain::Base => "https://rpc.ankr.com/base",
             Chain::Blast => "https://rpc.ankr.com/blast",
-            Chain::Optimism => "https://rpc.ankr.com/optimism",
+            Chain::Optimism => "https://optimism.drpc.org",
             Chain::Polygon => "https://polygon.llamarpc.com",
             Chain::Anvil => "http://localhost:8545",
             Chain::Mantle => "https://mantle.drpc.org",

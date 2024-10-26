@@ -193,8 +193,12 @@ async fn pick_transaction_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{block::BlockRange, chain::Chain};
-    use alloy::{eips::BlockNumberOrTag, primitives::U256, providers::ProviderBuilder};
+    use crate::common::{block::BlockRange, chain::Chain, ens::NameOrAddress};
+    use alloy::{
+        eips::BlockNumberOrTag,
+        primitives::{address, U256},
+        providers::ProviderBuilder,
+    };
 
     #[tokio::test]
     async fn test_get_transactions_by_block_range() {
@@ -239,7 +243,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_resolve_query_using_all_filters() {
+    async fn test_resolve_query_using_filters() {
+        let value = "1000000000000000".parse::<U256>().unwrap();
+        let from = address!("BF2EFaA8715d75AfC562Cde29f56B55aA0Fb219F");
+        let to = address!("3fE873889008521bf335E07CEAfdfd0D9a6864A8");
+        let gas = 22000;
+        let gas_price = 5000000000;
+        let status = true;
+
         let rpc = Chain::Ethereum.rpc_url().unwrap();
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc));
         let block_id = BlockId::Range(BlockRange::new(10000004.into(), None));
@@ -247,7 +258,12 @@ mod tests {
             None,
             Some(vec![
                 TransactionFilter::BlockId(block_id),
-                // TransactionFilter::Value(U256::from(10000000)),
+                TransactionFilter::Value(value),
+                TransactionFilter::From(NameOrAddress::Address(from)),
+                TransactionFilter::To(NameOrAddress::Address(to)),
+                TransactionFilter::Gas(gas),
+                TransactionFilter::GasPrice(gas_price),
+                TransactionFilter::Status(status),
             ]),
             TransactionField::all_variants().to_vec(),
         );
@@ -256,8 +272,23 @@ mod tests {
             .await
             .unwrap();
 
-        println!("{:#?}", transactions);
+        let tx = transactions.first().unwrap();
+        let expected_tx: TransactionQueryRes = TransactionQueryRes {
+            value: Some(value),
+            from: Some(from),
+            to: Some(to),
+            gas: Some(gas),
+            gas_price: Some(gas_price),
+            status: Some(status),
+            ..Default::default()
+        };
 
-        assert_eq!(transactions.len(), 127);
+        assert_eq!(transactions.len(), 1);
+        assert_eq!(tx.value, expected_tx.value);
+        assert_eq!(tx.from, expected_tx.from);
+        assert_eq!(tx.to, expected_tx.to);
+        assert_eq!(tx.gas, expected_tx.gas);
+        assert_eq!(tx.gas_price, expected_tx.gas_price);
+        assert_eq!(tx.status, expected_tx.status);
     }
 }
