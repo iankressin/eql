@@ -23,21 +23,19 @@ pub enum TransactionResolverErrors {
     MissingTransactionHashOrFilter,
 }
 
-/// TODO: Handle filter
 /// Resolve the query to get transactions after receiving an transaction entity expression
 /// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results.
+/// The sequence of steps to fetch transactions is:
+/// 1. Check if ids are provided.
+/// 2. If ids are provided, fetch the transactions.
+/// 3. If ids are not provided, fetch the transactions by block number.
+/// 4. If ids are not provided, then block number or block range filter must be provided.
+/// 5. Fetch the transactions by block number or block range.
+/// 6. If both ids and block number or block range filter are provided, then fetch the transactions by ids first, and filter the result by block number or block range.
 pub async fn resolve_transaction_query(
     transaction: &Transaction,
     provider: Arc<RootProvider<Http<Client>>>,
 ) -> Result<Vec<TransactionQueryRes>> {
-    // The sequence of steps to fetch transactions is:
-    // 1. Check if ids are provided.
-    // 2. If ids are provided, fetch the transactions.
-    // 3. If ids are not provided, fetch the transactions by block number.
-    // 4. If ids are not provided, then block number or block range filter must be provided.
-    // 5. Fetch the transactions by block number or block range.
-    // 6. If both ids and block number or block range filter are provided, then fetch the transactions by ids first, and filter the result by block number or block range.
-
     let ids_provided = transaction.ids().is_some();
     let block_filter_provided = match transaction.filters() {
         Some(filters) => filters
@@ -193,7 +191,12 @@ async fn pick_transaction_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{block::BlockRange, chain::Chain, ens::NameOrAddress};
+    use crate::common::{
+        block::BlockRange,
+        chain::Chain,
+        ens::NameOrAddress,
+        filters::{ComparisonFilter, EqualityFilter},
+    };
     use alloy::{
         eips::BlockNumberOrTag,
         primitives::{address, U256},
@@ -258,12 +261,12 @@ mod tests {
             None,
             Some(vec![
                 TransactionFilter::BlockId(block_id),
-                TransactionFilter::Value(value),
-                TransactionFilter::From(NameOrAddress::Address(from)),
-                TransactionFilter::To(NameOrAddress::Address(to)),
-                TransactionFilter::Gas(gas),
-                TransactionFilter::GasPrice(gas_price),
-                TransactionFilter::Status(status),
+                TransactionFilter::Value(ComparisonFilter::Lte(value)),
+                TransactionFilter::From(EqualityFilter::Eq(from)),
+                TransactionFilter::To(EqualityFilter::Eq(to)),
+                TransactionFilter::Gas(ComparisonFilter::Lte(gas)),
+                TransactionFilter::GasPrice(ComparisonFilter::Lte(gas_price)),
+                TransactionFilter::Status(EqualityFilter::Eq(status)),
             ]),
             TransactionField::all_variants().to_vec(),
         );

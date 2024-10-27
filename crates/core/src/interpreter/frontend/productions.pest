@@ -161,18 +161,18 @@ tx_filter = {
     y_parity_filter
 }
 
-from_filter_type = { address | ens}
-to_filter_type = { address }
-data_filter_type = { hex_string }
-value_filter_type = { number }
-gas_filter_type = { integer }
-status_filter_type = { ("success" | "failure") }
-max_fee_per_blob_gas_filter_type = { number }
-blob_versioned_hashes_filter_type = { hex_string }
-max_fee_per_gas_filter_type = { number }
-max_priority_fee_per_gas_filter_type = { number }
-y_parity_filter_type = { ("true" | "false") }
-gas_price_filter_type = { number }
+from_filter_type = { equality_operators ~ address | ens }
+to_filter_type = { equality_operators ~ address }
+data_filter_type = { equality_operators ~ hex_string }
+value_filter_type = { all_operators ~ number }
+gas_filter_type = { all_operators ~ integer }
+status_filter_type = { equality_operators ~ ("success" | "failure") }
+max_fee_per_blob_gas_filter_type = { all_operators ~ number }
+blob_versioned_hashes_filter_type = { equality_operators ~ hex_string }
+max_fee_per_gas_filter_type = { all_operators ~ number }
+max_priority_fee_per_gas_filter_type = { all_operators ~ number }
+y_parity_filter_type = { equality_operators ~ ("true" | "false") }
+gas_price_filter_type = { all_operators ~ number }
 
 // TODO: add support for different ether units (ether, gwei, wei)
 from_filter = _{"from" ~ from_filter_type}
@@ -227,7 +227,7 @@ event_signature_filter ={"event_signature" ~ function_signature}
 
 // Common filters
 blockrange_filter = {"block" ~ block_id}
-dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
+dump = { ">>" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
 file_name = { (ASCII_ALPHANUMERIC | "-" | "_" | "/")+ }
 file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
 
@@ -278,6 +278,17 @@ solidity_type = _{
     "bool" 
 }
 size = _{integer ~ "[]"*}
+
+all_operators = _{ equality_operators | comparison_operators }
+equality_operators = { eq_operator | neq_operator }
+comparison_operators = { gt_operator | gte_operator | lt_operator | lte_operator }
+
+eq_operator = { "=" }
+neq_operator = { "!=" }
+gt_operator = { ">" }
+gte_operator = { ">=" }
+lt_operator = { "<" }
+lte_operator = { "<=" }
 
 // Helpers
 WHITESPACE = _{ " " | "\t" | NEWLINE }
