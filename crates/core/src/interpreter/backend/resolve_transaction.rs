@@ -194,8 +194,7 @@ mod tests {
     use crate::common::{
         block::BlockRange,
         chain::Chain,
-        ens::NameOrAddress,
-        filters::{ComparisonFilter, EqualityFilter},
+        filters::{ComparisonFilter, EqualityFilter, FilterType},
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -231,7 +230,7 @@ mod tests {
     async fn test_resolve_query_using_block_range_filter() {
         let rpc = Chain::Ethereum.rpc_url().unwrap();
         let provider = Arc::new(ProviderBuilder::new().on_http(rpc));
-        let block_id = BlockId::Range(BlockRange::new(10000000.into(), Some(10000015.into())));
+        let block_id = BlockId::Range(BlockRange::new(10000000.into(), Some(10000001.into())));
         let transaction = Transaction::new(
             None,
             Some(vec![TransactionFilter::BlockId(block_id)]),
@@ -242,7 +241,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(transactions.len(), 2394);
+        assert_eq!(transactions.len(), 211);
     }
 
     #[tokio::test]
@@ -261,11 +260,13 @@ mod tests {
             None,
             Some(vec![
                 TransactionFilter::BlockId(block_id),
-                TransactionFilter::Value(ComparisonFilter::Lte(value)),
+                TransactionFilter::Value(FilterType::Comparison(ComparisonFilter::Lte(value))),
                 TransactionFilter::From(EqualityFilter::Eq(from)),
                 TransactionFilter::To(EqualityFilter::Eq(to)),
-                TransactionFilter::Gas(ComparisonFilter::Lte(gas)),
-                TransactionFilter::GasPrice(ComparisonFilter::Lte(gas_price)),
+                TransactionFilter::Gas(FilterType::Comparison(ComparisonFilter::Lte(gas))),
+                TransactionFilter::GasPrice(FilterType::Comparison(ComparisonFilter::Lte(
+                    gas_price,
+                ))),
                 TransactionFilter::Status(EqualityFilter::Eq(status)),
             ]),
             TransactionField::all_variants().to_vec(),

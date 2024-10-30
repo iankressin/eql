@@ -1,51 +1,48 @@
 use crate::interpreter::frontend::parser::Rule;
 use pest::iterators::Pair;
-use std::fmt::Debug;
 
-pub trait FilterTrait<T>: Debug {
-    fn compare(&self, a: T) -> bool;
+pub trait Filter<T> {
+    fn compare(&self, a: &T) -> bool;
 }
 
-#[derive(Debug)]
-pub struct FullFilter<T: PartialEq + PartialOrd + Copy + 'static> {
-    value: T,
-    operator: Box<dyn FilterTrait<T>>,
+#[derive(Debug, PartialEq)]
+pub enum FilterType<T> {
+    Equality(EqualityFilter<T>),
+    Comparison(ComparisonFilter<T>),
 }
 
-impl<T: PartialEq + PartialOrd + Copy + 'static> FullFilter<T> {
-    pub fn new(value: T, operator: Box<dyn FilterTrait<T>>) -> Self {
-        Self { value, operator }
+impl<T> Filter<T> for FilterType<T>
+where
+    EqualityFilter<T>: Filter<T>,
+    ComparisonFilter<T>: Filter<T>,
+{
+    fn compare(&self, a: &T) -> bool {
+        match self {
+            FilterType::Equality(filter) => filter.compare(a),
+            FilterType::Comparison(filter) => filter.compare(a),
+        }
     }
 }
 
-impl<T: PartialEq + PartialOrd + Copy + 'static> PartialEq for FullFilter<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-            && self.operator.compare(other.value) == other.operator.compare(self.value)
-    }
-}
-
-impl<T: PartialEq + PartialOrd + Copy + 'static> Eq for FullFilter<T> {}
-
-impl<T: PartialEq + PartialOrd + Copy + Debug + 'static> FilterTrait<T> for FullFilter<T> {
-    fn compare(&self, a: T) -> bool {
-        self.operator.compare(a)
-    }
-}
-
-impl<T: PartialEq + PartialOrd + Copy + Debug + 'static> TryFrom<(Pair<'_, Rule>, T)>
-    for FullFilter<T>
+impl<'a, T> TryFrom<(Pair<'a, Rule>, T)> for FilterType<T>
+where
+    EqualityFilter<T>: TryFrom<(Pair<'a, Rule>, T), Error = EqualityFilterError>,
+    ComparisonFilter<T>: TryFrom<(Pair<'a, Rule>, T), Error = ComparisonFilterError>,
 {
     type Error = FilterError;
 
-    fn try_from((pair, value): (Pair<'_, Rule>, T)) -> Result<Self, Self::Error> {
-        let operator: Box<dyn FilterTrait<T>> = match pair.as_rule() {
-            Rule::equality_operators => Box::new(EqualityFilter::try_from((pair, value))?),
-            Rule::comparison_operators => Box::new(ComparisonFilter::try_from((pair, value))?),
-            _ => return Err(FilterError::InvalidFilter(pair.as_str().to_string())),
-        };
-
-        Ok(Self { value, operator })
+    fn try_from((pair, value): (Pair<'a, Rule>, T)) -> Result<Self, Self::Error> {
+        match pair.as_rule() {
+            Rule::equality_operators => {
+                let filter = EqualityFilter::try_from((pair, value))?;
+                Ok(FilterType::Equality(filter))
+            }
+            Rule::comparison_operators => {
+                let filter = ComparisonFilter::try_from((pair, value))?;
+                Ok(FilterType::Comparison(filter))
+            }
+            _ => Err(FilterError::InvalidFilter(pair.as_str().to_string())),
+        }
     }
 }
 
@@ -87,11 +84,14 @@ impl<T> TryFrom<(Pair<'_, Rule>, T)> for EqualityFilter<T> {
     }
 }
 
-impl<T: PartialEq + Debug> FilterTrait<T> for EqualityFilter<T> {
-    fn compare(&self, a: T) -> bool {
+impl<T> Filter<T> for EqualityFilter<T>
+where
+    T: PartialEq,
+{
+    fn compare(&self, a: &T) -> bool {
         match self {
-            EqualityFilter::Eq(value) => a == *value,
-            EqualityFilter::Neq(value) => a != *value,
+            EqualityFilter::Eq(value) => a == value,
+            EqualityFilter::Neq(value) => a != value,
         }
     }
 }
@@ -104,13 +104,16 @@ pub enum ComparisonFilter<T> {
     Lte(T),
 }
 
-impl<T: PartialOrd + Debug> FilterTrait<T> for ComparisonFilter<T> {
-    fn compare(&self, a: T) -> bool {
+impl<T> Filter<T> for ComparisonFilter<T>
+where
+    T: PartialOrd,
+{
+    fn compare(&self, a: &T) -> bool {
         match self {
-            ComparisonFilter::Gt(value) => a > *value,
-            ComparisonFilter::Gte(value) => a >= *value,
-            ComparisonFilter::Lt(value) => a < *value,
-            ComparisonFilter::Lte(value) => a <= *value,
+            ComparisonFilter::Gt(value) => a > value,
+            ComparisonFilter::Gte(value) => a >= value,
+            ComparisonFilter::Lt(value) => a < value,
+            ComparisonFilter::Lte(value) => a <= value,
         }
     }
 }
@@ -135,5 +138,40 @@ impl<T> TryFrom<(Pair<'_, Rule>, T)> for ComparisonFilter<T> {
                 inner_operator.as_str().to_string(),
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_equality_filter() {
+        let filter = EqualityFilter::Eq(1);
+        assert!(filter.compare(&1));
+        assert!(!filter.compare(&2));
+    }
+
+    #[test]
+    fn test_comparison_filter() {
+        let filter = ComparisonFilter::Gt(1);
+        assert!(filter.compare(&2));
+        assert!(!filter.compare(&1));
+        assert!(!filter.compare(&0));
+    }
+
+    #[test]
+    fn test_filter_type_equality() {
+        let filter = FilterType::Equality(EqualityFilter::Eq(1));
+        assert!(filter.compare(&1));
+        assert!(!filter.compare(&2));
+    }
+
+    #[test]
+    fn test_filter_type_comparison() {
+        let filter = FilterType::Comparison(ComparisonFilter::Lt(5));
+        assert!(filter.compare(&3));
+        assert!(!filter.compare(&5));
+        assert!(!filter.compare(&7));
     }
 }

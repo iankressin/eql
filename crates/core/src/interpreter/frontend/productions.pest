@@ -165,14 +165,14 @@ from_filter_type = { equality_operators ~ address | ens }
 to_filter_type = { equality_operators ~ address }
 data_filter_type = { equality_operators ~ hex_string }
 value_filter_type = { all_operators ~ number }
-gas_filter_type = { all_operators ~ integer }
-status_filter_type = { equality_operators ~ ("success" | "failure") }
+gas_filter_type = { all_operators ~ number }
+gas_price_filter_type = { all_operators ~ number }
+status_filter_type = { equality_operators ~ boolean }
 max_fee_per_blob_gas_filter_type = { all_operators ~ number }
 blob_versioned_hashes_filter_type = { equality_operators ~ hex_string }
 max_fee_per_gas_filter_type = { all_operators ~ number }
 max_priority_fee_per_gas_filter_type = { all_operators ~ number }
-y_parity_filter_type = { equality_operators ~ ("true" | "false") }
-gas_price_filter_type = { all_operators ~ number }
+y_parity_filter_type = { equality_operators ~ boolean }
 
 // TODO: add support for different ether units (ether, gwei, wei)
 from_filter = _{"from" ~ from_filter_type}
@@ -217,13 +217,13 @@ log_filter = {
     event_signature_filter
 }
 // Log filters
-address_filter = {"address" ~ address}
-topic0_filter = {"topic0" ~ hash}
-topic1_filter = {"topic1" ~ hash}
-topic2_filter = {"topic2" ~ hash}
-topic3_filter = {"topic3" ~ hash}
-blockhash_filter = {"block_hash" ~ hash}
-event_signature_filter ={"event_signature" ~ function_signature}
+address_filter = {"address" ~ eq_operator ~ address}
+topic0_filter = {"topic0" ~ eq_operator ~ hash}
+topic1_filter = {"topic1" ~ eq_operator ~ hash}
+topic2_filter = {"topic2" ~ eq_operator ~ hash}
+topic3_filter = {"topic3" ~ eq_operator ~ hash}
+blockhash_filter = {"block_hash" ~ eq_operator ~ hash}
+event_signature_filter ={"event_signature" ~ eq_operator ~ function_signature}
 
 // Common filters
 blockrange_filter = {"block" ~ block_id}
@@ -234,8 +234,8 @@ file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
 // Terminals
 unit = { "ether" | "gwei" | "wei" }
 number = _{ float | integer }
-integer = _{ (ASCII_DIGIT)+ }
-float = _{ integer ~ "." ~ integer }
+integer = { (ASCII_DIGIT)+ }
+float = { integer ~ "." ~ integer }
 chain = {
     "eth" |
     "arb" |
@@ -268,6 +268,7 @@ address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 hex_string = { "0x" ~ ASCII_HEX_DIGIT{1,} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
+boolean = { "true" | "false" }
 function_signature = { ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
 solidity_type = _{ 
     ("uint" ~ size | "uint[]" | "uint" ) |
@@ -281,7 +282,7 @@ size = _{integer ~ "[]"*}
 
 all_operators = _{ equality_operators | comparison_operators }
 equality_operators = { eq_operator | neq_operator }
-comparison_operators = { gt_operator | gte_operator | lt_operator | lte_operator }
+comparison_operators = { gte_operator | gt_operator | lte_operator | lt_operator }
 
 eq_operator = { "=" }
 neq_operator = { "!=" }

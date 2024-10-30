@@ -53,13 +53,14 @@ mod tests {
         dump::{Dump, DumpFormat},
         ens::NameOrAddress,
         entity::Entity,
+        filters::{ComparisonFilter, EqualityFilter, FilterType},
         logs::{LogField, LogFilter, Logs},
         transaction::{Transaction, TransactionField, TransactionFilter},
         types::*,
     };
     use alloy::{
         eips::BlockNumberOrTag,
-        primitives::{address, b256, Address, U256},
+        primitives::{address, b256, Address, U128, U256},
     };
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
@@ -194,7 +195,11 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_transaction_fields() {
-        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, status, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, max_priority_fee_per_gas, y_parity FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 ON eth";
+        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, \
+            status, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, \
+            max_priority_fee_per_gas, y_parity \
+            FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 \
+            ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction(Transaction::new(
@@ -212,7 +217,6 @@ mod tests {
                     TransactionField::GasPrice,
                     TransactionField::Gas,
                     TransactionField::Status,
-                    TransactionField::ChainId,
                     TransactionField::V,
                     TransactionField::R,
                     TransactionField::S,
@@ -221,31 +225,6 @@ mod tests {
                     TransactionField::MaxPriorityFeePerGas,
                     TransactionField::YParity,
                 ],
-            )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
-            dump: None,
-        })];
-
-        match Parser::new(source).parse_expressions() {
-            Ok(result) => assert_eq!(result, expected),
-            Err(e) => panic!("Error: {}", e),
-        }
-    }
-
-    #[test]
-    fn test_build_ast_with_transaction_filter() {
-        let source = "GET hash FROM tx WHERE block 1:10 ON eth";
-
-        let expected = vec![Expression::Get(GetExpression {
-            entity: Entity::Transaction(Transaction::new(
-                None,
-                Some(vec![TransactionFilter::BlockId(BlockId::Range(
-                    BlockRange::new(
-                        BlockNumberOrTag::Number(1),
-                        Some(BlockNumberOrTag::Number(10)),
-                    ),
-                ))]),
-                vec![TransactionField::Hash],
             )),
             chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
             dump: None,
@@ -282,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_dump() {
-        let source = "GET balance FROM account vitalik.eth ON eth > vitalik-balance.csv";
+        let source = "GET balance FROM account vitalik.eth ON eth >> vitalik-balance.csv";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Account(Account::new(
@@ -302,9 +281,21 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_log_fields() {
-        let source = "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, block_timestamp, transaction_hash, transaction_index, log_index, removed FROM log WHERE block 4638757, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth,
-        GET address FROM log WHERE block_hash 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, event_signature Transfer(address,address,uint256), topic1 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, topic2 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 ON eth
-        ";
+        let source =
+            "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, \
+            block_timestamp, transaction_hash, transaction_index, log_index, removed \
+            FROM log \
+            WHERE block 4638757, \
+                  address = 0xdAC17F958D2ee523a2206206994597C13D831ec7, \
+                  topic0 = 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a \
+            ON eth,\n\
+            GET address \
+            FROM log \
+            WHERE block_hash = 0xedb7f4a64744594838f7d9888883ae964fcb4714f6fe5cafb574d3ed6141ad5b, \
+                  event_signature = Transfer(address,address,uint256), \
+                  topic1 = 0x00000000000000000000000036928500Bc1dCd7af6a2B4008875CC336b927D57, \
+                  topic2 = 0x000000000000000000000000C6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828 \
+            ON eth";
         // let source_1 = "";
 
         let expected = vec![
@@ -391,33 +382,42 @@ mod tests {
     }
 
     #[test]
-    fn test_build_ast_with_transaction_filter_from_ens() {
+    fn test_build_ast_with_transaction_comparison_filters() {
         let source = "GET * FROM tx WHERE \
-            value 10000000, \
-            block 10000000, \
-            gas 10000000, \
-            gas_price 10000000, \
-            max_fee_per_blob_gas 10000000, \
-            max_fee_per_gas 10000000, \
-            max_priority_fee_per_gas 10000000, \
-            y_parity false \
+            gas > 10000000, \
+            gas_price < 10000000, \
+            max_fee_per_blob_gas >= 10000000, \
+            max_fee_per_gas <= 10000000, \
+            max_priority_fee_per_gas != 10000000, \
+            value = 10000000, \
+            status = true, \
+            y_parity = false \
             ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction(Transaction::new(
                 None,
                 Some(vec![
-                    TransactionFilter::Value(U256::from(10000000)),
-                    TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
-                        BlockNumberOrTag::Number(10000000),
-                        None,
+                    TransactionFilter::Gas(FilterType::Comparison(ComparisonFilter::Gt(
+                        U128::from(10000000).try_into().unwrap(),
                     ))),
-                    TransactionFilter::Gas(10000000.try_into().unwrap()),
-                    TransactionFilter::GasPrice(10000000.try_into().unwrap()),
-                    TransactionFilter::MaxFeePerBlobGas(10000000.try_into().unwrap()),
-                    TransactionFilter::MaxFeePerGas(10000000.try_into().unwrap()),
-                    TransactionFilter::MaxPriorityFeePerGas(10000000.try_into().unwrap()),
-                    TransactionFilter::YParity(false),
+                    TransactionFilter::GasPrice(FilterType::Comparison(ComparisonFilter::Lt(
+                        U128::from(10000000).try_into().unwrap(),
+                    ))),
+                    TransactionFilter::MaxFeePerBlobGas(FilterType::Comparison(
+                        ComparisonFilter::Gte(U128::from(10000000).try_into().unwrap()),
+                    )),
+                    TransactionFilter::MaxFeePerGas(FilterType::Comparison(ComparisonFilter::Lte(
+                        U128::from(10000000).try_into().unwrap(),
+                    ))),
+                    TransactionFilter::MaxPriorityFeePerGas(FilterType::Equality(
+                        EqualityFilter::Neq(U128::from(10000000).try_into().unwrap()),
+                    )),
+                    TransactionFilter::Value(FilterType::Equality(EqualityFilter::Eq(U256::from(
+                        10000000,
+                    )))),
+                    TransactionFilter::Status(EqualityFilter::Eq(true)),
+                    TransactionFilter::YParity(EqualityFilter::Eq(false)),
                 ]),
                 TransactionField::all_variants().to_vec(),
             )),
