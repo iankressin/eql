@@ -52,19 +52,14 @@ impl Logs {
 pub enum LogsError {
     #[error("Invalid log filter {0}")]
     InvalidLogFilter(String),
-
     #[error(transparent)]
     FromHexError(#[from] FromHexError),
-
     #[error(transparent)]
     ParserError(#[from] ParserError),
-
     #[error(transparent)]
     EntityIdError(#[from] EntityIdError),
-
     #[error(transparent)]
     AddressError(#[from] AddressError),
-
     #[error(transparent)]
     LogFieldError(#[from] LogFieldError),
 }
@@ -130,61 +125,64 @@ impl TryFrom<Pair<'_, Rule>> for LogFilter {
     type Error = LogsError;
 
     fn try_from(pair: Pair<'_, Rule>) -> Result<Self, Self::Error> {
+        // Move helper function outside the main function since it doesn't capture anything
+        fn extract_value<T, F>(pairs: Pair<'_, Rule>, parser: F) -> Result<T, LogsError>
+        where
+            F: FnOnce(&str) -> Result<T, LogsError>,
+        {
+            let mut inner_pairs = pairs.into_inner();
+            inner_pairs.next().ok_or_else(|| {
+                LogsError::InvalidLogFilter("Missing operator in filter".to_string())
+            })?;
+            parser(inner_pairs.as_str())
+        }
+
         match pair.as_rule() {
-            Rule::address_filter => {
-                let tochecksum = pair.as_str().trim_start_matches("address ").trim();
-                let address = Address::parse_checksummed(tochecksum, None)?;
-                Ok(LogFilter::EmitterAddress(address))
+            Rule::address_filter_type => extract_value(pair, |s| {
+                Ok(LogFilter::EmitterAddress(Address::parse_checksummed(
+                    s, None,
+                )?))
+            }),
+            Rule::blockrange_filter => parse_block_range(pair),
+            Rule::blockhash_filter_type => {
+                extract_value(pair, |s| Ok(LogFilter::BlockHash(s.parse::<B256>()?)))
             }
-            Rule::blockrange_filter => {
-                let range = pair.as_str().trim_start_matches("block ").trim();
-                let (start, end) = match range.split_once(":") {
-                    //if ":" is present, we have an start and an end.
-                    Some((start, end)) => (
-                        parse_block_number_or_tag(start)?,
-                        Some(parse_block_number_or_tag(end)?),
-                    ),
-                    //else we only have start.
-                    None => (parse_block_number_or_tag(range)?, None),
-                };
-                Ok(LogFilter::BlockRange(BlockRange::new(start, end)))
+            Rule::event_signature_filter_type => {
+                extract_value(pair, |s| Ok(LogFilter::EventSignature(s.to_string())))
             }
-            Rule::blockhash_filter => {
-                let hash = pair
-                    .as_str()
-                    .trim_start_matches("blockhash ")
-                    .trim_start_matches("block_hash ")
-                    .trim();
-                let hash = hash.parse::<B256>()?;
-                Ok(LogFilter::BlockHash(hash))
+            Rule::topic0_filter_type => {
+                extract_value(pair, |s| Ok(LogFilter::Topic0(s.parse::<B256>()?)))
             }
-            Rule::event_signature_filter => {
-                let signature = pair.as_str().trim_start_matches("event_signature ").trim();
-                Ok(LogFilter::EventSignature(signature.to_string()))
+            Rule::topic1_filter_type => {
+                extract_value(pair, |s| Ok(LogFilter::Topic1(s.parse::<B256>()?)))
             }
-            Rule::topic0_filter => {
-                let topic = pair.as_str().trim_start_matches("topic0 ").trim();
-                let topic = topic.parse::<B256>()?;
-                Ok(LogFilter::Topic0(topic))
+            Rule::topic2_filter_type => {
+                extract_value(pair, |s| Ok(LogFilter::Topic2(s.parse::<B256>()?)))
             }
-            Rule::topic1_filter => {
-                let topic = pair.as_str().trim_start_matches("topic1 ").trim();
-                let topic = topic.parse::<B256>()?;
-                Ok(LogFilter::Topic1(topic))
-            }
-            Rule::topic2_filter => {
-                let topic = pair.as_str().trim_start_matches("topic2 ").trim();
-                let topic = topic.parse::<B256>()?;
-                Ok(LogFilter::Topic2(topic))
-            }
-            Rule::topic3_filter => {
-                let topic = pair.as_str().trim_start_matches("topic3 ").trim();
-                let topic = topic.parse::<B256>()?;
-                Ok(LogFilter::Topic3(topic))
+            Rule::topic3_filter_type => {
+                extract_value(pair, |s| Ok(LogFilter::Topic3(s.parse::<B256>()?)))
             }
             _ => Err(LogsError::InvalidLogFilter(pair.as_str().to_string())),
         }
     }
+}
+
+// Helper function to handle block range parsing
+fn parse_block_range(pair: Pair<'_, Rule>) -> Result<LogFilter, LogsError> {
+    let range = pair
+        .as_str()
+        .strip_prefix("block")
+        .and_then(|s| s.find('=').map(|i| s[i + 1..].trim()))
+        .ok_or_else(|| LogsError::InvalidLogFilter("Invalid block range format".to_string()))?;
+
+    let (start, end) = match range.split_once(':') {
+        Some((start, end)) => (
+            parse_block_number_or_tag(start)?,
+            Some(parse_block_number_or_tag(end)?),
+        ),
+        None => (parse_block_number_or_tag(range)?, None),
+    };
+    Ok(LogFilter::BlockRange(BlockRange::new(start, end)))
 }
 
 impl LogFilter {

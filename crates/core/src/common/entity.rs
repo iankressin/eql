@@ -28,7 +28,7 @@ pub enum EntityError {
     AccountError(#[from] AccountError),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Entity {
     Account(Account),
     Block(Block),

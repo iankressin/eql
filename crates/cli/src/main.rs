@@ -2,7 +2,7 @@ mod repl;
 
 use crate::repl::Repl;
 use clap::{Parser, Subcommand};
-use csv::{ReaderBuilder, Writer};
+use csv::ReaderBuilder;
 use eql_core::{
     common::query_result::{ExpressionResult, QueryResult},
     interpreter::Interpreter,
@@ -65,17 +65,20 @@ impl ResultHandler {
     }
 }
 
-pub fn to_table<S: Serialize>(data: Vec<S>) -> Result<Table, Box<dyn Error>> {
-    let mut writer = Writer::from_writer(vec![]);
+pub fn to_table<S: Serialize + core::fmt::Debug>(data: Vec<S>) -> Result<Table, Box<dyn Error>> {
+    let mut writer = csv::WriterBuilder::new()
+        .flexible(true) // Enable flexible mode
+        .from_writer(vec![]);
 
     for entry in data {
-        writer.serialize(entry).unwrap();
+        writer.serialize(entry)?;
     }
 
-    let data = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+    let data = String::from_utf8(writer.into_inner()?)?;
     let mut builder = Builder::default();
     let reader = ReaderBuilder::new()
         .has_headers(false)
+        .flexible(true)
         .from_reader(data.as_bytes());
 
     for record in reader.into_records() {

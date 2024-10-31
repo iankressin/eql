@@ -160,18 +160,33 @@ tx_filter = {
     max_priority_fee_per_gas_filter |
     y_parity_filter
 }
-from_filter = {"from" ~ address | ens}
-to_filter = {"to" ~ address}
-data_filter = {"data" ~ hex_string}
-value_filter = {"value" ~ number ~ unit}
-gas_price_filter = {"gas_price" ~ number ~ unit}
-gas_filter = {"gas" ~ integer}
-status_filter = {"status" ~ "success" | "failure"}
-max_fee_per_blob_gas_filter = {"max_fee_per_blob_gas" ~ number ~ unit}
-blob_versioned_hashes_filter = {"blob_versioned_hashes" ~ hex_string}
-max_fee_per_gas_filter = {"max_fee_per_gas" ~ number ~ unit}
-max_priority_fee_per_gas_filter = {"max_priority_fee_per_gas" ~ number ~ unit}
-y_parity_filter = {"y_parity" ~ "0x" ~ hex_string}
+
+from_filter_type = { equality_operators ~ address | ens }
+to_filter_type = { equality_operators ~ address }
+data_filter_type = { equality_operators ~ hex_string }
+value_filter_type = { all_operators ~ number }
+gas_filter_type = { all_operators ~ number }
+gas_price_filter_type = { all_operators ~ number }
+status_filter_type = { equality_operators ~ boolean }
+max_fee_per_blob_gas_filter_type = { all_operators ~ number }
+blob_versioned_hashes_filter_type = { equality_operators ~ hex_string }
+max_fee_per_gas_filter_type = { all_operators ~ number }
+max_priority_fee_per_gas_filter_type = { all_operators ~ number }
+y_parity_filter_type = { equality_operators ~ boolean }
+
+// TODO: add support for different ether units (ether, gwei, wei)
+from_filter = _{"from" ~ from_filter_type}
+to_filter = _{"to" ~ to_filter_type}
+data_filter = _{"data" ~ data_filter_type}
+value_filter = _{"value" ~ value_filter_type}
+gas_price_filter = _{"gas_price" ~ gas_price_filter_type}
+gas_filter = _{"gas" ~ gas_filter_type}
+status_filter = _{"status" ~ status_filter_type}
+max_fee_per_blob_gas_filter = _{"max_fee_per_blob_gas" ~ max_fee_per_blob_gas_filter_type}
+blob_versioned_hashes_filter = _{"blob_versioned_hashes" ~ blob_versioned_hashes_filter_type}
+max_fee_per_gas_filter = _{"max_fee_per_gas" ~ max_fee_per_gas_filter_type}
+max_priority_fee_per_gas_filter = _{"max_priority_fee_per_gas" ~ max_priority_fee_per_gas_filter_type}
+y_parity_filter = _{"y_parity" ~ y_parity_filter_type}
 
 // Log
 log_field_list = _{ log_field ~ ("," ~ WHITESPACE* ~ log_field)* }
@@ -201,26 +216,36 @@ log_filter = {
     blockrange_filter |
     event_signature_filter
 }
+// Log filter types
+address_filter_type = { equality_operators ~ address }
+topic0_filter_type = { equality_operators ~ hash }
+topic1_filter_type = { equality_operators ~ hash }
+topic2_filter_type = { equality_operators ~ hash }
+topic3_filter_type = { equality_operators ~ hash }
+blockhash_filter_type = { equality_operators ~ hash }
+event_signature_filter_type = { equality_operators ~ function_signature }
 // Log filters
-address_filter = {"address" ~ address}
-topic0_filter = {"topic0" ~ hash}
-topic1_filter = {"topic1" ~ hash}
-topic2_filter = {"topic2" ~ hash}
-topic3_filter = {"topic3" ~ hash}
-blockhash_filter = {"block_hash" ~ hash}
-event_signature_filter ={"event_signature" ~ function_signature}
+address_filter = _{ "address" ~ address_filter_type }
+topic0_filter = _{ "topic0" ~ topic0_filter_type }
+topic1_filter = _{ "topic1" ~ topic1_filter_type }
+topic2_filter = _{ "topic2" ~ topic2_filter_type }
+topic3_filter = _{ "topic3" ~ topic3_filter_type }
+blockhash_filter = _{ "block_hash" ~ blockhash_filter_type }
+event_signature_filter = _{ "event_signature" ~ event_signature_filter_type }
 
 // Common filters
-blockrange_filter = {"block" ~ block_id}
-dump = { ">" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
+blockrange_filter_type = { eq_operator ~ block_id }
+blockrange_filter = {"block" ~ blockrange_filter_type}
+
+dump = { ">>" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
 file_name = { (ASCII_ALPHANUMERIC | "-" | "_" | "/")+ }
 file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
 
 // Terminals
 unit = { "ether" | "gwei" | "wei" }
 number = _{ float | integer }
-integer = _{ (ASCII_DIGIT)+ }
-float = _{ integer ~ "." ~ integer }
+integer = { (ASCII_DIGIT)+ }
+float = { integer ~ "." ~ integer }
 chain = {
     "eth" |
     "arb" |
@@ -253,8 +278,9 @@ address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
 hash = { "0x" ~ (ASCII_HEX_DIGIT){64} }
 hex_string = { "0x" ~ ASCII_HEX_DIGIT{1,} }
 ens = { (ASCII_ALPHANUMERIC)+ ~ ".eth" }
-function_signature = { ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
-solidity_type = _{ 
+boolean = { "true" | "false" }
+function_signature = @{ ASCII_ALPHANUMERIC+ ~ "(" ~ solidity_type* ~ ("," ~ solidity_type)* ~ ")" }
+solidity_type = { 
     ("uint" ~ size | "uint[]" | "uint" ) |
     ("bytes" ~ size | "bytes[]" | "bytes" ) |
     ("int" ~ size | "int[]" | "int" ) |
@@ -263,6 +289,17 @@ solidity_type = _{
     "bool" 
 }
 size = _{integer ~ "[]"*}
+
+all_operators = _{ equality_operators | comparison_operators }
+equality_operators = { eq_operator | neq_operator }
+comparison_operators = { gte_operator | gt_operator | lte_operator | lt_operator }
+
+eq_operator = { "=" | " "}
+neq_operator = { "!=" }
+gt_operator = { ">" }
+gte_operator = { ">=" }
+lt_operator = { "<" }
+lte_operator = { "<=" }
 
 // Helpers
 WHITESPACE = _{ " " | "\t" | NEWLINE }

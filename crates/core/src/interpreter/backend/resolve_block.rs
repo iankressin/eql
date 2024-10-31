@@ -5,6 +5,7 @@ use crate::common::{
 use alloy::{
     eips::BlockNumberOrTag,
     providers::{Provider, RootProvider},
+    rpc::types::Block as RpcBlock,
     transports::http::{Client, Http},
 };
 use anyhow::Result;
@@ -41,41 +42,13 @@ pub async fn resolve_block_query(
         let provider = Arc::clone(&provider);
         let fields = block.fields().clone();
         let block_future = async move {
-            match id {
-                BlockId::Range(block_range) => {
-                    let (start_block, end_block) = block_range.range();
-                    let start_block_number =
-                        get_block_number_from_tag(provider.clone(), start_block).await?;
-                    let end_block_number = match end_block {
-                        Some(end) => Some(get_block_number_from_tag(provider.clone(), end).await?),
-                        None => None,
-                    };
-
-                    if let Some(end_number) = end_block_number {
-                        if start_block_number > end_number {
-                            return Err(
-                                BlockResolverErrors::StartBlockMustBeGreaterThanEndBlock.into()
-                            );
-                        }
-
-                        batch_get_block(
-                            (start_block_number..=end_number).collect(),
-                            fields.clone(),
-                            provider.clone(),
-                        )
-                        .await
-                    } else {
-                        batch_get_block(vec![start_block_number], fields.clone(), provider.clone())
-                            .await
-                    }
-                }
+            let block_numbers = match id {
+                BlockId::Range(block_range) => block_range.resolve_block_numbers(&provider).await?,
                 BlockId::Number(block_number) => {
-                    let block_numbers = vec![block_number.clone()];
-                    let block_numbers =
-                        resolve_block_numbers(&block_numbers, provider.clone()).await?;
-                    batch_get_block(block_numbers, fields.clone(), provider.clone()).await
+                    resolve_block_numbers(&[block_number.clone()], provider.clone()).await?
                 }
-            }
+            };
+            get_block_and_filter_fields(block_numbers, provider.clone(), fields.clone()).await
         };
 
         block_futures.push(block_future);
@@ -85,6 +58,20 @@ pub async fn resolve_block_query(
     Ok(block_res.into_iter().flatten().collect())
 }
 
+async fn get_block_and_filter_fields(
+    block_numbers: Vec<u64>,
+    provider: Arc<RootProvider<Http<Client>>>,
+    fields: Vec<BlockField>,
+) -> Result<Vec<BlockQueryRes>> {
+    let blocks = batch_get_blocks(block_numbers, &provider, false).await?;
+    Ok(blocks
+        .into_iter()
+        .map(|block| filter_fields(block, &fields))
+        .collect())
+}
+
+// TODO: this method only exists here because it wasn't implemented on the BlockId struct yet.
+// BlockRange has a similar implementation and should be unified.
 async fn resolve_block_numbers(
     block_numbers: &[BlockNumberOrTag],
     provider: Arc<RootProvider<Http<Client>>>,
@@ -94,7 +81,7 @@ async fn resolve_block_numbers(
     for block_number in block_numbers {
         let provider = Arc::clone(&provider);
         let block_number_future =
-            async move { get_block_number_from_tag(provider, block_number.clone()).await };
+            async move { get_block_number_from_tag(provider, block_number).await };
         block_number_futures.push(block_number_future);
     }
 
@@ -102,22 +89,18 @@ async fn resolve_block_numbers(
     Ok(block_numbers)
 }
 
-async fn batch_get_block(
+pub async fn batch_get_blocks(
     block_numbers: Vec<u64>,
-    fields: Vec<BlockField>,
-    provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<Vec<BlockQueryRes>> {
+    provider: &Arc<RootProvider<Http<Client>>>,
+    hydrate: bool,
+) -> Result<Vec<RpcBlock>> {
     let mut block_futures = Vec::new();
 
-    // let x = start_block..=end_block;
     for block_number in block_numbers {
-        let fields = fields.clone();
         let provider = Arc::clone(&provider);
-
         let block_future = async move {
-            get_block(BlockNumberOrTag::Number(block_number), fields, provider).await
+            get_block(BlockNumberOrTag::Number(block_number), provider, hydrate).await
         };
-
         block_futures.push(block_future);
     }
 
@@ -125,89 +108,95 @@ async fn batch_get_block(
     Ok(block_results)
 }
 
-async fn get_block(
+pub async fn get_block(
     block_id: BlockNumberOrTag,
-    fields: Vec<BlockField>,
     provider: Arc<RootProvider<Http<Client>>>,
-) -> Result<BlockQueryRes> {
-    let mut result = BlockQueryRes::default();
-
-    match provider.get_block_by_number(block_id, false).await? {
-        Some(block) => {
-            for field in fields {
-                match field {
-                    BlockField::Timestamp => {
-                        result.timestamp = Some(block.header.timestamp);
-                    }
-                    BlockField::Number => {
-                        result.number = block.header.number;
-                    }
-                    BlockField::Hash => {
-                        result.hash = block.header.hash;
-                    }
-                    BlockField::ParentHash => {
-                        result.parent_hash = Some(block.header.parent_hash);
-                    }
-                    BlockField::Size => {
-                        result.size = block.size;
-                    }
-                    BlockField::StateRoot => {
-                        result.state_root = Some(block.header.state_root);
-                    }
-                    BlockField::TransactionsRoot => {
-                        result.transactions_root = Some(block.header.transactions_root);
-                    }
-                    BlockField::ReceiptsRoot => {
-                        result.receipts_root = Some(block.header.receipts_root);
-                    }
-                    BlockField::LogsBloom => {
-                        result.logs_bloom = Some(block.header.logs_bloom);
-                    }
-                    BlockField::ExtraData => {
-                        result.extra_data = Some(block.header.extra_data.clone());
-                    }
-                    BlockField::MixHash => {
-                        result.mix_hash = block.header.mix_hash;
-                    }
-                    BlockField::TotalDifficulty => {
-                        result.total_difficulty = block.header.total_difficulty;
-                    }
-                    BlockField::BaseFeePerGas => {
-                        result.base_fee_per_gas = block.header.base_fee_per_gas;
-                    }
-                    BlockField::WithdrawalsRoot => {
-                        result.withdrawals_root = block.header.withdrawals_root;
-                    }
-                    BlockField::BlobGasUsed => {
-                        result.blob_gas_used = block.header.blob_gas_used;
-                    }
-                    BlockField::ExcessBlobGas => {
-                        result.excess_blob_gas = block.header.excess_blob_gas;
-                    }
-                    BlockField::ParentBeaconBlockRoot => {
-                        result.parent_beacon_block_root = block.header.parent_beacon_block_root;
-                    }
-                }
-            }
-        }
+    hydrate: bool,
+) -> Result<RpcBlock> {
+    match provider.get_block_by_number(block_id, hydrate).await? {
+        Some(block) => Ok(block),
         None => return Err(BlockResolverErrors::UnableToFetchBlockNumber(block_id.clone()).into()),
     }
+}
 
-    Ok(result)
+fn filter_fields(block: RpcBlock, fields: &[BlockField]) -> BlockQueryRes {
+    let mut result = BlockQueryRes::default();
+
+    for field in fields {
+        match field {
+            BlockField::Timestamp => {
+                result.timestamp = Some(block.header.timestamp);
+            }
+            BlockField::Number => {
+                result.number = block.header.number;
+            }
+            BlockField::Hash => {
+                result.hash = block.header.hash;
+            }
+            BlockField::ParentHash => {
+                result.parent_hash = Some(block.header.parent_hash);
+            }
+            BlockField::Size => {
+                result.size = block.size;
+            }
+            BlockField::StateRoot => {
+                result.state_root = Some(block.header.state_root);
+            }
+            BlockField::TransactionsRoot => {
+                result.transactions_root = Some(block.header.transactions_root);
+            }
+            BlockField::ReceiptsRoot => {
+                result.receipts_root = Some(block.header.receipts_root);
+            }
+            BlockField::LogsBloom => {
+                result.logs_bloom = Some(block.header.logs_bloom);
+            }
+            BlockField::ExtraData => {
+                result.extra_data = Some(block.header.extra_data.clone());
+            }
+            BlockField::MixHash => {
+                result.mix_hash = block.header.mix_hash;
+            }
+            BlockField::TotalDifficulty => {
+                result.total_difficulty = block.header.total_difficulty;
+            }
+            BlockField::BaseFeePerGas => {
+                result.base_fee_per_gas = block.header.base_fee_per_gas;
+            }
+            BlockField::WithdrawalsRoot => {
+                result.withdrawals_root = block.header.withdrawals_root;
+            }
+            BlockField::BlobGasUsed => {
+                result.blob_gas_used = block.header.blob_gas_used;
+            }
+            BlockField::ExcessBlobGas => {
+                result.excess_blob_gas = block.header.excess_blob_gas;
+            }
+            BlockField::ParentBeaconBlockRoot => {
+                result.parent_beacon_block_root = block.header.parent_beacon_block_root;
+            }
+        }
+    }
+
+    result
 }
 
 async fn get_block_number_from_tag(
     provider: Arc<RootProvider<Http<Client>>>,
-    number_or_tag: BlockNumberOrTag,
+    number_or_tag: &BlockNumberOrTag,
 ) -> Result<u64> {
     match number_or_tag {
-        BlockNumberOrTag::Number(number) => Ok(number),
-        block_tag => match provider.get_block_by_number(block_tag, false).await? {
+        BlockNumberOrTag::Number(number) => Ok(*number),
+        block_tag => match provider.get_block_by_number(*block_tag, false).await? {
             Some(block) => match block.header.number {
                 Some(number) => Ok(number),
-                None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
+                None => {
+                    Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
+                }
             },
-            None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
+            None => {
+                Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
+            }
         },
     }
 }
@@ -219,7 +208,7 @@ mod tests {
     use alloy::providers::ProviderBuilder;
 
     #[tokio::test]
-    async fn test_resolve_block_query_when_start_is_greater_than_end() {
+    async fn test_error_when_start_block_is_greater_than_end_block() {
         let start_block = 10;
         let end_block = 5;
         // Empty fields for simplicity
@@ -236,11 +225,11 @@ mod tests {
             fields,
         );
 
-        let result = resolve_block_query(&block, provider)
-            .await
-            .unwrap_err()
-            .to_string();
-
-        assert_eq!(result, "Start block must be greater than end block");
+        let result = resolve_block_query(&block, provider).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Start block must be greater than end block"
+        );
     }
 }

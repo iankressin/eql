@@ -12,14 +12,14 @@
 - [x] Add support for more EVM chains
 
 ### v0.1.4-alpha
-- [ ] Get transactions from blocks:
+- [x] Get transactions from blocks:
 `GET from, to FROM transaction WHERE tx.value 1, block 1:10 ON eth`
 - [ ] Wildcard operator for both fields and chains:
  `GET * FROM account vitalik.eth ON *`
 - [ ] REPL improvements: Save query history, fix minor bugs
 
 ### v0.1.5-alpha
-- [ ] User configurable RPC list
+- [x] User configurable RPC list
 - [ ] Support to transaction receipt fields under transaction entity
 - [ ] Smart-contract support:
  `GET balanceOf(0x...) FROM contract 0x... ON polygon`

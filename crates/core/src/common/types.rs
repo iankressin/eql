@@ -7,12 +7,12 @@ use crate::interpreter::frontend::parser::Rule;
 use alloy::transports::http::reqwest::Url;
 use pest::iterators::Pairs;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Expression {
     Get(GetExpression),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct GetExpression {
     pub entity: Entity,
     pub chain_or_rpc: ChainOrRpc,
