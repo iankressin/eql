@@ -12,7 +12,7 @@
 - [x] Add support for more EVM chains
 
 ### v0.1.4-alpha
-- [ ] Get transactions from blocks:
+- [x] Get transactions from blocks:
 `GET from, to FROM transaction WHERE tx.value 1, block 1:10 ON eth`
 - [ ] Wildcard operator for both fields and chains:
  `GET * FROM account vitalik.eth ON *`
