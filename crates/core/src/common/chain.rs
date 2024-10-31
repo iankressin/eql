@@ -1,10 +1,15 @@
 use crate::interpreter::frontend::parser::Rule;
 
 use super::config::Config;
-use alloy::transports::http::reqwest::Url;
+use alloy::{
+    providers::{Provider, ProviderBuilder},
+    transports::http::reqwest::Url,
+};
 use anyhow::Result;
 use core::fmt;
+use eql_macros::EnumVariants;
 use pest::iterators::Pairs;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ChainOrRpc {
@@ -19,9 +24,21 @@ impl ChainOrRpc {
             ChainOrRpc::Rpc(url) => Ok(url.clone()),
         }
     }
+
+    pub async fn to_chain(&self) -> Result<Chain> {
+        match self {
+            ChainOrRpc::Chain(chain) => Ok(chain.clone()),
+            ChainOrRpc::Rpc(rpc) => {
+                let provider = ProviderBuilder::new().on_http(rpc.clone());
+                let chain_id = provider.get_chain_id().await?;
+                let chain = chain_id.try_into()?;
+                Ok(chain)
+            }
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, EnumVariants, Serialize, Deserialize)]
 pub enum Chain {
     Ethereum,
     Sepolia,
@@ -30,7 +47,6 @@ pub enum Chain {
     Blast,
     Optimism,
     Polygon,
-    Anvil,
     Mantle,
     Zksync,
     Taiko,
@@ -69,6 +85,26 @@ impl TryFrom<Pairs<'_, Rule>> for Chain {
 }
 
 impl Chain {
+    pub fn from_selector(selector: &str) -> Result<Vec<ChainOrRpc>, ChainError> {
+        if selector == "*" {
+            let chains = Chain::all_variants();
+            let chains = chains
+                .into_iter()
+                .map(|chain| ChainOrRpc::Chain(chain.clone()))
+                .collect::<Vec<ChainOrRpc>>();
+            Ok(chains)
+        } else {
+            // Parse comma-separated chain list
+            let chains = selector
+                .split(',')
+                .map(str::trim)
+                .map(|s| Chain::try_from(s).map(ChainOrRpc::Chain))
+                .collect::<Result<Vec<ChainOrRpc>, ChainError>>()?;
+
+            Ok(chains)
+        }
+    }
+
     pub fn rpc_url(&self) -> Result<Url> {
         match Config::new().get_chain_default_rpc(self) {
             Ok(Some(url)) => Ok(url),
@@ -86,11 +122,10 @@ impl Chain {
             Chain::Blast => "https://rpc.ankr.com/blast",
             Chain::Optimism => "https://optimism.drpc.org",
             Chain::Polygon => "https://polygon.llamarpc.com",
-            Chain::Anvil => "http://localhost:8545",
             Chain::Mantle => "https://mantle.drpc.org",
-            Chain::Zksync => "https://zksync.drpc.org",
+            Chain::Zksync => "https://mainnet.era.zksync.io",
             Chain::Taiko => "https://rpc.taiko.xyz",
-            Chain::Celo => "https://forno.celo.org",
+            Chain::Celo => "https://1rpc.io/celo",
             Chain::Avalanche => "https://avalanche.drpc.org",
             Chain::Scroll => "https://scroll.drpc.org",
             Chain::Bnb => "https://binance.llamarpc.com",
@@ -100,7 +135,7 @@ impl Chain {
             Chain::Moonriver => "https://moonriver.drpc.org",
             Chain::Ronin => "https://ronin.drpc.org",
             Chain::Fantom => "https://fantom.drpc.org",
-            Chain::Kava => "https://kava.drpc.org",
+            Chain::Kava => "https://evm.kava.io",
             Chain::Gnosis => "https://gnosis.drpc.org",
         }
     }
@@ -124,7 +159,6 @@ impl TryFrom<&str> for Chain {
             "blast" => Ok(Chain::Blast),
             "op" => Ok(Chain::Optimism),
             "polygon" => Ok(Chain::Polygon),
-            "anvil" => Ok(Chain::Anvil),
             "mantle" => Ok(Chain::Mantle),
             "zksync" => Ok(Chain::Zksync),
             "taiko" => Ok(Chain::Taiko),
@@ -155,7 +189,6 @@ impl From<&Chain> for u64 {
             Chain::Blast => 238,
             Chain::Optimism => 10,
             Chain::Polygon => 137,
-            Chain::Anvil => 31337,
             Chain::Mantle => 5000,
             Chain::Zksync => 324,
             Chain::Taiko => 167000,
@@ -175,6 +208,38 @@ impl From<&Chain> for u64 {
     }
 }
 
+impl TryFrom<u64> for Chain {
+    type Error = ChainError;
+
+    fn try_from(chain_id: u64) -> Result<Self, Self::Error> {
+        match chain_id {
+            1 => Ok(Chain::Ethereum),
+            11155111 => Ok(Chain::Sepolia),
+            42161 => Ok(Chain::Arbitrum),
+            8453 => Ok(Chain::Base),
+            238 => Ok(Chain::Blast),
+            10 => Ok(Chain::Optimism),
+            137 => Ok(Chain::Polygon),
+            5000 => Ok(Chain::Mantle),
+            324 => Ok(Chain::Zksync),
+            167000 => Ok(Chain::Taiko),
+            42220 => Ok(Chain::Celo),
+            43114 => Ok(Chain::Avalanche),
+            534352 => Ok(Chain::Scroll),
+            56 => Ok(Chain::Bnb),
+            59144 => Ok(Chain::Linea),
+            7777777 => Ok(Chain::Zora),
+            1284 => Ok(Chain::Moonbeam),
+            1285 => Ok(Chain::Moonriver),
+            2020 => Ok(Chain::Ronin),
+            250 => Ok(Chain::Fantom),
+            2222 => Ok(Chain::Kava),
+            100 => Ok(Chain::Gnosis),
+            _ => Err(ChainError::InvalidChain(chain_id.to_string())),
+        }
+    }
+}
+
 impl fmt::Display for Chain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let chain_str = match self {
@@ -185,7 +250,6 @@ impl fmt::Display for Chain {
             Chain::Blast => "blast",
             Chain::Optimism => "op",
             Chain::Polygon => "polygon",
-            Chain::Anvil => "anvil",
             Chain::Mantle => "mantle",
             Chain::Zksync => "zksync",
             Chain::Taiko => "taiko",

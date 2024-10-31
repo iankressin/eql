@@ -1,3 +1,4 @@
+use crate::common::chain::Chain;
 use alloy::primitives::{Address, Bloom, Bytes, FixedBytes, B256, U256};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -28,6 +29,7 @@ pub enum ExpressionResult {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct BlockQueryRes {
+    pub chain: Option<Chain>,
     pub number: Option<u64>,
     pub timestamp: Option<u64>,
     pub hash: Option<B256>,
@@ -51,6 +53,7 @@ pub struct BlockQueryRes {
 impl Default for BlockQueryRes {
     fn default() -> Self {
         Self {
+            chain: None,
             number: None,
             timestamp: None,
             hash: None,
@@ -75,6 +78,7 @@ impl Default for BlockQueryRes {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct AccountQueryRes {
+    pub chain: Option<Chain>,
     pub nonce: Option<u64>,
     #[serde(serialize_with = "serialize_option_u256")]
     pub balance: Option<U256>,
@@ -85,6 +89,7 @@ pub struct AccountQueryRes {
 impl Default for AccountQueryRes {
     fn default() -> Self {
         Self {
+            chain: None,
             nonce: None,
             balance: None,
             address: None,
@@ -96,6 +101,7 @@ impl Default for AccountQueryRes {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct TransactionQueryRes {
+    pub chain: Option<Chain>,
     pub transaction_type: Option<u8>,
     pub hash: Option<FixedBytes<32>>,
     pub from: Option<Address>,
@@ -119,6 +125,7 @@ pub struct TransactionQueryRes {
 impl Default for TransactionQueryRes {
     fn default() -> Self {
         Self {
+            chain: None,
             transaction_type: None,
             hash: None,
             from: None,
@@ -143,6 +150,7 @@ impl Default for TransactionQueryRes {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct LogQueryRes {
+    pub chain: Option<Chain>,
     pub address: Option<Address>,
     pub topic0: Option<FixedBytes<32>>,
     pub topic1: Option<FixedBytes<32>>,
@@ -161,6 +169,7 @@ pub struct LogQueryRes {
 impl Default for LogQueryRes {
     fn default() -> Self {
         Self {
+            chain: None,
             address: None,
             topic0: None,
             topic1: None,

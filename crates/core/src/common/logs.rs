@@ -238,6 +238,7 @@ pub enum LogField {
     TransactionIndex,
     LogIndex,
     Removed,
+    Chain,
 }
 
 impl std::fmt::Display for LogField {
@@ -256,6 +257,7 @@ impl std::fmt::Display for LogField {
             LogField::TransactionIndex => write!(f, "transaction_index"),
             LogField::LogIndex => write!(f, "log_index"),
             LogField::Removed => write!(f, "removed"),
+            LogField::Chain => write!(f, "chain"),
         }
     }
 }
@@ -284,6 +286,7 @@ impl TryFrom<&str> for LogField {
             "transaction_index" => Ok(LogField::TransactionIndex),
             "log_index" => Ok(LogField::LogIndex),
             "removed" => Ok(LogField::Removed),
+            "chain" => Ok(LogField::Chain),
             invalid_field => Err(LogFieldError::InvalidLogField(invalid_field.to_string())),
         }
     }

@@ -1,6 +1,6 @@
 use crate::common::{
     account::{Account, AccountField},
-    chain::Chain,
+    chain::{Chain, ChainOrRpc},
     ens::NameOrAddress,
     query_result::AccountQueryRes,
 };
@@ -24,53 +24,64 @@ pub enum AccountResolverErrors {
 /// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results.
 pub async fn resolve_account_query(
     account: &Account,
-    provider: Arc<RootProvider<Http<Client>>>,
+    chains: &[ChainOrRpc],
 ) -> Result<Vec<AccountQueryRes>> {
-    let mut account_futures = Vec::new();
+    let mut all_account_futures = Vec::new();
 
-    // TODO: Handle filter
-    // TODO: Remove unwrap
-    for account_id in account.ids().unwrap() {
-        let fields = account.fields().clone();
-        let provider = provider.clone();
+    for chain in chains {
+        let provider = Arc::new(ProviderBuilder::new().on_http(chain.rpc_url()?));
 
-        let account_future = async move {
-            match account_id {
-                NameOrAddress::Address(address) => get_account(address, fields, &provider).await,
-                NameOrAddress::Name(name) => {
-                    let address = to_address(name).await?;
-                    get_account(address, fields, &provider).await
+        // TODO: Handle filter
+        // TODO: Remove unwrap
+        for account_id in account.ids().unwrap() {
+            let fields = account.fields().clone();
+            let provider = provider.clone();
+
+            let account_future = async move {
+                match account_id {
+                    NameOrAddress::Address(address) => {
+                        get_account(address, fields, &provider, chain).await
+                    }
+                    NameOrAddress::Name(name) => {
+                        let address = to_address(name).await?;
+                        get_account(&address, fields, &provider, chain).await
+                    }
                 }
-            }
-        };
+            };
 
-        account_futures.push(account_future);
+            all_account_futures.push(account_future);
+        }
     }
 
-    let account_res = try_join_all(account_futures).await?;
+    let account_res = try_join_all(all_account_futures).await?;
     Ok(account_res)
 }
 
 async fn get_account(
-    address: Address,
+    address: &Address,
     fields: Vec<AccountField>,
     provider: &RootProvider<Http<Client>>,
+    chain: &ChainOrRpc,
 ) -> Result<AccountQueryRes> {
     let mut account = AccountQueryRes::default();
+    let chain = chain.to_chain().await?;
 
     for field in &fields {
         match field {
             AccountField::Balance => {
-                account.balance = Some(provider.get_balance(address).await?);
+                account.balance = Some(provider.get_balance(*address).await?);
             }
             AccountField::Nonce => {
-                account.nonce = Some(provider.get_transaction_count(address).await?);
+                account.nonce = Some(provider.get_transaction_count(*address).await?);
             }
             AccountField::Address => {
-                account.address = Some(address);
+                account.address = Some(*address);
             }
             AccountField::Code => {
-                account.code = Some(provider.get_code_at(address).await?);
+                account.code = Some(provider.get_code_at(*address).await?);
+            }
+            AccountField::Chain => {
+                account.chain = Some(chain.clone());
             }
         }
     }
@@ -78,9 +89,9 @@ async fn get_account(
     Ok(account)
 }
 
-async fn to_address(name: String) -> Result<Address> {
+async fn to_address(name: &String) -> Result<Address> {
     let rpc_url = Chain::Ethereum.rpc_url()?;
     let provider = ProviderBuilder::new().on_http(rpc_url);
-    let address = NameOrAddress::Name(name).resolve(&provider).await?;
+    let address = NameOrAddress::Name(name.clone()).resolve(&provider).await?;
     Ok(address)
 }

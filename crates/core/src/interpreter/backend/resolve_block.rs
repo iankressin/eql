@@ -1,10 +1,11 @@
 use crate::common::{
     block::{Block, BlockField, BlockId},
+    chain::{Chain, ChainOrRpc},
     query_result::BlockQueryRes,
 };
 use alloy::{
     eips::BlockNumberOrTag,
-    providers::{Provider, RootProvider},
+    providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::Block as RpcBlock,
     transports::http::{Client, Http},
 };
@@ -17,63 +18,78 @@ use std::sync::Arc;
 pub enum BlockResolverErrors {
     #[error("Unable to fetch block number for tag {0}")]
     UnableToFetchBlockNumber(BlockNumberOrTag),
-    #[error("Start block must be greater than end block")]
-    StartBlockMustBeGreaterThanEndBlock,
     #[error("Mismatch between Entity and EntityId, {0} can't be resolved as a block id")]
     MismatchEntityAndEntityId(String),
     #[error("Missing block ids")]
     IdsNotSet,
 }
 
-/// Resolve the query to get blocks after receiving a block entity expression.
-/// Iterate through entity_ids and map them to a futures list. Execute all futures concurrently and collect the results, flattening them into a single vec.
+async fn resolve_block_id(
+    id: &BlockId,
+    provider: Arc<RootProvider<Http<Client>>>,
+) -> Result<Vec<u64>> {
+    let block_numbers = match id {
+        BlockId::Range(block_range) => block_range.resolve_block_numbers(&provider).await?,
+        BlockId::Number(block_number) => {
+            resolve_block_numbers(&[block_number.clone()], provider.clone()).await?
+        }
+    };
+
+    Ok(block_numbers)
+}
+
 pub async fn resolve_block_query(
     block: &Block,
-    provider: Arc<RootProvider<Http<Client>>>,
+    chains: &[ChainOrRpc],
 ) -> Result<Vec<BlockQueryRes>> {
-    let mut block_futures = Vec::new();
+    let mut all_chain_futures = Vec::new();
 
     let ids = match block.ids() {
         Some(ids) => ids,
         None => return Err(BlockResolverErrors::IdsNotSet.into()),
     };
 
-    for id in ids {
-        let provider = Arc::clone(&provider);
+    for chain in chains {
         let fields = block.fields().clone();
-        let block_future = async move {
-            match id {
-                BlockId::Range(block_range) => {
-                    let block_numbers = block_range.resolve_block_numbers(&provider).await?;
-                    get_block_and_filter_fields(block_numbers, provider.clone(), fields.clone())
-                        .await
-                }
-                BlockId::Number(block_number) => {
-                    let block_numbers = vec![block_number.clone()];
-                    let block_numbers =
-                        resolve_block_numbers(&block_numbers, provider.clone()).await?;
-                    get_block_and_filter_fields(block_numbers, provider.clone(), fields.clone())
-                        .await
-                }
+
+        let chain_future = async move {
+            let provider = Arc::new(ProviderBuilder::new().on_http(chain.rpc_url()?));
+            let chain = chain.to_chain().await?;
+            let mut all_block_futures = Vec::new();
+
+            for id in ids {
+                let provider_clone = provider.clone();
+                let chain_clone = chain.clone();
+                let fields = fields.clone();
+
+                let block_id = resolve_block_id(&id, provider_clone.clone()).await?;
+                let block_future = async move {
+                    get_filtered_blocks(block_id, fields, &provider_clone, &chain_clone).await
+                };
+                all_block_futures.push(block_future);
             }
+
+            let chain_blocks = try_join_all(all_block_futures).await?;
+            Ok::<Vec<BlockQueryRes>, anyhow::Error>(chain_blocks.concat())
         };
 
-        block_futures.push(block_future);
+        all_chain_futures.push(chain_future);
     }
 
-    let block_res: Vec<Vec<BlockQueryRes>> = try_join_all(block_futures).await?;
-    Ok(block_res.into_iter().flatten().collect())
+    let all_chain_blocks = try_join_all(all_chain_futures).await?;
+    Ok(all_chain_blocks.concat())
 }
 
-async fn get_block_and_filter_fields(
+async fn get_filtered_blocks(
     block_numbers: Vec<u64>,
-    provider: Arc<RootProvider<Http<Client>>>,
     fields: Vec<BlockField>,
+    provider: &Arc<RootProvider<Http<Client>>>,
+    chain: &Chain,
 ) -> Result<Vec<BlockQueryRes>> {
     let blocks = batch_get_blocks(block_numbers, &provider, false).await?;
     Ok(blocks
         .into_iter()
-        .map(|block| filter_fields(block, fields.clone()))
+        .map(|block| filter_fields(block, &fields, &chain))
         .collect())
 }
 
@@ -88,7 +104,7 @@ async fn resolve_block_numbers(
     for block_number in block_numbers {
         let provider = Arc::clone(&provider);
         let block_number_future =
-            async move { get_block_number_from_tag(provider, block_number.clone()).await };
+            async move { get_block_number_from_tag(provider, block_number).await };
         block_number_futures.push(block_number_future);
     }
 
@@ -126,7 +142,7 @@ pub async fn get_block(
     }
 }
 
-fn filter_fields(block: RpcBlock, fields: Vec<BlockField>) -> BlockQueryRes {
+fn filter_fields(block: RpcBlock, fields: &[BlockField], chain: &Chain) -> BlockQueryRes {
     let mut result = BlockQueryRes::default();
 
     for field in fields {
@@ -182,6 +198,9 @@ fn filter_fields(block: RpcBlock, fields: Vec<BlockField>) -> BlockQueryRes {
             BlockField::ParentBeaconBlockRoot => {
                 result.parent_beacon_block_root = block.header.parent_beacon_block_root;
             }
+            BlockField::Chain => {
+                result.chain = Some(chain.clone());
+            }
         }
     }
 
@@ -190,16 +209,20 @@ fn filter_fields(block: RpcBlock, fields: Vec<BlockField>) -> BlockQueryRes {
 
 async fn get_block_number_from_tag(
     provider: Arc<RootProvider<Http<Client>>>,
-    number_or_tag: BlockNumberOrTag,
+    number_or_tag: &BlockNumberOrTag,
 ) -> Result<u64> {
     match number_or_tag {
-        BlockNumberOrTag::Number(number) => Ok(number),
-        block_tag => match provider.get_block_by_number(block_tag, false).await? {
+        BlockNumberOrTag::Number(number) => Ok(*number),
+        block_tag => match provider.get_block_by_number(*block_tag, false).await? {
             Some(block) => match block.header.number {
                 Some(number) => Ok(number),
-                None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
+                None => {
+                    Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
+                }
             },
-            None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
+            None => {
+                Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
+            }
         },
     }
 }
@@ -207,18 +230,15 @@ async fn get_block_number_from_tag(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::block::BlockRange;
-    use alloy::providers::ProviderBuilder;
+    use crate::common::{block::BlockRange, chain::Chain};
 
     #[tokio::test]
-    async fn test_resolve_block_query_when_start_is_greater_than_end() {
+    async fn test_error_when_start_block_is_greater_than_end_block() {
         let start_block = 10;
         let end_block = 5;
         // Empty fields for simplicity
         let fields = vec![];
-        let provider = Arc::new(
-            ProviderBuilder::new().on_http("https://rpc.ankr.com/eth_sepolia".parse().unwrap()),
-        );
+        let chain = ChainOrRpc::Chain(Chain::Ethereum);
         let block = Block::new(
             Some(vec![BlockId::Range(BlockRange::new(
                 start_block.into(),
@@ -228,8 +248,11 @@ mod tests {
             fields,
         );
 
-        let result = resolve_block_query(&block, provider).await.unwrap();
-        // TODO: this should return 5 blocks, but it returns 1
-        assert_eq!(result.len(), 0);
+        let result = resolve_block_query(&block, &[chain]).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Start block must be less than end block"
+        );
     }
 }

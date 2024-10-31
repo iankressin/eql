@@ -120,6 +120,7 @@ mod test {
             balance: Some(U256::from_str("100").unwrap()),
             nonce: Some(0),
             code: None,
+            chain: None,
         };
         let result = ExpressionResult::Account(vec![res]);
         let content = serialize_json(&result).unwrap();
@@ -135,12 +136,14 @@ mod test {
                 balance: Some(U256::from_str("100").unwrap()),
                 nonce: Some(0),
                 code: None,
+                chain: None,
             },
             AccountQueryRes {
                 address: None,
                 balance: Some(U256::from_str("200").unwrap()),
                 nonce: Some(1),
                 code: None,
+                chain: None,
             },
         ];
         let content = serialize_csv(&res).unwrap();
@@ -155,6 +158,7 @@ mod test {
             balance: Some(U256::from_str("100").unwrap()),
             nonce: Some(0),
             code: None,
+            chain: None,
         };
         let result = ExpressionResult::Account(vec![res]);
         let content = serialize_parquet(&result).unwrap();

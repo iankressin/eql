@@ -7,8 +7,6 @@ use super::{
 use crate::common::{
     entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression}
 };
-use alloy::providers::ProviderBuilder;
-use std::sync::Arc;
 use anyhow::Result;
 
 pub struct ExecutionEngine;
@@ -48,20 +46,18 @@ impl ExecutionEngine {
         &self,
         expr: &GetExpression,
     ) -> Result<ExpressionResult> {
-        let rpc_url = expr.chain_or_rpc.rpc_url()?;
-        let provider = Arc::new(ProviderBuilder::new().on_http(rpc_url.clone()));
-
         let result = match &expr.entity {
-            Entity::Block(block) => Ok(ExpressionResult::Block(resolve_block_query(block, provider.clone()).await?)),
-            Entity::Account(account) => Ok(ExpressionResult::Account(resolve_account_query(account, provider.clone()).await?)),
-            Entity::Transaction(transaction) => Ok(ExpressionResult::Transaction(resolve_transaction_query(transaction, provider.clone()).await?)),
-            Entity::Logs(logs) => Ok(ExpressionResult::Log(resolve_log_query(logs, provider.clone()).await?)),
+            Entity::Block(block) => ExpressionResult::Block(resolve_block_query(block, &expr.chains).await?),
+            Entity::Account(account) => ExpressionResult::Account(resolve_account_query(account, &expr.chains).await?),
+            Entity::Transaction(transaction) => ExpressionResult::Transaction(resolve_transaction_query(transaction, &expr.chains).await?),
+            Entity::Logs(logs) => ExpressionResult::Log(resolve_log_query(logs, &expr.chains).await?),
         };
 
-        result.and_then(|result| {
-            expr.dump.as_ref().map(|dump| dump_results(&result, dump));
-            Ok(result)
-        })
+        if let Some(dump) = &expr.dump {
+            dump_results(&result, dump);
+        }
+
+        Ok(result)
     }
 }
 
@@ -103,22 +99,9 @@ mod test {
                         "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
                     )),
                 ],
-                vec![
-                    LogField::Address,
-                    LogField::Topic0,
-                    LogField::Topic1,
-                    LogField::Topic2,
-                    LogField::Topic3,
-                    LogField::Data,
-                    LogField::BlockHash,
-                    LogField::BlockNumber,
-                    LogField::BlockTimestamp,
-                    LogField::TransactionHash,
-                    LogField::TransactionIndex,
-                    LogField::LogIndex,
-                ],
+                LogField::all_variants().to_vec(),
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
@@ -144,7 +127,8 @@ mod test {
             )),
             transaction_index: Some(9),
             log_index: Some(5),
-            removed: None,
+            removed: Some(false),
+            chain: Some(Chain::Ethereum),
         }];
 
         match execution_result {
@@ -168,33 +152,16 @@ mod test {
                         )),
                     ]),
                     None,
-                    vec![
-                        BlockField::Timestamp,
-                        BlockField::Hash,
-                        BlockField::ParentHash,
-                        BlockField::Size,
-                        BlockField::StateRoot,
-                        BlockField::TransactionsRoot,
-                        BlockField::ReceiptsRoot,
-                        BlockField::LogsBloom,
-                        BlockField::ExtraData,
-                        BlockField::MixHash,
-                        BlockField::TotalDifficulty,
-                        BlockField::BaseFeePerGas,
-                        BlockField::WithdrawalsRoot,
-                        BlockField::BlobGasUsed,
-                        BlockField::ExcessBlobGas,
-                        BlockField::ParentBeaconBlockRoot,
-                    ],
+                    BlockField::all_variants().to_vec(),
                 )
             ),
             dump: None,
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
         })];
         let expected = ExpressionResult::Block(vec![
             BlockQueryRes {
                 timestamp: Some(1438269988),
-                number: None,
+                number: Some(1),
                 hash: Some(b256!(
                     "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"
                 )),
@@ -221,6 +188,7 @@ mod test {
                 blob_gas_used: None,
                 excess_blob_gas: None,
                 parent_beacon_block_root: None,
+                chain: Some(Chain::Ethereum),
             },
         ]);
         let execution_result = execution_engine.run(expressions).await;
@@ -244,7 +212,7 @@ mod test {
                     vec![AccountField::Balance],
                 )
             ),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
@@ -262,28 +230,10 @@ mod test {
                         b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")
                     ]),
                     None,
-                    vec![
-                        TransactionField::TransactionType,
-                        TransactionField::Hash,
-                        TransactionField::From,
-                        TransactionField::To,
-                        TransactionField::Data,
-                        TransactionField::Value,
-                        TransactionField::GasPrice,
-                        TransactionField::Gas,
-                        TransactionField::Status,
-                        TransactionField::ChainId,
-                        TransactionField::V,
-                        TransactionField::R,
-                        TransactionField::S,
-                        TransactionField::MaxFeePerBlobGas,
-                        TransactionField::MaxFeePerGas,
-                        TransactionField::MaxPriorityFeePerGas,
-                        TransactionField::YParity,
-                    ]
+                    TransactionField::all_variants().to_vec(),
                 )
             ),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let expected = vec![ExpressionResult::Transaction(vec![
@@ -307,6 +257,7 @@ mod test {
                 max_fee_per_gas: Some(10209184711),
                 max_priority_fee_per_gas: Some(0),
                 y_parity: Some(false),
+                chain: Some(Chain::Ethereum),
             },
             TransactionQueryRes {
                 transaction_type: Some(2),
@@ -328,6 +279,7 @@ mod test {
                 max_fee_per_gas: Some(10209184711),
                 max_priority_fee_per_gas: Some(0),
                 y_parity: Some(false),
+                chain: Some(Chain::Ethereum),
             }])    
         ];            
 
@@ -350,28 +302,10 @@ mod test {
                         "0000000000000000000000000000000000000000000000000000000000000000"
                     )]),
                     None,
-                    vec![
-                        TransactionField::TransactionType,
-                        TransactionField::Hash,
-                        TransactionField::From,
-                        TransactionField::To,
-                        TransactionField::Data,
-                        TransactionField::Value,
-                        TransactionField::GasPrice,
-                        TransactionField::Gas,
-                        TransactionField::Status,
-                        TransactionField::ChainId,
-                        TransactionField::V,
-                        TransactionField::R,
-                        TransactionField::S,
-                        TransactionField::MaxFeePerBlobGas,
-                        TransactionField::MaxFeePerGas,
-                        TransactionField::MaxPriorityFeePerGas,
-                        TransactionField::YParity,
-                    ]
+                    TransactionField::all_variants().to_vec(),
                 )
             ),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let result = execution_engine.run(expressions).await.unwrap();
@@ -395,7 +329,7 @@ mod test {
                     vec![BlockField::Timestamp],
                 )
             ),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: Some(Dump::new(String::from("test"), DumpFormat::Json)),
         })];
         execution_engine.run(expressions).await.unwrap();
@@ -420,5 +354,33 @@ mod test {
 
     fn flatten_string(s: &str) -> String {
         s.replace('\n', "").replace('\r', "").replace(" ", "")
+    }
+
+    #[tokio::test]
+    async fn test_get_chain_field() {
+        let execution_engine = ExecutionEngine::new();
+        let test_cases = vec![
+            (
+                Expression::Get(GetExpression {
+                    entity: Entity::Block(Block::new(
+                        Some(vec![BlockId::Number(BlockNumberOrTag::Number(1))]),
+                        None,
+                        vec![BlockField::Chain],
+                    )),
+                    chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+                    dump: None,
+                }),
+                ExpressionResult::Block(vec![BlockQueryRes {
+                    chain: Some(Chain::Ethereum),
+                    ..Default::default()
+                }]),
+            ),
+            // Similar test cases for Account, Transaction, and Logs
+        ];
+
+        for (expression, expected) in test_cases {
+            let result = execution_engine.run(vec![expression]).await.unwrap();
+            assert_eq!(result[0].result, expected);
+        }
     }
 }
