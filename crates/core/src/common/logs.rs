@@ -171,9 +171,9 @@ impl TryFrom<Pair<'_, Rule>> for LogFilter {
 fn parse_block_range(pair: Pair<'_, Rule>) -> Result<LogFilter, LogsError> {
     let range = pair
         .as_str()
-        .trim_start_matches("block")
-        .trim_start_matches(|c: char| c.is_whitespace() || c == '=')
-        .trim();
+        .strip_prefix("block")
+        .and_then(|s| s.find('=').map(|i| s[i + 1..].trim()))
+        .ok_or_else(|| LogsError::InvalidLogFilter("Invalid block range format".to_string()))?;
 
     let (start, end) = match range.split_once(':') {
         Some((start, end)) => (
