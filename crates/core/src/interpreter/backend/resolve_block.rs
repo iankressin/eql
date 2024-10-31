@@ -42,20 +42,13 @@ pub async fn resolve_block_query(
         let provider = Arc::clone(&provider);
         let fields = block.fields().clone();
         let block_future = async move {
-            match id {
-                BlockId::Range(block_range) => {
-                    let block_numbers = block_range.resolve_block_numbers(&provider).await?;
-                    get_block_and_filter_fields(block_numbers, provider.clone(), fields.clone())
-                        .await
-                }
+            let block_numbers = match id {
+                BlockId::Range(block_range) => block_range.resolve_block_numbers(&provider).await?,
                 BlockId::Number(block_number) => {
-                    let block_numbers = vec![block_number.clone()];
-                    let block_numbers =
-                        resolve_block_numbers(&block_numbers, provider.clone()).await?;
-                    get_block_and_filter_fields(block_numbers, provider.clone(), fields.clone())
-                        .await
+                    resolve_block_numbers(&[block_number.clone()], provider.clone()).await?
                 }
-            }
+            };
+            get_block_and_filter_fields(block_numbers, provider.clone(), fields.clone()).await
         };
 
         block_futures.push(block_future);
