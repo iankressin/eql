@@ -211,7 +211,7 @@ mod tests {
     use alloy::providers::ProviderBuilder;
 
     #[tokio::test]
-    async fn test_resolve_block_query_when_start_is_greater_than_end() {
+    async fn test_error_when_start_block_is_greater_than_end_block() {
         let start_block = 10;
         let end_block = 5;
         // Empty fields for simplicity
@@ -228,8 +228,11 @@ mod tests {
             fields,
         );
 
-        let result = resolve_block_query(&block, provider).await.unwrap();
-        // TODO: this should return 5 blocks, but it returns 1
-        assert_eq!(result.len(), 0);
+        let result = resolve_block_query(&block, provider).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Start block must be greater than end block"
+        );
     }
 }
