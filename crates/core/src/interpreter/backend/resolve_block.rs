@@ -186,13 +186,17 @@ async fn get_block_number_from_tag(
     number_or_tag: &BlockNumberOrTag,
 ) -> Result<u64> {
     match number_or_tag {
-        BlockNumberOrTag::Number(number) => Ok(number),
-        block_tag => match provider.get_block_by_number(block_tag, false).await? {
+        BlockNumberOrTag::Number(number) => Ok(*number),
+        block_tag => match provider.get_block_by_number(*block_tag, false).await? {
             Some(block) => match block.header.number {
                 Some(number) => Ok(number),
-                None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
+                None => {
+                    Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
+                }
             },
-            None => Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag).into()),
+            None => {
+                Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
+            }
         },
     }
 }
