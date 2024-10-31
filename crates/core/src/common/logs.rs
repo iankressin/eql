@@ -131,9 +131,9 @@ impl TryFrom<Pair<'_, Rule>> for LogFilter {
             F: FnOnce(&str) -> Result<T, LogsError>,
         {
             let mut inner_pairs = pairs.into_inner();
-            inner_pairs
-                .next()
-                .expect("operator should always be present");
+            inner_pairs.next().ok_or_else(|| {
+                LogsError::InvalidLogFilter("Missing operator in filter".to_string())
+            })?;
             parser(inner_pairs.as_str())
         }
 
