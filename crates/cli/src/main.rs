@@ -118,26 +118,3 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_to_table_tx_query_using_block_filters() {
-        let result = Interpreter::run_program("GET * FROM tx WHERE block 10000003 ON eth")
-            .await
-            .unwrap()
-            .first()
-            .unwrap()
-            .clone();
-
-        match result.result {
-            ExpressionResult::Transaction(query_res) => {
-                let table = to_table(query_res).unwrap();
-                println!("TABLE: {:#?}", table);
-            }
-            _ => panic!("Expected transaction result"),
-        }
-    }
-}

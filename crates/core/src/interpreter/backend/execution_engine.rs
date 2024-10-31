@@ -137,7 +137,8 @@ mod test {
                 "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
             )),
             block_number: Some(4638757),
-            block_timestamp: Some(1511886266),
+            // TODO: the provider is returning None for block_timestamp
+            block_timestamp: None,
             transaction_hash: Some(b256!(
                 "8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"
             )),

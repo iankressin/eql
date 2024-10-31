@@ -111,7 +111,10 @@ mod tests {
 
     #[test]
     fn test_build_get_ast_with_block_fields() {
-        let source = "GET parent_hash, state_root, transactions_root, receipts_root, logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, size FROM block 1 ON eth";
+        let source = "GET parent_hash, state_root, transactions_root, receipts_root, \
+            logs_bloom, extra_data, mix_hash, total_difficulty, base_fee_per_gas, \
+            withdrawals_root, blob_gas_used, excess_blob_gas, parent_beacon_block_root, \
+            size FROM block 1 ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Block(Block::new(
@@ -285,7 +288,7 @@ mod tests {
             "GET address, topic0, topic1, topic2, topic3, data, block_hash, block_number, \
             block_timestamp, transaction_hash, transaction_index, log_index, removed \
             FROM log \
-            WHERE block 4638757, \
+            WHERE block = 4638757, \
                   address = 0xdAC17F958D2ee523a2206206994597C13D831ec7, \
                   topic0 = 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a \
             ON eth,\n\
@@ -384,20 +387,27 @@ mod tests {
     #[test]
     fn test_build_ast_with_transaction_comparison_filters() {
         let source = "GET * FROM tx WHERE \
+            block = 4638757, \
             gas > 10000000, \
             gas_price < 10000000, \
             max_fee_per_blob_gas >= 10000000, \
             max_fee_per_gas <= 10000000, \
             max_priority_fee_per_gas != 10000000, \
-            value = 10000000, \
+            value = 0, \
             status = true, \
-            y_parity = false \
+            y_parity = false, \
+            from = 0x1234567890123456789012345678901234567890, \
+            to = 0x1234567890123456789012345678901234567890 \
             ON eth";
 
         let expected = vec![Expression::Get(GetExpression {
             entity: Entity::Transaction(Transaction::new(
                 None,
                 Some(vec![
+                    TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                        BlockNumberOrTag::Number(4638757),
+                        None,
+                    ))),
                     TransactionFilter::Gas(FilterType::Comparison(ComparisonFilter::Gt(
                         U128::from(10000000).try_into().unwrap(),
                     ))),
@@ -414,10 +424,16 @@ mod tests {
                         EqualityFilter::Neq(U128::from(10000000).try_into().unwrap()),
                     )),
                     TransactionFilter::Value(FilterType::Equality(EqualityFilter::Eq(U256::from(
-                        10000000,
+                        0,
                     )))),
                     TransactionFilter::Status(EqualityFilter::Eq(true)),
                     TransactionFilter::YParity(EqualityFilter::Eq(false)),
+                    TransactionFilter::From(EqualityFilter::Eq(
+                        Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+                    )),
+                    TransactionFilter::To(EqualityFilter::Eq(
+                        Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+                    )),
                 ]),
                 TransactionField::all_variants().to_vec(),
             )),

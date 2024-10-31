@@ -1,7 +1,9 @@
 use super::{
     block::{BlockId, BlockRange},
     entity_id::{parse_block_number_or_tag, EntityIdError},
-    filters::{ComparisonFilterError, EqualityFilter, Filter, FilterError, FilterType},
+    filters::{
+        ComparisonFilterError, EqualityFilter, EqualityFilterError, Filter, FilterError, FilterType,
+    },
     query_result::TransactionQueryRes,
 };
 use crate::interpreter::frontend::parser::Rule;
@@ -304,8 +306,32 @@ impl TransactionFilter {
 
         match operator {
             Some(op) => {
-                let value = value_parser(inner_pair.as_str());
+                let value = value_parser(inner_pair.as_str().trim());
                 Ok(constructor(FilterType::try_from((op, value))?))
+            }
+            None => Err(TransactionFilterError::MissingOperator),
+        }
+    }
+
+    // Helper function to parse equality filter components
+    fn parse_equality_filter<'a, T, F>(
+        pair: Pair<'a, Rule>,
+        value_parser: F,
+        constructor: impl FnOnce(EqualityFilter<T>) -> TransactionFilter,
+    ) -> Result<TransactionFilter, TransactionFilterError>
+    where
+        F: FnOnce(&str) -> T,
+        EqualityFilter<T>: TryFrom<(Pair<'a, Rule>, T), Error = EqualityFilterError>,
+    {
+        let mut inner_pair = pair.into_inner();
+        let operator = inner_pair.next();
+
+        match operator {
+            Some(op) => {
+                let value = value_parser(inner_pair.as_str());
+                let filter =
+                    EqualityFilter::try_from((op, value)).map_err(|e| FilterError::from(e))?;
+                Ok(constructor(filter))
             }
             None => Err(TransactionFilterError::MissingOperator),
         }
@@ -315,14 +341,19 @@ impl TransactionFilter {
     fn try_from(pair: Pair<'_, Rule>) -> Result<Self, TransactionFilterError> {
         match pair.as_rule() {
             Rule::blockrange_filter => {
-                let range = pair.as_str().trim_start_matches("block ").trim();
-                let (start, end) = match range.split_once(":") {
-                    //if ":" is present, we have an start and an end.
+                let range = pair
+                    .as_str()
+                    .trim_start_matches("block")
+                    .trim_start_matches(|c: char| c.is_whitespace() || c == '=')
+                    .trim();
+
+                let (start, end) = match range.split_once(':') {
+                    // if ":" is present, we have a start and an end
                     Some((start, end)) => (
                         parse_block_number_or_tag(start)?,
                         Some(parse_block_number_or_tag(end)?),
                     ),
-                    //else we only have start.
+                    // else we only have start
                     None => (parse_block_number_or_tag(range)?, None),
                 };
                 Ok(TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
@@ -366,8 +397,16 @@ impl TransactionFilter {
                     EqualityFilter::try_from((operator, value == "true")).unwrap(),
                 ))
             }
-            Rule::from_filter_type => todo!(),
-            Rule::to_filter_type => todo!(),
+            Rule::from_filter_type => Self::parse_equality_filter(
+                pair,
+                |s| Address::from_str(s).unwrap(),
+                TransactionFilter::From,
+            ),
+            Rule::to_filter_type => Self::parse_equality_filter(
+                pair,
+                |s| Address::from_str(s).unwrap(),
+                TransactionFilter::To,
+            ),
             Rule::data_filter_type => {
                 let mut inner_pair = pair.into_inner();
                 let operator = inner_pair.next().unwrap();
