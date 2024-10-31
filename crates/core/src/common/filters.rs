@@ -72,7 +72,9 @@ impl<T> TryFrom<(Pair<'_, Rule>, T)> for EqualityFilter<T> {
     type Error = EqualityFilterError;
 
     fn try_from((operator, value): (Pair<'_, Rule>, T)) -> Result<Self, Self::Error> {
-        let inner_operator = operator.into_inner().next().unwrap();
+        let inner_operator = operator.into_inner().next().ok_or_else(|| {
+            EqualityFilterError::InvalidOperator("Missing operator in filter".to_string())
+        })?;
 
         match inner_operator.as_rule() {
             Rule::eq_operator => Ok(Self::Eq(value)),
@@ -122,13 +124,18 @@ where
 pub enum ComparisonFilterError {
     #[error("Invalid operator {0}")]
     InvalidOperator(String),
+    #[error("Missing operator in filter")]
+    MissingOperator,
 }
 
 impl<T> TryFrom<(Pair<'_, Rule>, T)> for ComparisonFilter<T> {
     type Error = ComparisonFilterError;
 
     fn try_from((operator, value): (Pair<'_, Rule>, T)) -> Result<Self, Self::Error> {
-        let inner_operator = operator.into_inner().next().unwrap();
+        let inner_operator = operator
+            .into_inner()
+            .next()
+            .ok_or_else(|| ComparisonFilterError::MissingOperator)?;
         match inner_operator.as_rule() {
             Rule::gt_operator => Ok(Self::Gt(value)),
             Rule::gte_operator => Ok(Self::Gte(value)),
