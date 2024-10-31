@@ -66,7 +66,7 @@ async fn get_block_and_filter_fields(
     let blocks = batch_get_blocks(block_numbers, &provider, false).await?;
     Ok(blocks
         .into_iter()
-        .map(|block| filter_fields(block, fields.clone()))
+        .map(|block| filter_fields(block, &fields))
         .collect())
 }
 
@@ -81,7 +81,7 @@ async fn resolve_block_numbers(
     for block_number in block_numbers {
         let provider = Arc::clone(&provider);
         let block_number_future =
-            async move { get_block_number_from_tag(provider, block_number.clone()).await };
+            async move { get_block_number_from_tag(provider, block_number).await };
         block_number_futures.push(block_number_future);
     }
 
@@ -119,7 +119,7 @@ pub async fn get_block(
     }
 }
 
-fn filter_fields(block: RpcBlock, fields: Vec<BlockField>) -> BlockQueryRes {
+fn filter_fields(block: RpcBlock, fields: &[BlockField]) -> BlockQueryRes {
     let mut result = BlockQueryRes::default();
 
     for field in fields {
@@ -183,7 +183,7 @@ fn filter_fields(block: RpcBlock, fields: Vec<BlockField>) -> BlockQueryRes {
 
 async fn get_block_number_from_tag(
     provider: Arc<RootProvider<Http<Client>>>,
-    number_or_tag: BlockNumberOrTag,
+    number_or_tag: &BlockNumberOrTag,
 ) -> Result<u64> {
     match number_or_tag {
         BlockNumberOrTag::Number(number) => Ok(number),
