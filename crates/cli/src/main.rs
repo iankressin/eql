@@ -71,10 +71,10 @@ pub fn to_table<S: Serialize + core::fmt::Debug>(data: Vec<S>) -> Result<Table, 
         .from_writer(vec![]);
 
     for entry in data {
-        writer.serialize(entry).unwrap();
+        writer.serialize(entry)?;
     }
 
-    let data = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+    let data = String::from_utf8(writer.into_inner()?)?;
     let mut builder = Builder::default();
     let reader = ReaderBuilder::new()
         .has_headers(false)
