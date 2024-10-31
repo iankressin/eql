@@ -268,6 +268,8 @@ impl TryFrom<&str> for BlockField {
 pub enum BlockRangeError {
     #[error("Unable to fetch block number {0}")]
     UnableToFetchBlockNumber(BlockNumberOrTag),
+    #[error("Start block must be greater than end block")]
+    StartBlockMustBeGreaterThanEndBlock,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -309,6 +311,12 @@ impl BlockRange {
             ),
             None => None,
         };
+
+        if let Some(end) = end_block_number {
+            if start_block_number > end {
+                return Err(BlockRangeError::StartBlockMustBeGreaterThanEndBlock.into());
+            }
+        }
 
         match end_block_number {
             Some(end) => {
