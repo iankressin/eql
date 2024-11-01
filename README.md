@@ -113,10 +113,9 @@ async fn main() {
 
 ## Documentation
 
-For detailed documentation on queries, entities, and operations:
-- [Query Syntax Guide](./docs/queries.md)
-- [Entity Reference](./docs/entities.md)
-- [Advanced Usage](./docs/advanced.md)
+For detailed documentation on queries and installation:
+- [Query Syntax Guide](./docs/query.md)
+- [Installation Guide](./docs/installation.md)
 
 ## Roadmap
 
