@@ -122,7 +122,7 @@ For detailed documentation on queries, entities, and operations:
 
 ![roadmap image](./roadmap.png)
 
-See our detailed [Roadmap](./ROADMAP.md) for upcoming features.
+See our detailed [Roadmap](./docs/roadmap.md) for upcoming features.
 
 ## Contributing
 
