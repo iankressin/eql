@@ -3,6 +3,8 @@
 
 > A SQL-like language for querying EVM chains with minimal boilerplate.
 
+![Discord](https://img.shields.io/discord/1247647880634695730?logo=discord&logoColor=ffffff&labelColor=6A7EC2&color=7389D8)
+[![Tests](https://github.com/iankressin/eql/actions/workflows/tests.yml/badge.svg)](https://github.com/iankressin/eql/actions/workflows/tests.yml)
 ![GitHub commits since latest release (branch)](https://img.shields.io/github/commits-since/iankressin/eql/latest/main)
 ![GitHub contributors](https://img.shields.io/github/contributors/iankressin/eql)
 ![GitHub Release Date](https://img.shields.io/github/release-date/iankressin/eql)
