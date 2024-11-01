@@ -5,7 +5,7 @@ get       = {
     WHITESPACE* ~
     "ON" ~
     WHITESPACE* ~
-    (chain | rpc_url) ~
+    (chain_selector | rpc_url) ~
     (WHITESPACE* ~ dump)* ~
     exp_separator* ~
     WHITESPACE*
@@ -71,7 +71,8 @@ account_field_list = _{ account_field ~ ("," ~ WHITESPACE* ~ account_field)* }
 account_field = {
     "nonce" |
     "balance" |
-    "code"
+    "code" |
+    "chain"
 }
 account_id_list = _{ account_id ~ ("," ~ WHITESPACE* ~ account_id)* }
 account_id = { address | ens }
@@ -100,7 +101,8 @@ block_field = {
     "excess_blob_gas" |
     "parent_beacon_block_root" |
     "parent_beacon_block_root" |
-    "size"
+    "size" |
+    "chain"
 }
 block_id_list = _{ block_id ~ ("," ~ WHITESPACE* ~ block_id)* }
 block_id = { block_range | block_tag_or_number }
@@ -139,7 +141,8 @@ tx_field = {
 
     // EIP-2930
     "access_list" |
-    "y_parity"
+    "y_parity" |
+    "chain"
 }
 tx_id_list = _{ tx_id ~ ("," ~ WHITESPACE* ~ tx_id)* }
 tx_id = { hash } 
@@ -203,7 +206,8 @@ log_field =  {
     "transaction_hash" |
     "transaction_index" |
     "log_index" |
-    "removed"
+    "removed" |
+    "chain"
 }
 log_filter_list = _{ "WHERE" ~ WHITESPACE* ~ log_filter ~ ("," ~ WHITESPACE* ~ log_filter)* }
 log_filter = {
@@ -254,8 +258,6 @@ chain = {
     "blast" |
     "polygon" |
     "sepolia" |
-    "anvil" |
-    "local" |
     "mantle" |
     "zksync" |
     "taiko" |
@@ -264,7 +266,6 @@ chain = {
     "scroll" |
     "bnb" |
     "linea" |
-    "tron" |
     "zora" |
     "moonbeam" |
     "moonriver" |
@@ -306,3 +307,8 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 exp_separator = _{"," | ";"}
 silent_eoi = _{ !ANY }
 wildcard = { "*" }
+
+// Add new rules for chain selection
+chain_selector = { chain_list | chain_wildcard }
+chain_list = { chain ~ ("," ~ WHITESPACE* ~ chain)* }
+chain_wildcard = { "*" }

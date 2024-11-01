@@ -80,7 +80,7 @@ mod tests {
                     AccountField::Code,
                 ],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let parser = Parser::new(source);
@@ -101,7 +101,7 @@ mod tests {
                 None,
                 vec![AccountField::Nonce, AccountField::Balance],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let result = Parser::new(source).parse_expressions().unwrap();
@@ -137,7 +137,7 @@ mod tests {
                     BlockField::Size,
                 ],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
 
@@ -161,7 +161,7 @@ mod tests {
                 None,
                 vec![BlockField::Timestamp],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
         let result = Parser::new(source).parse_expressions();
@@ -186,7 +186,7 @@ mod tests {
                 None,
                 vec![BlockField::Timestamp],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
 
@@ -229,7 +229,7 @@ mod tests {
                     TransactionField::YParity,
                 ],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
 
@@ -252,7 +252,7 @@ mod tests {
                 None,
                 vec![TransactionField::Hash],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
 
@@ -272,7 +272,7 @@ mod tests {
                 None,
                 vec![AccountField::Balance],
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: Some(Dump::new("vitalik-balance".to_string(), DumpFormat::Csv)),
         })];
 
@@ -332,7 +332,7 @@ mod tests {
                         LogField::Removed,
                     ],
                 )),
-                chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+                chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                 dump: None,
             }),
             Expression::Get(GetExpression {
@@ -353,7 +353,7 @@ mod tests {
                     ],
                     vec![LogField::Address],
                 )),
-                chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+                chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                 dump: None,
             }),
         ];
@@ -374,7 +374,7 @@ mod tests {
                 None,
                 vec![AccountField::Nonce, AccountField::Balance],
             )),
-            chain_or_rpc: ChainOrRpc::Rpc("http://localhost:8545".parse().unwrap()),
+            chains: vec![ChainOrRpc::Rpc("http://localhost:8545".parse().unwrap())],
             dump: None,
         })];
 
@@ -437,7 +437,107 @@ mod tests {
                 ]),
                 TransactionField::all_variants().to_vec(),
             )),
-            chain_or_rpc: ChainOrRpc::Chain(Chain::Ethereum),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+        })];
+
+        match Parser::new(source).parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_with_chain_fields() {
+        let test_cases = vec![
+            (
+                "GET chain FROM block 1 ON eth",
+                Entity::Block(Block::new(
+                    Some(vec![BlockId::Number(BlockNumberOrTag::Number(1))]),
+                    None,
+                    vec![BlockField::Chain],
+                )),
+            ),
+            (
+                "GET chain FROM account 0x1234567890123456789012345678901234567890 ON eth",
+                Entity::Account(Account::new(
+                    Some(vec![NameOrAddress::Address(address!(
+                        "1234567890123456789012345678901234567890"
+                    ))]),
+                    None,
+                    vec![AccountField::Chain],
+                )),
+            ),
+            (
+                "GET chain FROM tx 0x1234567890123456789012345678901234567890123456789012345678901234 ON eth",
+                Entity::Transaction(Transaction::new(
+                    Some(vec![b256!(
+                        "1234567890123456789012345678901234567890123456789012345678901234"
+                    )]),
+                    None,
+                    vec![TransactionField::Chain],
+                )),
+            ),
+            (
+                "GET chain FROM log WHERE block = 1 ON eth",
+                Entity::Logs(Logs::new(
+                    vec![LogFilter::BlockRange(BlockRange::new(1.into(), None))],
+                    vec![LogField::Chain],
+                )),
+            ),
+        ];
+
+        for (source, expected_entity) in test_cases {
+            let expected = vec![Expression::Get(GetExpression {
+                entity: expected_entity,
+                chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+                dump: None,
+            })];
+
+            let parser = Parser::new(source);
+            match parser.parse_expressions() {
+                Ok(result) => assert_eq!(result, expected),
+                Err(e) => panic!("Error for {}: {}", source, e),
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_ast_with_chain_list() {
+        let source = "GET size FROM block 1 ON eth, op, arb";
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Number(BlockNumberOrTag::Number(1))]),
+                None,
+                vec![BlockField::Size],
+            )),
+            chains: vec![
+                ChainOrRpc::Chain(Chain::Ethereum),
+                ChainOrRpc::Chain(Chain::Optimism),
+                ChainOrRpc::Chain(Chain::Arbitrum),
+            ],
+            dump: None,
+        })];
+
+        match Parser::new(source).parse_expressions() {
+            Ok(result) => assert_eq!(result, expected),
+            Err(e) => panic!("Error: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_build_ast_with_chain_wildcard() {
+        let source = "GET size FROM block 1 ON *";
+        let expected = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Number(BlockNumberOrTag::Number(1))]),
+                None,
+                vec![BlockField::Size],
+            )),
+            chains: Chain::all_variants()
+                .iter()
+                .map(|c| ChainOrRpc::Chain(c.clone()))
+                .collect(),
             dump: None,
         })];
 

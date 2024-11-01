@@ -1,12 +1,13 @@
 use super::resolve_block::{batch_get_blocks, get_block};
 use crate::common::{
     block::BlockId,
+    chain::ChainOrRpc,
     query_result::TransactionQueryRes,
-    transaction::{Transaction, TransactionField, TransactionFilter},
+    transaction::{Transaction, TransactionField},
 };
 use alloy::{
     primitives::FixedBytes,
-    providers::{Provider, RootProvider},
+    providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::{BlockTransactions, Transaction as RpcTransaction},
     transports::http::{Client, Http},
 };
@@ -34,39 +35,41 @@ pub enum TransactionResolverErrors {
 /// 6. If both ids and block number or block range filter are provided, then fetch the transactions by ids first, and filter the result by block number or block range.
 pub async fn resolve_transaction_query(
     transaction: &Transaction,
-    provider: Arc<RootProvider<Http<Client>>>,
+    chains: &[ChainOrRpc],
 ) -> Result<Vec<TransactionQueryRes>> {
-    let ids_provided = transaction.ids().is_some();
-    let block_filter_provided = match transaction.filters() {
-        Some(filters) => filters
-            .iter()
-            .any(|f| matches!(f, TransactionFilter::BlockId(BlockId::Range(_)))),
-        None => false,
-    };
-
-    if !ids_provided && !block_filter_provided {
+    if !transaction.ids().is_some() && !transaction.has_block_filter() {
         return Err(TransactionResolverErrors::MissingTransactionHashOrFilter.into());
     }
 
-    // In this step we're only fetching transactions, filtering is done in the next step.
-    let rpc_transactions = match transaction.ids() {
-        Some(ids) => get_transactions_by_ids(ids, &provider).await?,
-        None => {
-            let block_id = transaction.get_block_id_filter()?;
-            get_transactions_by_block_id(block_id, &provider).await?
-        }
-    };
+    let mut all_results = Vec::new();
 
-    let result_futures = rpc_transactions
-        .iter()
-        .map(|t| pick_transaction_fields(t, transaction.fields(), &provider));
-    let tx_res = try_join_all(result_futures).await?;
-    let filtered_tx_res = tx_res
-        .into_iter()
-        .filter(|t| transaction.filter(t))
-        .collect();
+    for chain in chains {
+        let provider = Arc::new(ProviderBuilder::new().on_http(chain.rpc_url()?));
 
-    Ok(filtered_tx_res)
+        // Fetch transactions for this chain
+        let rpc_transactions = match transaction.ids() {
+            Some(ids) => get_transactions_by_ids(ids, &provider).await?,
+            None => {
+                let block_id = transaction.get_block_id_filter()?;
+                get_transactions_by_block_id(block_id, &provider).await?
+            }
+        };
+
+        let result_futures = rpc_transactions
+            .iter()
+            .map(|t| pick_transaction_fields(t, transaction.fields(), &provider, chain));
+        let tx_res = try_join_all(result_futures).await?;
+
+        // Filter and collect results for this chain
+        let filtered_tx_res: Vec<TransactionQueryRes> = tx_res
+            .into_iter()
+            .filter(|t| transaction.filter(t))
+            .collect();
+
+        all_results.extend(filtered_tx_res);
+    }
+
+    Ok(all_results)
 }
 
 async fn get_transactions_by_ids(
@@ -118,8 +121,10 @@ async fn pick_transaction_fields(
     tx: &RpcTransaction,
     fields: &Vec<TransactionField>,
     provider: &Arc<RootProvider<Http<Client>>>,
+    chain: &ChainOrRpc,
 ) -> Result<TransactionQueryRes> {
     let mut result = TransactionQueryRes::default();
+    let chain = chain.to_chain().await?;
 
     for field in fields {
         match field {
@@ -182,6 +187,9 @@ async fn pick_transaction_fields(
                     .map_or(None, |s| s.y_parity)
                     .map_or(None, |y| Some(y.0));
             }
+            TransactionField::Chain => {
+                result.chain = Some(chain.clone());
+            }
         }
     }
 
@@ -195,6 +203,7 @@ mod tests {
         block::BlockRange,
         chain::Chain,
         filters::{ComparisonFilter, EqualityFilter, FilterType},
+        transaction::TransactionFilter,
     };
     use alloy::{
         eips::BlockNumberOrTag,
@@ -229,7 +238,7 @@ mod tests {
     #[tokio::test]
     async fn test_resolve_query_using_block_range_filter() {
         let rpc = Chain::Ethereum.rpc_url().unwrap();
-        let provider = Arc::new(ProviderBuilder::new().on_http(rpc));
+        let chain = ChainOrRpc::Rpc(rpc);
         let block_id = BlockId::Range(BlockRange::new(10000000.into(), Some(10000001.into())));
         let transaction = Transaction::new(
             None,
@@ -237,7 +246,7 @@ mod tests {
             TransactionField::all_variants().to_vec(),
         );
 
-        let transactions = resolve_transaction_query(&transaction, provider)
+        let transactions = resolve_transaction_query(&transaction, &[chain])
             .await
             .unwrap();
 
@@ -253,8 +262,7 @@ mod tests {
         let gas_price = 5000000000;
         let status = true;
 
-        let rpc = Chain::Ethereum.rpc_url().unwrap();
-        let provider = Arc::new(ProviderBuilder::new().on_http(rpc));
+        let chain = ChainOrRpc::Chain(Chain::Ethereum);
         let block_id = BlockId::Range(BlockRange::new(10000004.into(), None));
         let transaction = Transaction::new(
             None,
@@ -272,7 +280,7 @@ mod tests {
             TransactionField::all_variants().to_vec(),
         );
 
-        let transactions = resolve_transaction_query(&transaction, provider)
+        let transactions = resolve_transaction_query(&transaction, &[chain])
             .await
             .unwrap();
 

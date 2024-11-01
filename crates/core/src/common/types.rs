@@ -15,15 +15,15 @@ pub enum Expression {
 #[derive(Debug, PartialEq)]
 pub struct GetExpression {
     pub entity: Entity,
-    pub chain_or_rpc: ChainOrRpc,
+    pub chains: Vec<ChainOrRpc>,
     pub dump: Option<Dump>,
 }
 
 impl GetExpression {
-    fn new(entity: Entity, chain_or_rpc: ChainOrRpc, dump: Option<Dump>) -> Self {
+    fn new(entity: Entity, chains: Vec<ChainOrRpc>, dump: Option<Dump>) -> Self {
         Self {
             entity,
-            chain_or_rpc,
+            chains,
             dump,
         }
     }
@@ -32,22 +32,16 @@ impl GetExpression {
 pub enum GetExpressionError {
     #[error("Unexpected token: {0}")]
     UnexpectedToken(String),
-
     #[error("Missing entity")]
     MissingEntity,
-
     #[error("Missing chain or RPC")]
     MissingChainOrRpc,
-
     #[error("URL parse error: {0}")]
     UrlParseError(String),
-
     #[error(transparent)]
     EntityError(#[from] EntityError),
-
     #[error(transparent)]
     ChainError(#[from] ChainError),
-
     #[error(transparent)]
     DumpError(#[from] DumpError),
 }
@@ -57,7 +51,7 @@ impl TryFrom<Pairs<'_, Rule>> for GetExpression {
 
     fn try_from(pairs: Pairs<'_, Rule>) -> Result<Self, Self::Error> {
         let mut entity: Option<Entity> = None;
-        let mut chain_or_rpc: Option<ChainOrRpc> = None;
+        let mut chains: Option<Vec<ChainOrRpc>> = None;
         let mut dump: Option<Dump> = None;
 
         for pair in pairs {
@@ -65,14 +59,15 @@ impl TryFrom<Pairs<'_, Rule>> for GetExpression {
                 Rule::entity => {
                     entity = Some(Entity::try_from(pair.into_inner())?);
                 }
-                Rule::chain => {
-                    let chain = Chain::try_from(pair.into_inner())?;
-                    chain_or_rpc = Some(ChainOrRpc::Chain(chain));
+                Rule::chain_selector => {
+                    let selector = pair.as_str();
+                    chains = Some(Chain::from_selector(selector)?);
                 }
-                Rule::rpc_url => match Url::parse(&pair.as_str().to_string()) {
-                    Ok(url) => chain_or_rpc = Some(ChainOrRpc::Rpc(url)),
-                    Err(e) => return Err(GetExpressionError::UrlParseError(e.to_string())),
-                },
+                Rule::rpc_url => {
+                    let url = Url::parse(pair.as_str())
+                        .map_err(|e| GetExpressionError::UrlParseError(e.to_string()))?;
+                    chains = Some(vec![ChainOrRpc::Rpc(url)]);
+                }
                 Rule::dump => {
                     dump = Some(Dump::try_from(pair.into_inner())?);
                 }
@@ -84,10 +79,10 @@ impl TryFrom<Pairs<'_, Rule>> for GetExpression {
             }
         }
 
-        // Ensure all required fields are initialized
-        let entity = entity.ok_or_else(|| GetExpressionError::MissingEntity)?;
-        let chain_or_rpc = chain_or_rpc.ok_or_else(|| GetExpressionError::MissingChainOrRpc)?;
-
-        Ok(GetExpression::new(entity, chain_or_rpc, dump))
+        Ok(GetExpression::new(
+            entity.ok_or(GetExpressionError::MissingEntity)?,
+            chains.ok_or(GetExpressionError::MissingChainOrRpc)?,
+            dump,
+        ))
     }
 }

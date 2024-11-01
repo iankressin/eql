@@ -91,6 +91,15 @@ impl Transaction {
             true
         }
     }
+
+    pub fn has_block_filter(&self) -> bool {
+        match self.filters() {
+            Some(filters) => filters
+                .iter()
+                .any(|f| matches!(f, TransactionFilter::BlockId(BlockId::Range(_)))),
+            None => false,
+        }
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -180,6 +189,7 @@ pub enum TransactionField {
     MaxFeePerGas,
     MaxPriorityFeePerGas,
     YParity,
+    Chain,
 }
 
 impl std::fmt::Display for TransactionField {
@@ -202,6 +212,7 @@ impl std::fmt::Display for TransactionField {
             TransactionField::MaxFeePerGas => write!(f, "max_fee_per_gas"),
             TransactionField::MaxPriorityFeePerGas => write!(f, "max_priority_fee_per_gas"),
             TransactionField::YParity => write!(f, "y_parity"),
+            TransactionField::Chain => write!(f, "chain"),
         }
     }
 }
@@ -235,6 +246,7 @@ impl TryFrom<&str> for TransactionField {
             "max_fee_per_gas" => Ok(TransactionField::MaxFeePerGas),
             "max_priority_fee_per_gas" => Ok(TransactionField::MaxPriorityFeePerGas),
             "y_parity" => Ok(TransactionField::YParity),
+            "chain" => Ok(TransactionField::Chain),
             invalid_field => Err(TransactionFieldError::InvalidTransactionField(
                 invalid_field.to_string(),
             )),

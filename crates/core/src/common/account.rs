@@ -37,8 +37,8 @@ impl Account {
         Self { id, filter, fields }
     }
 
-    pub fn ids(&self) -> Option<Vec<NameOrAddress>> {
-        self.id.clone()
+    pub fn ids(&self) -> Option<&Vec<NameOrAddress>> {
+        self.id.as_ref()
     }
 
     pub fn filter(&self) -> Option<Vec<AccountFilter>> {
@@ -136,6 +136,7 @@ pub enum AccountField {
     Nonce,
     Balance,
     Code,
+    Chain,
 }
 
 impl Display for AccountField {
@@ -145,6 +146,7 @@ impl Display for AccountField {
             AccountField::Nonce => write!(f, "nonce"),
             AccountField::Balance => write!(f, "balance"),
             AccountField::Code => write!(f, "code"),
+            AccountField::Chain => write!(f, "chain"),
         }
     }
 }
@@ -175,6 +177,7 @@ impl TryFrom<&str> for AccountField {
             "nonce" => Ok(AccountField::Nonce),
             "balance" => Ok(AccountField::Balance),
             "code" => Ok(AccountField::Code),
+            "chain" => Ok(AccountField::Chain),
             invalid_field => Err(AccountFieldError::InvalidField(invalid_field.to_string())),
         }
     }

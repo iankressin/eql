@@ -209,6 +209,7 @@ pub enum BlockField {
     BlobGasUsed,
     ExcessBlobGas,
     ParentBeaconBlockRoot,
+    Chain,
 }
 
 impl Display for BlockField {
@@ -231,6 +232,7 @@ impl Display for BlockField {
             BlockField::BlobGasUsed => write!(f, "blob_gas_used"),
             BlockField::ExcessBlobGas => write!(f, "excess_blob_gas"),
             BlockField::ParentBeaconBlockRoot => write!(f, "parent_beacon_block_root"),
+            BlockField::Chain => write!(f, "chain"),
         }
     }
 }
@@ -257,6 +259,7 @@ impl TryFrom<&str> for BlockField {
             "blob_gas_used" => Ok(BlockField::BlobGasUsed),
             "excess_blob_gas" => Ok(BlockField::ExcessBlobGas),
             "parent_beacon_block_root" => Ok(BlockField::ParentBeaconBlockRoot),
+            "chain" => Ok(BlockField::Chain),
             invalid_field => Err(BlockFieldError::InvalidBlockField(
                 invalid_field.to_string(),
             )),
@@ -268,8 +271,8 @@ impl TryFrom<&str> for BlockField {
 pub enum BlockRangeError {
     #[error("Unable to fetch block number {0}")]
     UnableToFetchBlockNumber(BlockNumberOrTag),
-    #[error("Start block must be greater than end block")]
-    StartBlockMustBeGreaterThanEndBlock,
+    #[error("Start block must be less than end block")]
+    StartBlockMustBeLessThanEndBlock,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -314,7 +317,7 @@ impl BlockRange {
 
         if let Some(end) = end_block_number {
             if start_block_number > end {
-                return Err(BlockRangeError::StartBlockMustBeGreaterThanEndBlock.into());
+                return Err(BlockRangeError::StartBlockMustBeLessThanEndBlock.into());
             }
         }
 
