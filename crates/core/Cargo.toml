@@ -1,6 +1,6 @@
 [package]
 name = "eql_core"
-version = "0.1.16"
+version = "0.1.17"
 rust-version.workspace = true
 edition.workspace = true
 authors.workspace = true
