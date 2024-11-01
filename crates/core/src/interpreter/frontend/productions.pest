@@ -243,7 +243,7 @@ blockrange_filter = {"block" ~ blockrange_filter_type}
 
 dump = { ">>" ~ WHITESPACE* ~ file_name ~ "." ~ file_format }
 file_name = { (ASCII_ALPHANUMERIC | "-" | "_" | "/")+ }
-file_format = { "json" | "csv" | "yaml" | "toml" | "parquet" }
+file_format = { "json" | "csv" | "parquet" }
 
 // Terminals
 unit = { "ether" | "gwei" | "wei" }
