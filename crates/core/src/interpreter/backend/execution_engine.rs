@@ -375,7 +375,53 @@ mod test {
                     ..Default::default()
                 }]),
             ),
-            // Similar test cases for Account, Transaction, and Logs
+            (
+                Expression::Get(GetExpression {
+                    entity: Entity::Account(Account::new(
+                        Some(vec![NameOrAddress::Address(address!("dac17f958d2ee523a2206206994597c13d831ec7"))]),
+                        None,
+                        vec![AccountField::Chain],
+                    )),
+                    chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+                    dump: None,
+                }),
+                ExpressionResult::Account(vec![AccountQueryRes {
+                    chain: Some(Chain::Ethereum),
+                    ..Default::default()
+                }]),
+            ),
+            (
+                Expression::Get(GetExpression {
+                    entity: Entity::Transaction(Transaction::new(
+                        Some(vec![b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")]),
+                        None,
+                        vec![TransactionField::Chain],
+                    )),
+                    chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+                    dump: None,
+                }),
+                ExpressionResult::Transaction(vec![TransactionQueryRes {
+                    chain: Some(Chain::Ethereum),
+                    ..Default::default()
+                }]),
+            ),
+            (
+                Expression::Get(GetExpression {
+                    entity: Entity::Logs(Logs::new(
+                        vec![LogFilter::BlockRange(BlockRange::new(
+                            BlockNumberOrTag::Number(4638757),
+                            Some(BlockNumberOrTag::Number(4638758)),
+                        ))],
+                        vec![LogField::Chain],
+                    )),
+                    chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+                    dump: None,
+                }),
+                ExpressionResult::Log(vec![LogQueryRes {
+                    chain: Some(Chain::Ethereum),
+                    ..Default::default()
+                }]),
+            ),
         ];
 
         for (expression, expected) in test_cases {
