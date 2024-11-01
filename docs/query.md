@@ -203,8 +203,7 @@ Syntax:
 WHERE <[conditions, ]>
 ```
 
-The where clause is used to filter the results of a query. Each condition is must use the operators described [below](#available-operators), and must be separated by a comma.
-
+The WHERE clause is used to filter the results of a query. Each condition must use the operators described [below](#available-operators), with multiple conditions separated by commas.
 **Example**:
 ```sql
 GET * FROM tx WHERE block = latest, value > 0 ON eth
