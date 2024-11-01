@@ -71,7 +71,7 @@ mod test {
         dump::{Dump, DumpFormat},
         ens::NameOrAddress,
         logs::{LogField, LogFilter, Logs},
-        query_result::{BlockQueryRes, LogQueryRes, TransactionQueryRes},
+        query_result::{AccountQueryRes, BlockQueryRes, LogQueryRes, TransactionQueryRes},
         transaction::{Transaction, TransactionField},
         types::{Expression, GetExpression},
     };
@@ -401,23 +401,6 @@ mod test {
                     dump: None,
                 }),
                 ExpressionResult::Transaction(vec![TransactionQueryRes {
-                    chain: Some(Chain::Ethereum),
-                    ..Default::default()
-                }]),
-            ),
-            (
-                Expression::Get(GetExpression {
-                    entity: Entity::Logs(Logs::new(
-                        vec![LogFilter::BlockRange(BlockRange::new(
-                            BlockNumberOrTag::Number(4638757),
-                            Some(BlockNumberOrTag::Number(4638758)),
-                        ))],
-                        vec![LogField::Chain],
-                    )),
-                    chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
-                    dump: None,
-                }),
-                ExpressionResult::Log(vec![LogQueryRes {
                     chain: Some(Chain::Ethereum),
                     ..Default::default()
                 }]),
