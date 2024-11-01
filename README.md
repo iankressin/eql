@@ -1,7 +1,7 @@
 # EVM Query Language (EQL)
 ![cover image](./preview.png)
 
-> A SQL-like language for querying EVM chains with minimal boilerplate code.
+> A SQL-like language for querying EVM chains with minimal boilerplate.
 
 ## Overview
 
@@ -69,7 +69,7 @@ eqlup
 
 ### Usage
 
-**CLI Mode**:
+#### CLI Mode
 ```bash
 # Run a query file
 eql run query.eql
@@ -78,7 +78,7 @@ eql run query.eql
 eql repl
 ```
 
-**Library Mode**:
+#### Library Mode
 ```toml
 # Cargo.toml
 [dependencies]
@@ -94,13 +94,16 @@ async fn main() {
 }
 ```
 
+#### Web Mode
+[https://eql.sh](https://eql.sh)
+
 ## Features
 
 ### Supported Entities
-- **Accounts**: Balance, nonce, code
-- **Blocks**: Headers, transactions, receipts
-- **Transactions**: Full transaction data
-- **Logs**: Event logs with filtering
+- **Accounts**
+- **Blocks**
+- **Transactions**
+- **Logs**
 
 ### Supported Operations
 - **GET**: Query entity data
