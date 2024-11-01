@@ -7,7 +7,7 @@
   - [Account](#account)
   - [Block](#block)
   - [Transaction](#transaction)
-  - [Event Log](#event-log)
+  - [Event Log](#event-logs)
 - [WHERE Clause](#where-clause)
 - [File Exports](#file-exports)
 - [Limitations](#limitations)
@@ -27,7 +27,7 @@ GET <fields> FROM <entity> [WHERE <conditions>] ON <chains>
 
 # Entities
 
-Entities are analogus to the tables in a relational database, and are used to query data from. The supported entities are:
+Entities are analogous to tables in a relational database and are used to query data. The supported entities are:
 - `account`
 - `block`
 - `tx`
@@ -50,7 +50,7 @@ Accounts supports the following identifiers:
 - `nonce`: Transaction count
 - `code`: Contract bytecode (if contract account)
 - `address`: Account address
-- `chain`: Chain identifier (generelly used for cross-chain queries)
+- `chain`: Chain identifier (generally used for cross-chain queries)
 
 ### Examples
 #### Fetching from a single address
@@ -155,18 +155,17 @@ GET * FROM tx 0x456..., 0x789... ON eth
 GET * FROM tx WHERE block = latest ON eth
 ```
 
-## Event Log Queries
+## Event Logs
 
 ### Identifiers
-Different from transactions, blocks and accounts, logs doesn't have a global identifier, instead they are stored in a vector inside of a transaction receipt, therefore in order to fetch logs, we need to specify a combination of fields to filter the logs by.
+Unlike transactions, blocks, and accounts, logs don't have a global identifier. Instead, they are stored in a vector inside a transaction receipt. Therefore, to fetch logs, you need to specify a combination of fields to filter them.
 
 The filtering is done using the `WHERE` clause, which is explained in more detail [below](#where-clause).
 
-The log queries are mapped to the `eth_getLogs` JSON-RPC method, which requires either a block number or a block range to be specified.
+Log queries are mapped to the `eth_getLogs` JSON-RPC method, which requires either a block number or a block range to be specified.
 
-> Log queries do not support list of blocks
-
-> Log queries do not support comparison operators. The only supported operator is `=`.
+> Note: Log queries do not support lists of blocks
+> Note: Log queries only support the `=` operator for comparisons
 
 ### Examples
 #### Fetching logs using topic and address
@@ -209,10 +208,10 @@ The WHERE clause is used to filter the results of a query. Each condition must u
 GET * FROM tx WHERE block = latest, value > 0 ON eth
 ```
 
-The where clause is currently only **available** for **transactions** and **logs** queries, and they work differently for each.
+The where clause is currently only **available** for **transactions** and **logs** queries, and they work differently for each type.
 
-For **transactions** queries, the `WHERE` clause demand user to specify the a block number, list of block numbers, or a block range, which is used to filter the transactions by the block they are included in.
-Alongside the block height, users can also filter transactions by any other field using the operators described [below](#available-operators), which will be used to filter the transactions accordingly in memory.
+For **transactions** queries, the `WHERE` clause requires users to specify a block number, list of block numbers, or block range to filter transactions by the block they are included in.
+Users can also filter transactions by any other field using the operators described [below](#available-operators), which will filter the transactions in memory.
 
 **Example**:
 Get all transactions from the latest block with a value greater than 0 ether
@@ -277,8 +276,8 @@ GET * FROM tx WHERE block = 1:100, from = 0x456... >> tx_history.parquet
 - File extension must match one of the supported formats
 
 ## Limitations
-As EQL uses JSON-RPC providers as the backbone for querying, it inherits the same a few limitations, most commonly:
-1. Rate limits apply based on RPC provider
+Since EQL uses JSON-RPC providers as the backbone for querying, it inherits some limitations, most commonly:
+1. Rate limits apply based on your RPC provider
 2. Some complex queries may timeout on congested networks
 
 For rate limits, EQL enables users to specify their own RPC providers when installed locally. Check out the [installation guide](./installation.md) for more details.
