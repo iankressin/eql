@@ -1,5 +1,5 @@
 ## Alpha roadmap
-![roadmap image](./roadmap.png)
+![roadmap image](../roadmap.png)
 
 ### v0.1.3-alpha
 - [x] Logs and filters:
