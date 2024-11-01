@@ -3,7 +3,9 @@
 
 > A SQL-like language for querying EVM chains with minimal boilerplate.
 
-## Overview
+![GitHub commits since latest release (branch)](https://img.shields.io/github/commits-since/iankressin/eql/latest/main)
+![GitHub contributors](https://img.shields.io/github/contributors/iankressin/eql)
+![GitHub Release Date](https://img.shields.io/github/release-date/iankressin/eql)
 
 EQL provides a declarative way to query Ethereum Virtual Machine (EVM) chains. It enables developers and researchers to fetch blockchain data using familiar SQL-like syntax, eliminating the need for complex boilerplate code.
 
@@ -11,6 +13,25 @@ EQL provides a declarative way to query Ethereum Virtual Machine (EVM) chains. I
 // Fetch Vitalik's balance across multiple chains
 GET balance, balance FROM account vitalik.eth ON eth, base, arbitrum
 ```
+
+## Table of Contents
+- [Why EQL?](#why-eql)
+  - [The Problem](#the-problem)
+  - [The Solution](#the-solution)
+- [How It Works](#how-it-works)
+- [Quick Start](#quick-start)
+  - [Installation](#installation)
+  - [Usage](#usage)
+    - [CLI Mode](#cli-mode)
+    - [Library Mode](#library-mode)
+    - [Web Mode](#web-mode)
+- [Features](#features)
+  - [Supported Entities](#supported-entities)
+  - [Supported Operations](#supported-operations)
+- [Documentation](#documentation)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Why EQL?
 
@@ -130,3 +151,6 @@ We welcome contributions! See our [Contributing Guide](./CONTRIBUTING.md) for de
 ## License
 
 MIT License - see [LICENSE](./LICENSE) for details
+
+
+
