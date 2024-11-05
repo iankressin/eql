@@ -12,7 +12,7 @@
 EQL provides a declarative way to query Ethereum Virtual Machine (EVM) chains. It enables developers and researchers to fetch blockchain data using familiar SQL-like syntax, eliminating the need for complex boilerplate code.
 
 ```sql
-// Fetch Vitalik's balance across multiple chains
+# Fetch Vitalik's balance across multiple chains
 GET balance, balance FROM account vitalik.eth ON eth, base, arbitrum
 ```
 
