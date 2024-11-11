@@ -62,6 +62,9 @@ pub enum Chain {
     Fantom,
     Kava,
     Gnosis,
+
+    // Short-lived Pectra testnet
+    Mekong,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -137,6 +140,7 @@ impl Chain {
             Chain::Fantom => "https://fantom.drpc.org",
             Chain::Kava => "https://evm.kava.io",
             Chain::Gnosis => "https://gnosis.drpc.org",
+            Chain::Mekong => "https://rpc.mekong.ethpandaops.io",
         }
     }
 }
@@ -174,6 +178,7 @@ impl TryFrom<&str> for Chain {
             "fantom" => Ok(Chain::Fantom),
             "kava" => Ok(Chain::Kava),
             "gnosis" => Ok(Chain::Gnosis),
+            "mekong" => Ok(Chain::Mekong),
             _ => Err(ChainError::InvalidChain(chain.to_string())),
         }
     }
@@ -204,6 +209,7 @@ impl From<&Chain> for u64 {
             Chain::Fantom => 250,
             Chain::Kava => 2222,
             Chain::Gnosis => 100,
+            Chain::Mekong => 7078815900,
         }
     }
 }
@@ -265,6 +271,7 @@ impl fmt::Display for Chain {
             Chain::Fantom => "fantom",
             Chain::Kava => "kava",
             Chain::Gnosis => "gnosis",
+            Chain::Mekong => "mekong",
         };
         write!(f, "{}", chain_str)
     }

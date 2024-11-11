@@ -272,7 +272,8 @@ chain = {
     "ronin" |
     "fantom" |
     "kava" |
-    "gnosis"
+    "gnosis" |
+    "mekong"
 }
 rpc_url = { ("http://" | "https://") ~ (ASCII_ALPHANUMERIC | "." | "-" | ":" | "/")+ }
 address = { "0x" ~ (ASCII_HEX_DIGIT){40} }
