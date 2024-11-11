@@ -122,9 +122,7 @@ pub async fn batch_get_blocks(
     for block_number in block_numbers {
         let provider = Arc::clone(&provider);
         let block_future = async move {
-            let block = get_block(BlockNumberOrTag::Number(block_number), provider, hydrate).await;
-            println!("block: {:#?}", block);
-            block
+            get_block(BlockNumberOrTag::Number(block_number), provider, hydrate).await
         };
         block_futures.push(block_future);
     }

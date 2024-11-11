@@ -1634,7 +1634,7 @@ dependencies = [
 
 [[package]]
 name = "eql_core"
-version = "0.1.17"
+version = "0.1.18"
 dependencies = [
  "alloy",
  "anyhow",
