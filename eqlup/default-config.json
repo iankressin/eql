@@ -140,6 +140,12 @@
             "rpcs": [
                 "https://gnosis.drpc.org"
             ]
+        },
+        "mekong": {
+            "default": "https://rpc.mekong.ethpandaops.io",
+            "rpcs": [
+                "https://rpc.mekong.ethpandaops.io"
+            ]
         }
     }
 }
