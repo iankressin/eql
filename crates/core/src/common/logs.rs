@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use super::{
     block::BlockRange,
     entity_id::{parse_block_number_or_tag, EntityIdError},
@@ -140,7 +142,7 @@ impl TryFrom<Pair<'_, Rule>> for LogFilter {
         match pair.as_rule() {
             Rule::address_filter_type => extract_value(pair, |s| {
                 Ok(LogFilter::EmitterAddress(Address::parse_checksummed(
-                    s, None,
+                    Address::to_checksum(&Address::from_str(s)?, None), None,
                 )?))
             }),
             Rule::blockrange_filter => parse_block_range(pair),
