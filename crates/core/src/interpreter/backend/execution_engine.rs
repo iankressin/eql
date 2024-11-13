@@ -54,7 +54,7 @@ impl ExecutionEngine {
         };
 
         if let Some(dump) = &expr.dump {
-            dump_results(&result, dump);
+            let _ = dump_results(&result, dump);
         }
 
         Ok(result)
@@ -238,7 +238,7 @@ mod test {
         })];
         let expected = vec![ExpressionResult::Transaction(vec![
             TransactionQueryRes {
-                transaction_type: Some(2),
+                r#type: Some(2),
                 hash: Some(b256!(
                     "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
                 )),
@@ -246,11 +246,12 @@ mod test {
                 to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
                 data: Some(bytes!("")),
                 value: Some(U256::from(234808500010631948_u128)),
-                gas_price: Some(10209184711_u128),
-                gas: Some(21000),
+                gas_price: None,
+                gas_limit: Some(21000),
+                effective_gas_price: Some(10209184711_u128),
                 status: Some(true),
                 chain_id: Some(1),
-                v: Some(U256::from(0)),
+                v: Some(false),
                 r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
                 s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
                 max_fee_per_blob_gas: None,
@@ -258,9 +259,10 @@ mod test {
                 max_priority_fee_per_gas: Some(0),
                 y_parity: Some(false),
                 chain: Some(Chain::Ethereum),
+                authorization_list: None,
             },
             TransactionQueryRes {
-                transaction_type: Some(2),
+                r#type: Some(2),
                 hash: Some(b256!(
                     "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
                 )),
@@ -268,11 +270,12 @@ mod test {
                 to: Some(address!("2eeb301387d6bda23e02fa0c7463507c68b597b5")),
                 data: Some(bytes!("")),
                 value: Some(U256::from(234808500010631948_u128)),
-                gas_price: Some(10209184711_u128),
-                gas: Some(21000),
+                gas_price: None,
+                gas_limit: Some(21000),
+                effective_gas_price: Some(10209184711_u128),
                 status: Some(true),
                 chain_id: Some(1),
-                v: Some(U256::from(0)),
+                v: Some(false),
                 r: Some(U256::from_str("105656622829170817033829205634607968479218860016837137132236076370603621041980").unwrap()),
                 s: Some(U256::from_str("15038977765364444198936700207894720753481416564436657360670639019817488048130").unwrap()),
                 max_fee_per_blob_gas: None,
@@ -280,6 +283,7 @@ mod test {
                 max_priority_fee_per_gas: Some(0),
                 y_parity: Some(false),
                 chain: Some(Chain::Ethereum),
+                authorization_list: None,
             }])    
         ];            
 

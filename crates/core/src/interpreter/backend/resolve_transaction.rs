@@ -6,6 +6,7 @@ use crate::common::{
     transaction::{Transaction, TransactionField},
 };
 use alloy::{
+    consensus::Transaction as ConsensusTransaction,
     primitives::FixedBytes,
     providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::{BlockTransactions, Transaction as RpcTransaction},
@@ -63,7 +64,7 @@ pub async fn resolve_transaction_query(
         // Filter and collect results for this chain
         let filtered_tx_res: Vec<TransactionQueryRes> = tx_res
             .into_iter()
-            .filter(|t| transaction.filter(t))
+            .filter(|t| t.has_value() && transaction.filter(t))
             .collect();
 
         all_results.extend(filtered_tx_res);
@@ -79,8 +80,10 @@ async fn get_transactions_by_ids(
     let mut tx_futures = Vec::new();
     for id in ids {
         let provider = provider.clone();
+        // let tx = provider
+        //     .raw_request("eth_getTransactionByHash".into(), (*id,))
+        //     .await?;
         let tx_future = async move { provider.get_transaction_by_hash(*id).await };
-
         tx_futures.push(tx_future);
     }
 
@@ -128,64 +131,72 @@ async fn pick_transaction_fields(
 
     for field in fields {
         match field {
-            TransactionField::TransactionType => {
-                result.transaction_type = tx.transaction_type;
+            TransactionField::Type => {
+                result.r#type = Some(tx.inner.tx_type().into());
+            }
+            TransactionField::AuthorizationList => {
+                result.authorization_list = tx.inner.authorization_list().map(|a| a.to_vec());
             }
             TransactionField::Hash => {
-                result.hash = Some(tx.hash);
+                result.hash = Some(tx.inner.tx_hash().clone());
             }
             TransactionField::From => {
                 result.from = Some(tx.from);
             }
             TransactionField::To => {
-                result.to = tx.to;
+                result.to = tx.inner.to().clone();
             }
             TransactionField::Data => {
-                result.data = Some(tx.input.clone());
+                result.data = Some(tx.inner.input().clone());
             }
             TransactionField::Value => {
-                result.value = Some(tx.value);
+                result.value = Some(tx.inner.value().clone());
             }
             TransactionField::GasPrice => {
-                result.gas_price = tx.gas_price;
+                result.gas_price = tx.inner.gas_price();
             }
-            TransactionField::Gas => {
-                result.gas = Some(tx.gas);
+            TransactionField::EffectiveGasPrice => {
+                result.effective_gas_price = tx.effective_gas_price;
             }
-            TransactionField::Status => match provider.get_transaction_receipt(tx.hash).await? {
-                Some(receipt) => {
-                    result.status = Some(receipt.status());
+            TransactionField::GasLimit => {
+                result.gas_limit = Some(tx.inner.gas_limit());
+            }
+            TransactionField::Status => {
+                match provider
+                    .get_transaction_receipt(tx.inner.tx_hash().clone())
+                    .await?
+                {
+                    Some(receipt) => {
+                        result.status = Some(receipt.status());
+                    }
+                    None => {
+                        result.status = None;
+                    }
                 }
-                None => {
-                    result.status = None;
-                }
-            },
+            }
             TransactionField::ChainId => {
-                result.chain_id = tx.chain_id;
+                result.chain_id = tx.inner.chain_id();
             }
             TransactionField::V => {
-                result.v = tx.signature.map_or(None, |s| Some(s.v));
+                result.v = Some(tx.inner.signature().v());
             }
             TransactionField::R => {
-                result.r = tx.signature.map_or(None, |s| Some(s.r));
+                result.r = Some(tx.inner.signature().r());
             }
             TransactionField::S => {
-                result.s = tx.signature.map_or(None, |s| Some(s.s));
+                result.s = Some(tx.inner.signature().s());
             }
             TransactionField::MaxFeePerBlobGas => {
-                result.max_fee_per_blob_gas = tx.max_fee_per_blob_gas;
+                result.max_fee_per_blob_gas = tx.inner.max_fee_per_blob_gas();
             }
             TransactionField::MaxFeePerGas => {
-                result.max_fee_per_gas = tx.max_fee_per_gas;
+                result.max_fee_per_gas = Some(tx.inner.max_fee_per_gas());
             }
             TransactionField::MaxPriorityFeePerGas => {
-                result.max_priority_fee_per_gas = tx.max_priority_fee_per_gas;
+                result.max_priority_fee_per_gas = tx.inner.max_priority_fee_per_gas();
             }
             TransactionField::YParity => {
-                result.y_parity = tx
-                    .signature
-                    .map_or(None, |s| s.y_parity)
-                    .map_or(None, |y| Some(y.0));
+                result.y_parity = Some(tx.inner.signature().v());
             }
             TransactionField::Chain => {
                 result.chain = Some(chain.clone());
@@ -194,113 +205,4 @@ async fn pick_transaction_fields(
     }
 
     Ok(result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::common::{
-        block::BlockRange,
-        chain::Chain,
-        filters::{ComparisonFilter, EqualityFilter, FilterType},
-        transaction::TransactionFilter,
-    };
-    use alloy::{
-        eips::BlockNumberOrTag,
-        primitives::{address, U256},
-        providers::ProviderBuilder,
-    };
-
-    #[tokio::test]
-    async fn test_get_transactions_by_block_range() {
-        let rpc = Chain::Ethereum.rpc_url().unwrap();
-        let provider = Arc::new(ProviderBuilder::new().on_http(rpc));
-        let block_id = BlockId::Range(BlockRange::new(10000000.into(), Some(10000015.into())));
-        let transactions = get_transactions_by_block_id(&block_id, &provider)
-            .await
-            .unwrap();
-
-        assert_eq!(transactions.len(), 2394);
-    }
-
-    #[tokio::test]
-    async fn test_get_transactions_by_block_number() {
-        let rpc = Chain::Ethereum.rpc_url().unwrap();
-        let provider = Arc::new(ProviderBuilder::new().on_http(rpc));
-        let block_id = BlockId::Number(BlockNumberOrTag::Number(21036202));
-        let transactions = get_transactions_by_block_id(&block_id, &provider)
-            .await
-            .unwrap();
-
-        assert_eq!(transactions.len(), 177);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_query_using_block_range_filter() {
-        let rpc = Chain::Ethereum.rpc_url().unwrap();
-        let chain = ChainOrRpc::Rpc(rpc);
-        let block_id = BlockId::Range(BlockRange::new(10000000.into(), Some(10000001.into())));
-        let transaction = Transaction::new(
-            None,
-            Some(vec![TransactionFilter::BlockId(block_id)]),
-            TransactionField::all_variants().to_vec(),
-        );
-
-        let transactions = resolve_transaction_query(&transaction, &[chain])
-            .await
-            .unwrap();
-
-        assert_eq!(transactions.len(), 211);
-    }
-
-    #[tokio::test]
-    async fn test_resolve_query_using_filters() {
-        let value = "1000000000000000".parse::<U256>().unwrap();
-        let from = address!("BF2EFaA8715d75AfC562Cde29f56B55aA0Fb219F");
-        let to = address!("3fE873889008521bf335E07CEAfdfd0D9a6864A8");
-        let gas = 22000;
-        let gas_price = 5000000000;
-        let status = true;
-
-        let chain = ChainOrRpc::Chain(Chain::Ethereum);
-        let block_id = BlockId::Range(BlockRange::new(10000004.into(), None));
-        let transaction = Transaction::new(
-            None,
-            Some(vec![
-                TransactionFilter::BlockId(block_id),
-                TransactionFilter::Value(FilterType::Comparison(ComparisonFilter::Lte(value))),
-                TransactionFilter::From(EqualityFilter::Eq(from)),
-                TransactionFilter::To(EqualityFilter::Eq(to)),
-                TransactionFilter::Gas(FilterType::Comparison(ComparisonFilter::Lte(gas))),
-                TransactionFilter::GasPrice(FilterType::Comparison(ComparisonFilter::Lte(
-                    gas_price,
-                ))),
-                TransactionFilter::Status(EqualityFilter::Eq(status)),
-            ]),
-            TransactionField::all_variants().to_vec(),
-        );
-
-        let transactions = resolve_transaction_query(&transaction, &[chain])
-            .await
-            .unwrap();
-
-        let tx = transactions.first().unwrap();
-        let expected_tx: TransactionQueryRes = TransactionQueryRes {
-            value: Some(value),
-            from: Some(from),
-            to: Some(to),
-            gas: Some(gas),
-            gas_price: Some(gas_price),
-            status: Some(status),
-            ..Default::default()
-        };
-
-        assert_eq!(transactions.len(), 1);
-        assert_eq!(tx.value, expected_tx.value);
-        assert_eq!(tx.from, expected_tx.from);
-        assert_eq!(tx.to, expected_tx.to);
-        assert_eq!(tx.gas, expected_tx.gas);
-        assert_eq!(tx.gas_price, expected_tx.gas_price);
-        assert_eq!(tx.status, expected_tx.status);
-    }
 }

@@ -1,12 +1,12 @@
 use crate::common::{
-    block::{Block, BlockField, BlockId},
+    block::{get_block_number_from_tag, Block, BlockField, BlockId},
     chain::{Chain, ChainOrRpc},
     query_result::BlockQueryRes,
 };
 use alloy::{
     eips::BlockNumberOrTag,
     providers::{Provider, ProviderBuilder, RootProvider},
-    rpc::types::Block as RpcBlock,
+    rpc::types::{Block as RpcBlock, BlockTransactionsKind},
     transports::http::{Client, Http},
 };
 use anyhow::Result;
@@ -136,7 +136,13 @@ pub async fn get_block(
     provider: Arc<RootProvider<Http<Client>>>,
     hydrate: bool,
 ) -> Result<RpcBlock> {
-    match provider.get_block_by_number(block_id, hydrate).await? {
+    let kind = if hydrate {
+        BlockTransactionsKind::Full
+    } else {
+        BlockTransactionsKind::Hashes
+    };
+
+    match provider.get_block_by_number(block_id, kind).await? {
         Some(block) => Ok(block),
         None => return Err(BlockResolverErrors::UnableToFetchBlockNumber(block_id.clone()).into()),
     }
@@ -151,16 +157,16 @@ fn filter_fields(block: RpcBlock, fields: &[BlockField], chain: &Chain) -> Block
                 result.timestamp = Some(block.header.timestamp);
             }
             BlockField::Number => {
-                result.number = block.header.number;
+                result.number = Some(block.header.number);
             }
             BlockField::Hash => {
-                result.hash = block.header.hash;
+                result.hash = Some(block.header.hash);
             }
             BlockField::ParentHash => {
                 result.parent_hash = Some(block.header.parent_hash);
             }
             BlockField::Size => {
-                result.size = block.size;
+                result.size = block.header.size;
             }
             BlockField::StateRoot => {
                 result.state_root = Some(block.header.state_root);
@@ -178,7 +184,7 @@ fn filter_fields(block: RpcBlock, fields: &[BlockField], chain: &Chain) -> Block
                 result.extra_data = Some(block.header.extra_data.clone());
             }
             BlockField::MixHash => {
-                result.mix_hash = block.header.mix_hash;
+                result.mix_hash = Some(block.header.mix_hash);
             }
             BlockField::TotalDifficulty => {
                 result.total_difficulty = block.header.total_difficulty;
@@ -205,26 +211,6 @@ fn filter_fields(block: RpcBlock, fields: &[BlockField], chain: &Chain) -> Block
     }
 
     result
-}
-
-async fn get_block_number_from_tag(
-    provider: Arc<RootProvider<Http<Client>>>,
-    number_or_tag: &BlockNumberOrTag,
-) -> Result<u64> {
-    match number_or_tag {
-        BlockNumberOrTag::Number(number) => Ok(*number),
-        block_tag => match provider.get_block_by_number(*block_tag, false).await? {
-            Some(block) => match block.header.number {
-                Some(number) => Ok(number),
-                None => {
-                    Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
-                }
-            },
-            None => {
-                Err(BlockResolverErrors::UnableToFetchBlockNumber(number_or_tag.clone()).into())
-            }
-        },
-    }
 }
 
 #[cfg(test)]

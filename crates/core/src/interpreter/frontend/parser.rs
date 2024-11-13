@@ -198,9 +198,9 @@ mod tests {
 
     #[test]
     fn test_build_ast_with_transaction_fields() {
-        let source = "GET transaction_type, hash, from, to, data, value, gas_price, gas, \
+        let source = "GET type, hash, from, to, data, value, gas_price, gas_limit, \
             status, v, r, s, max_fee_per_blob_gas, max_fee_per_gas, \
-            max_priority_fee_per_gas, y_parity \
+            max_priority_fee_per_gas, y_parity, authorization_list \
             FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81 \
             ON eth";
 
@@ -211,14 +211,14 @@ mod tests {
                 )]),
                 None,
                 vec![
-                    TransactionField::TransactionType,
+                    TransactionField::Type,
                     TransactionField::Hash,
                     TransactionField::From,
                     TransactionField::To,
                     TransactionField::Data,
                     TransactionField::Value,
                     TransactionField::GasPrice,
-                    TransactionField::Gas,
+                    TransactionField::GasLimit,
                     TransactionField::Status,
                     TransactionField::V,
                     TransactionField::R,
@@ -227,6 +227,7 @@ mod tests {
                     TransactionField::MaxFeePerGas,
                     TransactionField::MaxPriorityFeePerGas,
                     TransactionField::YParity,
+                    TransactionField::AuthorizationList,
                 ],
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
@@ -388,7 +389,7 @@ mod tests {
     fn test_build_ast_with_transaction_comparison_filters() {
         let source = "GET * FROM tx WHERE \
             block = 4638757, \
-            gas > 10000000, \
+            gas_limit > 10000000, \
             gas_price < 10000000, \
             max_fee_per_blob_gas >= 10000000, \
             max_fee_per_gas <= 10000000, \
@@ -408,7 +409,7 @@ mod tests {
                         BlockNumberOrTag::Number(4638757),
                         None,
                     ))),
-                    TransactionFilter::Gas(FilterType::Comparison(ComparisonFilter::Gt(
+                    TransactionFilter::GasLimit(FilterType::Comparison(ComparisonFilter::Gt(
                         U128::from(10000000).try_into().unwrap(),
                     ))),
                     TransactionFilter::GasPrice(FilterType::Comparison(ComparisonFilter::Lt(
