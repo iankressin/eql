@@ -126,8 +126,8 @@ Transactions supports the following identifiers:
 - `data`: Transaction input data 
 - `nonce`: Transaction nonce
 - `gas_price`: Gas price in wei
-- `gas`: Gas limit
-- `transaction_type`: Transaction type
+- `gas_limit`: Gas limit
+- `type`: Transaction type
 - `fee`: Transaction fee in wei
 - `status`: Transaction status (true = success, false = failure)
 - `v`: v component of signature

@@ -116,7 +116,7 @@ block_filter = { blockrange_filter }
 // Transaction
 tx_field_list = _{ tx_field ~ ("," ~ WHITESPACE* ~ tx_field)* }
 tx_field = {
-    "transaction_type" |
+    "type" |
     "hash" |
     "from" | 
     "to" | 
@@ -124,12 +124,16 @@ tx_field = {
     "value" | 
     "fee" |
     "gas_price" |
-    "gas" |
+    "gas_limit" |
+    "effective_gas_price" |
     "status" |
     "chain_id" |
     "v" |
     "r" |
     "s" |
+
+    // EIP-7702
+    "authorization_list" |
 
     // EIP-4844
     "max_fee_per_blob_gas" |
@@ -149,13 +153,15 @@ tx_id = { hash }
 // Transaction filters
 tx_filter_list = _{ "WHERE" ~ WHITESPACE* ~ tx_filter ~ ("," ~ WHITESPACE* ~ tx_filter)* }
 tx_filter = {
+    type_filter |
     blockrange_filter |
     from_filter |
     to_filter |
     data_filter |
     value_filter |
     gas_price_filter |
-    gas_filter |
+    effective_gas_price_filter |
+    gas_limit_filter |
     status_filter |
     max_fee_per_blob_gas_filter |
     blob_versioned_hashes_filter |
@@ -164,12 +170,14 @@ tx_filter = {
     y_parity_filter
 }
 
+type_filter_type = { equality_operators ~ number }
 from_filter_type = { equality_operators ~ address | ens }
 to_filter_type = { equality_operators ~ address }
 data_filter_type = { equality_operators ~ hex_string }
 value_filter_type = { all_operators ~ number }
-gas_filter_type = { all_operators ~ number }
+gas_limit_filter_type = { all_operators ~ number }
 gas_price_filter_type = { all_operators ~ number }
+effective_gas_price_filter_type = { all_operators ~ number }
 status_filter_type = { equality_operators ~ boolean }
 max_fee_per_blob_gas_filter_type = { all_operators ~ number }
 blob_versioned_hashes_filter_type = { equality_operators ~ hex_string }
@@ -178,13 +186,15 @@ max_priority_fee_per_gas_filter_type = { all_operators ~ number }
 y_parity_filter_type = { equality_operators ~ boolean }
 
 // TODO: add support for different ether units (ether, gwei, wei)
+type_filter = _{ "type" ~ type_filter_type }
 from_filter = _{"from" ~ from_filter_type}
 to_filter = _{"to" ~ to_filter_type}
 data_filter = _{"data" ~ data_filter_type}
 value_filter = _{"value" ~ value_filter_type}
 gas_price_filter = _{"gas_price" ~ gas_price_filter_type}
-gas_filter = _{"gas" ~ gas_filter_type}
+gas_limit_filter = _{"gas_limit" ~ gas_limit_filter_type}
 status_filter = _{"status" ~ status_filter_type}
+effective_gas_price_filter = _{"effective_gas_price" ~ effective_gas_price_filter_type}
 max_fee_per_blob_gas_filter = _{"max_fee_per_blob_gas" ~ max_fee_per_blob_gas_filter_type}
 blob_versioned_hashes_filter = _{"blob_versioned_hashes" ~ blob_versioned_hashes_filter_type}
 max_fee_per_gas_filter = _{"max_fee_per_gas" ~ max_fee_per_gas_filter_type}

@@ -3,6 +3,7 @@ use crate::interpreter::frontend::parser::Rule;
 use alloy::{
     eips::BlockNumberOrTag,
     providers::{Provider, RootProvider},
+    rpc::types::BlockTransactionsKind,
     transports::http::{Client, Http},
 };
 use anyhow::Result;
@@ -303,15 +304,10 @@ impl BlockRange {
         provider: &Arc<RootProvider<Http<Client>>>,
     ) -> Result<Vec<u64>> {
         let (start_block, end_block) = self.range();
-        let start_block_number = self
-            .get_block_number_from_tag(provider.clone(), start_block)
-            .await?;
+        let start_block_number = get_block_number_from_tag(provider.clone(), &start_block).await?;
 
         let end_block_number = match end_block {
-            Some(end) => Some(
-                self.get_block_number_from_tag(provider.clone(), end)
-                    .await?,
-            ),
+            Some(end) => Some(get_block_number_from_tag(provider.clone(), &end).await?),
             None => None,
         };
 
@@ -327,23 +323,6 @@ impl BlockRange {
                 return Ok(range.collect());
             }
             None => Ok(vec![start_block_number]),
-        }
-    }
-
-    async fn get_block_number_from_tag(
-        &self,
-        provider: Arc<RootProvider<Http<Client>>>,
-        number_or_tag: BlockNumberOrTag,
-    ) -> Result<u64> {
-        match number_or_tag {
-            BlockNumberOrTag::Number(number) => Ok(number),
-            block_tag => match provider.get_block_by_number(block_tag, false).await? {
-                Some(block) => match block.header.number {
-                    Some(number) => Ok(number),
-                    None => Err(BlockRangeError::UnableToFetchBlockNumber(number_or_tag).into()),
-                },
-                None => Err(BlockRangeError::UnableToFetchBlockNumber(number_or_tag).into()),
-            },
         }
     }
 }
@@ -364,5 +343,21 @@ impl Display for BlockRange {
         } else {
             write!(f, "{}", start)
         }
+    }
+}
+
+pub async fn get_block_number_from_tag(
+    provider: Arc<RootProvider<Http<Client>>>,
+    number_or_tag: &BlockNumberOrTag,
+) -> Result<u64> {
+    match number_or_tag {
+        BlockNumberOrTag::Number(number) => Ok(*number),
+        block_tag => match provider
+            .get_block_by_number(*block_tag, BlockTransactionsKind::Hashes)
+            .await?
+        {
+            Some(block) => Ok(block.header.number),
+            None => Err(BlockRangeError::UnableToFetchBlockNumber(number_or_tag.clone()).into()),
+        },
     }
 }

@@ -63,14 +63,17 @@ impl Transaction {
     pub fn filter(&self, tx: &TransactionQueryRes) -> bool {
         if let Some(filters) = &self.filters {
             filters.iter().all(|filter| match filter {
-                TransactionFilter::TransactionType(t) => t.compare(&tx.transaction_type.unwrap()),
+                TransactionFilter::Type(t) => t.compare(&tx.r#type.unwrap()),
                 TransactionFilter::Hash(h) => h.compare(&tx.hash.unwrap()),
                 TransactionFilter::From(f) => f.compare(&tx.from.unwrap()),
                 TransactionFilter::To(t) => t.compare(&tx.to.unwrap()),
                 TransactionFilter::Data(d) => d.compare(&tx.data.clone().unwrap()),
                 TransactionFilter::Value(v) => v.compare(&tx.value.unwrap()),
                 TransactionFilter::GasPrice(gp) => gp.compare(&tx.gas_price.unwrap()),
-                TransactionFilter::Gas(g) => g.compare(&tx.gas.unwrap()),
+                TransactionFilter::GasLimit(g) => g.compare(&tx.gas_limit.unwrap()),
+                TransactionFilter::EffectiveGasPrice(egp) => {
+                    egp.compare(&tx.effective_gas_price.unwrap())
+                }
                 TransactionFilter::ChainId(cid) => cid.compare(&tx.chain_id.unwrap()),
                 TransactionFilter::Status(s) => s.compare(&tx.status.unwrap()),
                 TransactionFilter::V(v) => v.compare(&tx.v.unwrap()),
@@ -172,14 +175,15 @@ impl TryFrom<Pairs<'_, Rule>> for Transaction {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumVariants)]
 pub enum TransactionField {
-    TransactionType,
+    Type,
     Hash,
     From,
     To,
     Data,
     Value,
     GasPrice,
-    Gas,
+    GasLimit,
+    EffectiveGasPrice,
     Status,
     ChainId,
     V,
@@ -190,19 +194,21 @@ pub enum TransactionField {
     MaxPriorityFeePerGas,
     YParity,
     Chain,
+    AuthorizationList,
 }
 
 impl std::fmt::Display for TransactionField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransactionField::TransactionType => write!(f, "transaction_type"),
+            TransactionField::Type => write!(f, "type"),
             TransactionField::Hash => write!(f, "hash"),
             TransactionField::From => write!(f, "from"),
             TransactionField::To => write!(f, "to"),
             TransactionField::Data => write!(f, "data"),
             TransactionField::Value => write!(f, "value"),
             TransactionField::GasPrice => write!(f, "gas_price"),
-            TransactionField::Gas => write!(f, "gas"),
+            TransactionField::GasLimit => write!(f, "gas_limit"),
+            TransactionField::EffectiveGasPrice => write!(f, "effective_gas_price"),
             TransactionField::Status => write!(f, "status"),
             TransactionField::ChainId => write!(f, "chain_id"),
             TransactionField::V => write!(f, "v"),
@@ -213,6 +219,7 @@ impl std::fmt::Display for TransactionField {
             TransactionField::MaxPriorityFeePerGas => write!(f, "max_priority_fee_per_gas"),
             TransactionField::YParity => write!(f, "y_parity"),
             TransactionField::Chain => write!(f, "chain"),
+            TransactionField::AuthorizationList => write!(f, "authorization_list"),
         }
     }
 }
@@ -229,14 +236,15 @@ impl TryFrom<&str> for TransactionField {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "transaction_type" => Ok(TransactionField::TransactionType),
+            "type" => Ok(TransactionField::Type),
             "hash" => Ok(TransactionField::Hash),
             "from" => Ok(TransactionField::From),
             "to" => Ok(TransactionField::To),
             "data" => Ok(TransactionField::Data),
             "value" => Ok(TransactionField::Value),
             "gas_price" => Ok(TransactionField::GasPrice),
-            "gas" => Ok(TransactionField::Gas),
+            "gas_limit" => Ok(TransactionField::GasLimit),
+            "effective_gas_price" => Ok(TransactionField::EffectiveGasPrice),
             "status" => Ok(TransactionField::Status),
             "chain_id" => Ok(TransactionField::ChainId),
             "v" => Ok(TransactionField::V),
@@ -247,6 +255,7 @@ impl TryFrom<&str> for TransactionField {
             "max_priority_fee_per_gas" => Ok(TransactionField::MaxPriorityFeePerGas),
             "y_parity" => Ok(TransactionField::YParity),
             "chain" => Ok(TransactionField::Chain),
+            "authorization_list" => Ok(TransactionField::AuthorizationList),
             invalid_field => Err(TransactionFieldError::InvalidTransactionField(
                 invalid_field.to_string(),
             )),
@@ -274,18 +283,19 @@ pub enum TransactionFilterError {
 
 #[derive(Debug, PartialEq)]
 pub enum TransactionFilter {
-    TransactionType(EqualityFilter<u8>),
+    Type(EqualityFilter<u8>),
     Hash(EqualityFilter<B256>),
     From(EqualityFilter<Address>),
     To(EqualityFilter<Address>),
     Data(EqualityFilter<alloy::primitives::Bytes>),
     Value(FilterType<U256>),
     GasPrice(FilterType<u128>),
-    Gas(FilterType<u128>),
+    GasLimit(FilterType<u64>),
+    EffectiveGasPrice(FilterType<u128>),
     ChainId(EqualityFilter<u64>),
     BlockId(BlockId),
     Status(EqualityFilter<bool>),
-    V(EqualityFilter<U256>),
+    V(EqualityFilter<bool>),
     R(EqualityFilter<U256>),
     S(EqualityFilter<U256>),
     MaxFeePerBlobGas(FilterType<u128>),
@@ -325,7 +335,7 @@ impl TransactionFilter {
         }
     }
 
-    // Helper function to parse equality filter components
+    /// Helper function to parse equality filter components
     fn parse_equality_filter<'a, T, F>(
         pair: Pair<'a, Rule>,
         value_parser: F,
@@ -340,7 +350,7 @@ impl TransactionFilter {
 
         match operator {
             Some(op) => {
-                let value = value_parser(inner_pair.as_str());
+                let value = value_parser(inner_pair.as_str().trim());
                 let filter =
                     EqualityFilter::try_from((op, value)).map_err(|e| FilterError::from(e))?;
                 Ok(constructor(filter))
@@ -372,6 +382,11 @@ impl TransactionFilter {
                     start, end,
                 ))))
             }
+            Rule::type_filter_type => Self::parse_equality_filter(
+                pair,
+                |s| s.parse::<u8>().unwrap(),
+                TransactionFilter::Type,
+            ),
             Rule::value_filter_type => Self::parse_filter(
                 pair,
                 |s| U256::from_str(s).unwrap(),
@@ -382,9 +397,11 @@ impl TransactionFilter {
                 |s| s.parse::<u128>().unwrap(),
                 TransactionFilter::GasPrice,
             ),
-            Rule::gas_filter_type => {
-                Self::parse_filter(pair, |s| s.parse::<u128>().unwrap(), TransactionFilter::Gas)
-            }
+            Rule::gas_limit_filter_type => Self::parse_filter(
+                pair,
+                |s| s.parse::<u64>().unwrap(),
+                TransactionFilter::GasLimit,
+            ),
             Rule::max_fee_per_blob_gas_filter_type => Self::parse_filter(
                 pair,
                 |s| s.parse::<u128>().unwrap(),
@@ -436,17 +453,17 @@ impl TransactionFilter {
                     EqualityFilter::try_from((operator, value == "true")).unwrap(),
                 ))
             }
-            _ => {
-                return Err(TransactionFilterError::InvalidTransactionFilterProperty(
-                    pair.as_str().to_string(),
-                ));
-            }
+            _ => Err(TransactionFilterError::InvalidTransactionFilterProperty(
+                pair.as_str().to_string(),
+            )),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use alloy::eips::BlockNumberOrTag;
+
     use super::*;
     use crate::common::filters::ComparisonFilter;
 
@@ -474,15 +491,23 @@ mod tests {
     fn test_return_false_if_tx_does_not_pass_any_filters() {
         let tx_query_res = TransactionQueryRes {
             value: Some(U256::from(1)),
+            r#type: Some(2),
             ..Default::default()
         };
 
-        let filter = FilterType::Comparison(ComparisonFilter::Gte(U256::from(1000000000)));
+        // let filter = FilterType::Comparison(ComparisonFilter::Gte(U256::from(1000000000)));
 
+        // GET type FROM tx WHERE block = 45087:45187, type = 4 ON mekong
         let transaction = Transaction::new(
             None,
-            Some(vec![TransactionFilter::Value(filter)]),
-            TransactionField::all_variants().to_vec(),
+            Some(vec![
+                TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                    BlockNumberOrTag::Number(45087),
+                    Some(BlockNumberOrTag::Number(45187)),
+                ))),
+                TransactionFilter::Type(EqualityFilter::Eq(4)),
+            ]),
+            vec![TransactionField::Type],
         );
 
         assert_eq!(false, transaction.filter(&tx_query_res));
