@@ -57,6 +57,8 @@ pub async fn resolve_account_query(
     Ok(account_res)
 }
 
+use log::error;
+
 async fn get_account(
     address: &Address,
     fields: Vec<AccountField>,
@@ -69,25 +71,44 @@ async fn get_account(
     for field in &fields {
         match field {
             AccountField::Balance => {
-                account.balance = Some(provider.get_balance(*address).await?);
+                match provider.get_balance(*address).await {
+                    Ok(balance) => account.balance = Some(balance),
+                    Err(e) => {
+                        error!("Failed to fetch balance for address {}: {:?}", address, e);
+                        account.balance = None;
+                    }
+                }
             }
             AccountField::Nonce => {
-                account.nonce = Some(provider.get_transaction_count(*address).await?);
+                match provider.get_transaction_count(*address).await {
+                    Ok(nonce) => account.nonce = Some(nonce),
+                    Err(e) => {
+                        error!("Failed to fetch nonce for address {}: {:?}", address, e);
+                        account.nonce = None;
+                    }
+                }
             }
             AccountField::Address => {
-                account.address = Some(*address);
+                account.address = Some(*address); // Always succeeds
             }
             AccountField::Code => {
-                account.code = Some(provider.get_code_at(*address).await?);
+                match provider.get_code_at(*address).await {
+                    Ok(code) => account.code = Some(code),
+                    Err(e) => {
+                        error!("Failed to fetch code for address {}: {:?}", address, e);
+                        account.code = None;
+                    }
+                }
             }
             AccountField::Chain => {
-                account.chain = Some(chain.clone());
+                account.chain = Some(chain.clone()); // Always succeeds
             }
         }
     }
 
     Ok(account)
 }
+
 
 async fn to_address(name: &String) -> Result<Address> {
     let rpc_url = Chain::Ethereum.rpc_url()?;
