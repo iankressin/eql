@@ -71,44 +71,37 @@ async fn get_account(
     for field in &fields {
         match field {
             AccountField::Balance => {
-                match provider.get_balance(*address).await {
-                    Ok(balance) => account.balance = Some(balance),
-                    Err(e) => {
-                        error!("Failed to fetch balance for address {}: {:?}", address, e);
-                        account.balance = None;
-                    }
+                if let Ok(balance) = provider.get_balance(*address).await {
+                    account.balance = Some(balance);
+                } else {
+                    account.balance = None;
                 }
             }
             AccountField::Nonce => {
-                match provider.get_transaction_count(*address).await {
-                    Ok(nonce) => account.nonce = Some(nonce),
-                    Err(e) => {
-                        error!("Failed to fetch nonce for address {}: {:?}", address, e);
-                        account.nonce = None;
-                    }
+                if let Ok(nonce) = provider.get_transaction_count(*address).await {
+                    account.nonce = Some(nonce);
+                } else {
+                    account.nonce = None;
                 }
             }
             AccountField::Address => {
-                account.address = Some(*address); // Always succeeds
+                account.address = Some(*address);
             }
             AccountField::Code => {
-                match provider.get_code_at(*address).await {
-                    Ok(code) => account.code = Some(code),
-                    Err(e) => {
-                        error!("Failed to fetch code for address {}: {:?}", address, e);
-                        account.code = None;
-                    }
+                if let Ok(code) = provider.get_code_at(*address).await {
+                    account.code = Some(code);
+                } else {
+                    account.code = None;
                 }
             }
             AccountField::Chain => {
-                account.chain = Some(chain.clone()); // Always succeeds
+                account.chain = Some(chain.clone());
             }
         }
     }
 
     Ok(account)
 }
-
 
 async fn to_address(name: &String) -> Result<Address> {
     let rpc_url = Chain::Ethereum.rpc_url()?;
