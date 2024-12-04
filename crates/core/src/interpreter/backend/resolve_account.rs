@@ -57,8 +57,6 @@ pub async fn resolve_account_query(
     Ok(account_res)
 }
 
-use log::error;
-
 async fn get_account(
     address: &Address,
     fields: Vec<AccountField>,
