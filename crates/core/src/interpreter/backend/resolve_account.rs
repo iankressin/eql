@@ -69,16 +69,28 @@ async fn get_account(
     for field in &fields {
         match field {
             AccountField::Balance => {
-                account.balance = Some(provider.get_balance(*address).await?);
+                if let Ok(balance) = provider.get_balance(*address).await {
+                    account.balance = Some(balance);
+                } else {
+                    account.balance = None;
+                }
             }
             AccountField::Nonce => {
-                account.nonce = Some(provider.get_transaction_count(*address).await?);
+                if let Ok(nonce) = provider.get_transaction_count(*address).await {
+                    account.nonce = Some(nonce);
+                } else {
+                    account.nonce = None;
+                }
             }
             AccountField::Address => {
                 account.address = Some(*address);
             }
             AccountField::Code => {
-                account.code = Some(provider.get_code_at(*address).await?);
+                if let Ok(code) = provider.get_code_at(*address).await {
+                    account.code = Some(code);
+                } else {
+                    account.code = None;
+                }
             }
             AccountField::Chain => {
                 account.chain = Some(chain.clone());
