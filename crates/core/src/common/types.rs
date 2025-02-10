@@ -10,6 +10,12 @@ use pest::iterators::Pairs;
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Get(GetExpression),
+    Count(CountExpression),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CountExpression {
+    pub query: GetExpression,
 }
 
 #[derive(Debug, PartialEq)]

@@ -25,6 +25,9 @@ pub enum ExpressionResult {
     Transaction(Vec<TransactionQueryRes>),
     #[serde(rename = "log")]
     Log(Vec<LogQueryRes>),
+    #[serde(rename = "count")]
+    Count(Vec<CountQueryRes>),
+
 }
 
 // TODO: should this be replaced with Alloy's Block?
@@ -329,6 +332,20 @@ impl Default for LogQueryRes {
             transaction_index: None,
             log_index: None,
             removed: None,
+        }
+    }
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct CountQueryRes {
+    pub count: usize,
+}
+
+impl Default for CountQueryRes {
+    fn default() -> Self {
+        Self {
+            count:0
         }
     }
 }
