@@ -5,7 +5,7 @@ use super::{
     resolve_transaction::resolve_transaction_query,
 };
 use crate::common::{
-    entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression}
+    entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression, SumExpression}
 };
 use anyhow::Result;
 
@@ -36,6 +36,10 @@ impl ExecutionEngine {
                     let result = self.run_get_expr(&get_expr).await?;
                     query_results.push(QueryResult::new(result));
                 }
+                Expression::Sum(sum_expr) => {
+                    let result = self.run_sum_expr(&sum_expr).await?;
+                    query_results.push(QueryResult::new(result));
+                }
             }
         }
 
@@ -58,6 +62,15 @@ impl ExecutionEngine {
         }
 
         Ok(result)
+    }
+
+    async fn run_sum_expr(
+        &self,
+        expr: &SumExpression,
+    ) -> Result<ExpressionResult> {
+        let query_result = self.run_get_expr(&expr.query).await?;
+    
+        Ok(query_result)
     }
 }
 

@@ -10,6 +10,21 @@ use pest::iterators::Pairs;
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Get(GetExpression),
+    Sum(SumExpression),
+}
+
+
+#[derive(Debug, PartialEq)]
+pub struct SumExpression {
+    pub query: GetExpression,
+}
+
+impl SumExpression {
+    fn new(query: GetExpression) -> Self {
+        Self {
+            query
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
