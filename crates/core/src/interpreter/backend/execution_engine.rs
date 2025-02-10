@@ -41,7 +41,6 @@ impl ExecutionEngine {
             }
         }
 
-        println!("Query results: {:#?}", query_results);
 
         Ok(query_results)
     }
@@ -222,7 +221,6 @@ mod test {
             removed: Some(false),
             chain: Some(Chain::Ethereum),
         }];
-        println!("Results: {:#?}", execution_result); 
         match execution_result {
             Ok(results) => {
                 assert_eq!(results[0].result, ExpressionResult::Log(expected));
