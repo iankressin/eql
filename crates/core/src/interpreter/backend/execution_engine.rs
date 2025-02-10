@@ -76,7 +76,9 @@ impl ExecutionEngine {
             ExpressionResult::Account(data) => data.len(),
             ExpressionResult::Transaction(data) => data.len(),
             ExpressionResult::Log(data) => data.len(),
-            _ =>  1
+            ExpressionResult::Count(_) => {
+                return Err(anyhow::anyhow!("Unexpected Count result from run_get_expr"))
+            }
         };
         let result =  ExpressionResult::Count(vec![CountQueryRes{ count }]);
         Ok(result)
