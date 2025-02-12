@@ -58,6 +58,9 @@ impl ResultHandler {
                 ExpressionResult::Log(query_res) => {
                     println!("{}", to_table(query_res)?);
                 }
+                ExpressionResult::Sum(query_res) => {
+                    println!("{}", to_table(query_res)?);
+                }
             }
         }
 

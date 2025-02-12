@@ -241,6 +241,12 @@ impl Repl {
                         queue!(stdout(), MoveToNextLine(1), Print(line.cyan())).unwrap();
                     });
                 }
+                ExpressionResult::Sum(query_res) => {
+                    let table = to_table(query_res)?;
+                    table.to_string().split("\n").for_each(|line| {
+                        queue!(stdout(), MoveToNextLine(1), Print(line.green())).unwrap();
+                    });
+                }
             }
         }
 
