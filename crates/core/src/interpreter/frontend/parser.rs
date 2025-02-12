@@ -33,6 +33,9 @@ impl<'a> Parser<'a> {
                 Rule::get => {
                     expressions.push(Expression::Get(pair.into_inner().try_into()?));
                 }
+                Rule::count => {
+                    expressions.push(Expression::Count(pair.into_inner().try_into()?));
+                }
                 _ => {
                     return Err(ParserError::UnexpectedToken(pair.as_str().to_string()).into());
                 }

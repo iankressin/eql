@@ -1,4 +1,16 @@
-program = _{SOI ~ (get){1, } ~ silent_eoi}
+program = _{SOI ~ (get|count){1, } ~ silent_eoi}
+
+count = {
+    "COUNT" ~
+    WHITESPACE* ~
+    "(" ~
+    WHITESPACE* ~
+    query ~
+    WHITESPACE* ~
+    ")"
+}
+
+query = { get }
 
 get       = {
     entity ~
@@ -12,6 +24,7 @@ get       = {
 }
 
 entity = { account_get | block_get | tx_get | log_get }
+
 
 account_get = {
     "GET" ~
