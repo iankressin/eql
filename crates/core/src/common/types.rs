@@ -13,7 +13,6 @@ pub enum Expression {
     Sum(SumExpression),
 }
 
-
 #[derive(Debug, PartialEq)]
 pub struct SumExpression {
     pub query: GetExpression,
@@ -21,9 +20,7 @@ pub struct SumExpression {
 
 impl SumExpression {
     fn new(query: GetExpression) -> Self {
-        Self {
-            query
-        }
+        Self { query }
     }
 }
 

@@ -142,7 +142,8 @@ impl TryFrom<Pair<'_, Rule>> for LogFilter {
         match pair.as_rule() {
             Rule::address_filter_type => extract_value(pair, |s| {
                 Ok(LogFilter::EmitterAddress(Address::parse_checksummed(
-                    Address::to_checksum(&Address::from_str(s)?, None), None,
+                    Address::to_checksum(&Address::from_str(s)?, None),
+                    None,
                 )?))
             }),
             Rule::blockrange_filter => parse_block_range(pair),

@@ -29,7 +29,6 @@ pub enum ExpressionResult {
     Sum(Vec<SumQueryRes>),
 }
 
-
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct SumQueryRes {
@@ -38,9 +37,7 @@ pub struct SumQueryRes {
 
 impl Default for SumQueryRes {
     fn default() -> Self {
-        Self {
-            sum: None,
-        }
+        Self { sum: None }
     }
 }
 
