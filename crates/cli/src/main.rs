@@ -83,7 +83,12 @@ pub fn to_table<S: Serialize + core::fmt::Debug>(data: Vec<S>) -> Result<Table, 
 
     for record in reader.into_records() {
         let record = record?;
-        let iter = record.iter().map(|s| s.to_owned());
+        let iter = record.iter().map(|s| { 
+            if s.len() > 20 {
+               return  truncate_string(s, 4, 3)
+            }
+            s.to_owned()
+        });
         builder.push_record(iter);
     }
 
@@ -117,4 +122,13 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+
+fn truncate_string(input: &str, prefix_len: usize, suffix_len: usize) -> String {
+    if input.len() <= prefix_len + suffix_len {
+        return input.to_string(); // No need to truncate
+    }
+
+    format!("{}...{}", &input[..prefix_len], &input[input.len() - suffix_len..])
 }
