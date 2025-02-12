@@ -25,6 +25,23 @@ pub enum ExpressionResult {
     Transaction(Vec<TransactionQueryRes>),
     #[serde(rename = "log")]
     Log(Vec<LogQueryRes>),
+    #[serde(rename = "sum")]
+    Sum(Vec<SumQueryRes>),
+}
+
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct SumQueryRes {
+    pub sum: Option<U256>,
+}
+
+impl Default for SumQueryRes {
+    fn default() -> Self {
+        Self {
+            sum: None,
+        }
+    }
 }
 
 // TODO: should this be replaced with Alloy's Block?
