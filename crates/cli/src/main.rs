@@ -83,9 +83,9 @@ pub fn to_table<S: Serialize + core::fmt::Debug>(data: Vec<S>) -> Result<Table, 
 
     for record in reader.into_records() {
         let record = record?;
-        let iter = record.iter().map(|s| { 
+        let iter = record.iter().map(|s| {
             if s.len() > 20 {
-               return  truncate_string(s, 4, 3)
+                return truncate_string(s, 4, 3);
             }
             s.to_owned()
         });
@@ -124,11 +124,31 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-
 fn truncate_string(input: &str, prefix_len: usize, suffix_len: usize) -> String {
-    if input.len() <= prefix_len + suffix_len {
-        return input.to_string(); // No need to truncate
+    // Validate input parameters
+    if prefix_len == 0 && suffix_len == 0 {
+        return input.to_string();
     }
 
-    format!("{}...{}", &input[..prefix_len], &input[input.len() - suffix_len..])
+    // Ensure we don't panic on short inputs
+    let _total_len = prefix_len.saturating_add(suffix_len);
+    if input.len() <= prefix_len  + suffix_len {
+         return input.to_string(); // No need to truncate
+    }
+
+     format!("{}...{}", &input[..prefix_len], &input[input.len() - suffix_len..])
+ }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_truncate_string() {
+        assert_eq!(truncate_string("abcdefghijk", 4, 3), "abcd...ijk");
+        assert_eq!(truncate_string("short", 4, 3), "short");
+        assert_eq!(truncate_string("a", 4, 3), "a");
+        assert_eq!(truncate_string("", 4, 3), "");
+    }
 }

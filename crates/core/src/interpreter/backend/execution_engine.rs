@@ -1,11 +1,12 @@
 use super::{
-    resolve_account::resolve_account_query,
-    resolve_block::resolve_block_query,
-    resolve_logs::resolve_log_query,
-    resolve_transaction::resolve_transaction_query,
+    resolve_account::resolve_account_query, resolve_block::resolve_block_query,
+    resolve_logs::resolve_log_query, resolve_transaction::resolve_transaction_query,
 };
 use crate::common::{
-    entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression}
+    entity::Entity,
+    query_result::{ExpressionResult, QueryResult},
+    serializer::dump_results,
+    types::{Expression, GetExpression},
 };
 use anyhow::Result;
 
@@ -24,10 +25,7 @@ impl ExecutionEngine {
         ExecutionEngine
     }
 
-    pub async fn run(
-        &self,
-        expressions: Vec<Expression>,
-    ) -> Result<Vec<QueryResult>> {
+    pub async fn run(&self, expressions: Vec<Expression>) -> Result<Vec<QueryResult>> {
         let mut query_results = vec![];
 
         for expression in expressions {
@@ -42,15 +40,20 @@ impl ExecutionEngine {
         Ok(query_results)
     }
 
-    async fn run_get_expr(
-        &self,
-        expr: &GetExpression,
-    ) -> Result<ExpressionResult> {
+    async fn run_get_expr(&self, expr: &GetExpression) -> Result<ExpressionResult> {
         let result = match &expr.entity {
-            Entity::Block(block) => ExpressionResult::Block(resolve_block_query(block, &expr.chains).await?),
-            Entity::Account(account) => ExpressionResult::Account(resolve_account_query(account, &expr.chains).await?),
-            Entity::Transaction(transaction) => ExpressionResult::Transaction(resolve_transaction_query(transaction, &expr.chains).await?),
-            Entity::Logs(logs) => ExpressionResult::Log(resolve_log_query(logs, &expr.chains).await?),
+            Entity::Block(block) => {
+                ExpressionResult::Block(resolve_block_query(block, &expr.chains).await?)
+            }
+            Entity::Account(account) => {
+                ExpressionResult::Account(resolve_account_query(account, &expr.chains).await?)
+            }
+            Entity::Transaction(transaction) => ExpressionResult::Transaction(
+                resolve_transaction_query(transaction, &expr.chains).await?,
+            ),
+            Entity::Logs(logs) => {
+                ExpressionResult::Log(resolve_log_query(logs, &expr.chains).await?)
+            }
         };
 
         if let Some(dump) = &expr.dump {
@@ -92,9 +95,7 @@ mod test {
                         BlockNumberOrTag::Number(4638757),
                         Some(BlockNumberOrTag::Number(4638758)),
                     )),
-                    LogFilter::EmitterAddress(address!(
-                        "dac17f958d2ee523a2206206994597c13d831ec7"
-                    )),
+                    LogFilter::EmitterAddress(address!("dac17f958d2ee523a2206206994597c13d831ec7")),
                     LogFilter::Topic0(b256!(
                         "cb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"
                     )),
@@ -143,18 +144,14 @@ mod test {
     async fn test_get_block_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            entity: Entity::Block(
-                Block::new(
-                    Some(vec![
-                        BlockId::Range(BlockRange::new(
-                            BlockNumberOrTag::Number(1),
-                            None,
-                        )),
-                    ]),
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Range(BlockRange::new(
+                    BlockNumberOrTag::Number(1),
                     None,
-                    BlockField::all_variants().to_vec(),
-                )
-            ),
+                ))]),
+                None,
+                BlockField::all_variants().to_vec(),
+            )),
             dump: None,
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
         })];
@@ -205,13 +202,13 @@ mod test {
     async fn test_get_account_fields_using_invalid_ens() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            entity: Entity::Account(
-                Account::new(
-                    Some(vec![NameOrAddress::Name(String::from("thisisinvalid235790123801.eth"))]),
-                    None,
-                    vec![AccountField::Balance],
-                )
-            ),
+            entity: Entity::Account(Account::new(
+                Some(vec![NameOrAddress::Name(String::from(
+                    "thisisinvalid235790123801.eth",
+                ))]),
+                None,
+                vec![AccountField::Balance],
+            )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
@@ -223,16 +220,14 @@ mod test {
     async fn test_get_transaction_fields() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            entity: Entity::Transaction(
-                Transaction::new(
-                    Some(vec![
-                        b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"),
-                        b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")
-                    ]),
-                    None,
-                    TransactionField::all_variants().to_vec(),
-                )
-            ),
+            entity: Entity::Transaction(Transaction::new(
+                Some(vec![
+                    b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"),
+                    b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"),
+                ]),
+                None,
+                TransactionField::all_variants().to_vec(),
+            )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
@@ -285,7 +280,7 @@ mod test {
                 chain: Some(Chain::Ethereum),
                 authorization_list: None,
             }])    
-        ];            
+        ];
 
         let result = execution_engine.run(expressions).await;
         match result {
@@ -300,15 +295,13 @@ mod test {
     async fn test_get_inexistent_transaction() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            entity: Entity::Transaction(
-                Transaction::new(
-                    Some(vec![b256!(
-                        "0000000000000000000000000000000000000000000000000000000000000000"
-                    )]),
-                    None,
-                    TransactionField::all_variants().to_vec(),
-                )
-            ),
+            entity: Entity::Transaction(Transaction::new(
+                Some(vec![b256!(
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                )]),
+                None,
+                TransactionField::all_variants().to_vec(),
+            )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
         })];
@@ -321,18 +314,11 @@ mod test {
     async fn test_dump_results() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
-            entity: Entity::Block(
-                Block::new(
-                    Some(vec![
-                        BlockId::Range(BlockRange::new(
-                            1.into(),
-                            None,
-                        ))
-                    ]),
-                    None,
-                    vec![BlockField::Timestamp],
-                )
-            ),
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Range(BlockRange::new(1.into(), None))]),
+                None,
+                vec![BlockField::Timestamp],
+            )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: Some(Dump::new(String::from("test"), DumpFormat::Json)),
         })];
@@ -382,7 +368,9 @@ mod test {
             (
                 Expression::Get(GetExpression {
                     entity: Entity::Account(Account::new(
-                        Some(vec![NameOrAddress::Address(address!("dac17f958d2ee523a2206206994597c13d831ec7"))]),
+                        Some(vec![NameOrAddress::Address(address!(
+                            "dac17f958d2ee523a2206206994597c13d831ec7"
+                        ))]),
                         None,
                         vec![AccountField::Chain],
                     )),
@@ -397,7 +385,9 @@ mod test {
             (
                 Expression::Get(GetExpression {
                     entity: Entity::Transaction(Transaction::new(
-                        Some(vec![b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")]),
+                        Some(vec![b256!(
+                            "72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890"
+                        )]),
                         None,
                         vec![TransactionField::Chain],
                     )),
