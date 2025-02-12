@@ -3,6 +3,7 @@ use super::{
     resolve_block::resolve_block_query,
     resolve_logs::resolve_log_query,
     resolve_transaction::resolve_transaction_query,
+    resolve_sum_query::resolve_sum_query
 };
 use crate::common::{
     entity::Entity, query_result::{ExpressionResult, QueryResult}, serializer::dump_results, types::{Expression, GetExpression, SumExpression}
@@ -69,8 +70,8 @@ impl ExecutionEngine {
         expr: &SumExpression,
     ) -> Result<ExpressionResult> {
         let query_result = self.run_get_expr(&expr.query).await?;
-    
-        Ok(query_result)
+        let result  = resolve_sum_query( &query_result)?;
+        Ok(result)
     }
 }
 
@@ -78,14 +79,14 @@ impl ExecutionEngine {
 mod test {
     use super::*;
     use crate::common::{
-        account::{Account, AccountField},
+        account::{Account, AccountField, AccountFilter},
         block::{Block, BlockField, BlockId, BlockRange},
         chain::{Chain, ChainOrRpc},
         dump::{Dump, DumpFormat},
         ens::NameOrAddress,
         logs::{LogField, LogFilter, Logs},
-        query_result::{AccountQueryRes, BlockQueryRes, LogQueryRes, TransactionQueryRes},
-        transaction::{Transaction, TransactionField},
+        query_result::{AccountQueryRes, BlockQueryRes, LogQueryRes, SumQueryRes, TransactionQueryRes},
+        transaction::{Transaction, TransactionField, TransactionFilter},
         types::{Expression, GetExpression},
     };
     use alloy::{
@@ -94,6 +95,70 @@ mod test {
     };
     use pretty_assertions::assert_eq;
     use std::str::FromStr;
+
+    #[tokio::test]
+    async fn test_sum_balance_of_mutiple_chain() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Sum(
+            SumExpression {
+                query: GetExpression {
+                    entity: Entity::Account(
+                        Account::new(
+                            Some(vec![NameOrAddress::Name(String::from("vitalik.eth"))]),
+                            None,
+                            vec![AccountField::Balance],
+                        )
+                ),
+                chains: vec![ChainOrRpc::Chain(Chain::Ethereum), ChainOrRpc::Chain(Chain::Base),ChainOrRpc::Chain(Chain::Arbitrum)],
+                dump: None,
+           }
+        })];
+
+        let execution_result = execution_engine.run(expressions).await;
+        let expected = vec![SumQueryRes {
+            sum: Some(U256::from(0)),
+        }];
+
+        match execution_result {
+            Ok(results) => {
+                assert_eq!(results[0].result, ExpressionResult::Sum(expected));
+            }
+            Err(_) => panic!("Error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sum_value_of_mutile_block_for_mutiple_chain() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Sum(SumExpression {
+            query: GetExpression {
+                entity: Entity::Transaction(Transaction::new(
+                     Some(vec![
+                        b256!("8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"),
+                        b256!("72546b3ca8ef0dfb85fe66d19645e44cb519858c72fbcad0e1c1699256fed890")
+                    ]),
+                    None,
+                    vec![TransactionField::Value],
+                )),
+                chains: vec![ChainOrRpc::Chain(Chain::Ethereum), ChainOrRpc::Chain(Chain::Base),ChainOrRpc::Chain(Chain::Arbitrum)], 
+                dump: None,
+            },
+        })];
+        println!("{:?}", expressions);
+
+        let execution_result = execution_engine.run(expressions).await;
+        let expected = vec![SumQueryRes {
+            sum: Some(U256::from(0)),
+        }];
+
+        match execution_result {
+            Ok(results) => {
+                assert_eq!(results[0].result, ExpressionResult::Sum(expected));
+            }
+            Err(_) => panic!("Error")
+        }
+    }
+
 
     #[tokio::test]
     async fn test_get_logs() {
