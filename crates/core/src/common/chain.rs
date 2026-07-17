@@ -88,6 +88,35 @@ impl TryFrom<Pairs<'_, Rule>> for Chain {
 }
 
 impl Chain {
+    /// Returns the SQD Portal dataset name for this chain, if available.
+    pub fn portal_dataset(&self) -> Option<&str> {
+        match self {
+            Chain::Ethereum => Some("ethereum-mainnet"),
+            Chain::Sepolia => Some("ethereum-sepolia"),
+            Chain::Arbitrum => Some("arbitrum-one"),
+            Chain::Base => Some("base-mainnet"),
+            Chain::Blast => Some("blast-l2-mainnet"),
+            Chain::Optimism => Some("optimism-mainnet"),
+            Chain::Polygon => Some("polygon-mainnet"),
+            Chain::Mantle => Some("mantle-mainnet"),
+            Chain::Zksync => Some("zksync-mainnet"),
+            Chain::Taiko => Some("taiko-mainnet"),
+            Chain::Celo => Some("celo-mainnet"),
+            Chain::Avalanche => Some("avalanche-mainnet"),
+            Chain::Scroll => Some("scroll-mainnet"),
+            Chain::Bnb => Some("binance-mainnet"),
+            Chain::Linea => Some("linea-mainnet"),
+            Chain::Zora => Some("zora-mainnet"),
+            Chain::Moonbeam => Some("moonbeam-mainnet"),
+            Chain::Moonriver => Some("moonriver-mainnet"),
+            Chain::Fantom => Some("fantom-mainnet"),
+            Chain::Gnosis => Some("gnosis-mainnet"),
+            Chain::Ronin => None,
+            Chain::Kava => None,
+            Chain::Mekong => None,
+        }
+    }
+
     pub fn from_selector(selector: &str) -> Result<Vec<ChainOrRpc>, ChainError> {
         if selector == "*" {
             let chains = Chain::all_variants();
