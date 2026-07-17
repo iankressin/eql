@@ -109,7 +109,7 @@ impl Chain {
             Chain::Zora => Some("zora-mainnet"),
             Chain::Moonbeam => Some("moonbeam-mainnet"),
             Chain::Moonriver => Some("moonriver-mainnet"),
-            Chain::Fantom => Some("fantom-mainnet"),
+            Chain::Fantom => None,
             Chain::Gnosis => Some("gnosis-mainnet"),
             Chain::Ronin => None,
             Chain::Kava => None,
@@ -303,5 +303,21 @@ impl fmt::Display for Chain {
             Chain::Mekong => "mekong",
         };
         write!(f, "{}", chain_str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fantom_has_no_portal_dataset() {
+        // fantom-mainnet 404s on Portal (Fantom Opera dataset dropped); must fall back to RPC.
+        assert_eq!(Chain::Fantom.portal_dataset(), None);
+    }
+
+    #[test]
+    fn test_supported_chain_still_has_dataset() {
+        assert_eq!(Chain::Ethereum.portal_dataset(), Some("ethereum-mainnet"));
     }
 }
