@@ -8,6 +8,20 @@ use crate::common::block::{BlockId, BlockRange};
 
 const PORTAL_BASE_URL: &str = "https://portal.sqd.dev/datasets";
 
+fn next_portal_page_start(page: &[Value], to_block: u64) -> Option<u64> {
+    let last_block = page
+        .iter()
+        .filter_map(|block| {
+            block
+                .get("header")
+                .and_then(|header| header.get("number"))
+                .and_then(value_to_u64)
+        })
+        .max()?;
+
+    (last_block < to_block).then_some(last_block + 1)
+}
+
 /// Send a query to the SQD Portal stream API and return parsed NDJSON response blocks.
 /// Automatically paginates by advancing `fromBlock` past the last returned block header
 /// until the full requested range is covered.
@@ -58,25 +72,17 @@ pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
             break;
         }
 
-        // Find the highest block number in this page to continue from
-        let last_block_num = page
-            .iter()
-            .filter_map(|b| {
-                b.get("header")
-                    .and_then(|h| h.get("number"))
-                    .and_then(|n| n.as_u64())
-            })
-            .max();
+        let next_page_start = next_portal_page_start(&page, to_block);
 
         all_blocks.extend(page);
 
-        match last_block_num {
-            Some(last) if last < to_block => {
+        match next_page_start {
+            Some(next_block) => {
                 // Advance fromBlock past the last returned block for the next page
                 current_query
                     .as_object_mut()
                     .unwrap()
-                    .insert("fromBlock".into(), Value::from(last + 1));
+                    .insert("fromBlock".into(), Value::from(next_block));
             }
             _ => break, // Reached or exceeded toBlock, or no header numbers found
         }
@@ -130,14 +136,14 @@ pub fn value_to_bytes(v: &Value) -> Option<Bytes> {
     v.as_str().and_then(|s| Bytes::from_str(s).ok())
 }
 
-/// Parse a JSON value as a boolean from integer (0/1) or bool.
+/// Parse a JSON value as a boolean from integer, hex string, or bool.
 pub fn value_to_status_bool(v: &Value) -> Option<bool> {
-    v.as_bool().or_else(|| v.as_u64().map(|n| n != 0))
+    value_to_u64(v).map(|n| n != 0).or_else(|| v.as_bool())
 }
 
-/// Parse a JSON value as u8 from integer.
+/// Parse a JSON value as u8 from integer or hex string.
 pub fn value_to_u8(v: &Value) -> Option<u8> {
-    v.as_u64().map(|n| n as u8)
+    value_to_u64(v).map(|n| n as u8)
 }
 
 /// Parse a JSON value as a Bloom from a hex string.
@@ -241,6 +247,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn test_next_portal_page_start_uses_hex_header_number() {
+        let page = vec![json!({ "header": { "number": "0x2a" } })];
+
+        assert_eq!(next_portal_page_start(&page, 43), Some(43));
+    }
+
+    #[test]
     fn test_value_to_bloom_parses_hex_string() {
         let zeros = format!("0x{}", "0".repeat(512));
         let bloom = value_to_bloom(&json!(zeros)).expect("should parse bloom");
@@ -255,6 +268,21 @@ mod tests {
         assert_eq!(value_to_parity_bool(&json!("0x0")), Some(false));
         assert_eq!(value_to_parity_bool(&json!("0x1")), Some(true));
         assert_eq!(value_to_parity_bool(&json!(true)), Some(true));
+    }
+
+    #[test]
+    fn test_value_to_status_bool_handles_int_and_hex() {
+        assert_eq!(value_to_status_bool(&json!(0)), Some(false));
+        assert_eq!(value_to_status_bool(&json!(1)), Some(true));
+        assert_eq!(value_to_status_bool(&json!("0x0")), Some(false));
+        assert_eq!(value_to_status_bool(&json!("0x1")), Some(true));
+        assert_eq!(value_to_status_bool(&json!(true)), Some(true));
+    }
+
+    #[test]
+    fn test_value_to_u8_handles_int_and_hex() {
+        assert_eq!(value_to_u8(&json!(2)), Some(2));
+        assert_eq!(value_to_u8(&json!("0xff")), Some(255));
     }
 
     #[test]
