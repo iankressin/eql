@@ -157,7 +157,7 @@ async fn resolve_transactions_via_portal(
         if let Some(txs) = portal_block.get("transactions").and_then(|t| t.as_array()) {
             for tx in txs {
                 let tx_res = parse_portal_transaction(tx, fields, &chain_enum);
-                if tx_res.has_value() && transaction.filter(&tx_res) {
+                if transaction.filter(&tx_res) {
                     results.push(tx_res);
                 }
             }

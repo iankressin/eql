@@ -335,6 +335,39 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_get_transactions_via_portal_authorization_list_only_retains_rows() {
+        use crate::common::transaction::TransactionFilter;
+
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Transaction(Transaction::new(
+                None,
+                Some(vec![TransactionFilter::BlockId(BlockId::Range(
+                    BlockRange::new(
+                        BlockNumberOrTag::Number(20000000),
+                        Some(BlockNumberOrTag::Number(20000000)),
+                    ),
+                ))]),
+                vec![TransactionField::AuthorizationList],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+        })];
+
+        let result = execution_engine.run(expressions).await.unwrap();
+        match &result[0].result {
+            ExpressionResult::Transaction(txs) => {
+                assert!(
+                    !txs.is_empty(),
+                    "expected Portal to retain rows whose only projected field is None"
+                );
+                assert!(txs.iter().all(|tx| tx.authorization_list.is_none()));
+            }
+            other => panic!("expected Transaction result, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
     async fn test_get_inexistent_transaction() {
         let execution_engine = ExecutionEngine::new();
         let expressions = vec![Expression::Get(GetExpression {
