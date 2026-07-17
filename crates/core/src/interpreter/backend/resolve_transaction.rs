@@ -1,7 +1,8 @@
 use super::resolve_block::{batch_get_blocks, get_block};
 use super::resolve_portal::{
-    portal_query, value_to_address, value_to_b256, value_to_bytes, value_to_status_bool,
-    value_to_u128, value_to_u256, value_to_u64, value_to_u8,
+    block_id_is_portal_eligible, portal_query, resolve_block_id_range, value_to_address,
+    value_to_b256, value_to_bytes, value_to_parity_bool, value_to_status_bool, value_to_u128,
+    value_to_u256, value_to_u64, value_to_u8,
 };
 use crate::common::{
     block::BlockId,
@@ -11,7 +12,6 @@ use crate::common::{
 };
 use alloy::{
     consensus::Transaction as ConsensusTransaction,
-    eips::BlockNumberOrTag,
     primitives::FixedBytes,
     providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::{BlockTransactions, Transaction as RpcTransaction},
@@ -29,46 +29,6 @@ pub enum TransactionResolverErrors {
     MismatchEntityAndEntityId(String),
     #[error("Query should either provide tx hash or block number/range filter")]
     MissingTransactionHashOrFilter,
-}
-
-/// Returns true if a TransactionField can be served by the SQD Portal.
-fn field_supported_by_portal(field: &TransactionField) -> bool {
-    matches!(
-        field,
-        TransactionField::Type
-            | TransactionField::Hash
-            | TransactionField::From
-            | TransactionField::To
-            | TransactionField::Data
-            | TransactionField::Value
-            | TransactionField::GasPrice
-            | TransactionField::GasLimit
-            | TransactionField::Status
-            | TransactionField::ChainId
-            | TransactionField::MaxFeePerGas
-            | TransactionField::MaxPriorityFeePerGas
-            | TransactionField::Chain
-    )
-}
-
-/// Extract block range as concrete (u64, u64) from a BlockId, or None if it contains tags.
-fn block_id_to_concrete_range(block_id: &BlockId) -> Option<(u64, u64)> {
-    match block_id {
-        BlockId::Number(BlockNumberOrTag::Number(n)) => Some((*n, *n)),
-        BlockId::Range(range) => {
-            let start = match range.start() {
-                BlockNumberOrTag::Number(n) => n,
-                _ => return None,
-            };
-            let end = match range.end() {
-                Some(BlockNumberOrTag::Number(n)) => n,
-                Some(_) => return None,
-                None => start,
-            };
-            Some((start, end))
-        }
-        _ => None,
-    }
 }
 
 /// Extract from/to address filters from TransactionFilters for Portal server-side filtering.
@@ -99,7 +59,6 @@ fn extract_address_filters(
 
 /// Determines if a transaction query for a given chain should use the Portal.
 fn should_use_portal(chain: &ChainOrRpc, transaction: &Transaction) -> bool {
-    // Must be a named chain with Portal dataset
     let dataset = match chain {
         ChainOrRpc::Chain(c) => c.portal_dataset(),
         ChainOrRpc::Rpc(_) => None,
@@ -107,30 +66,18 @@ fn should_use_portal(chain: &ChainOrRpc, transaction: &Transaction) -> bool {
     if dataset.is_none() {
         return false;
     }
-
-    // Must be a block-range query (not hash-based)
+    // Portal has no transaction-by-hash filter.
     if transaction.ids().is_some() {
         return false;
     }
-
+    // Portal needs a block range to scan.
     if !transaction.has_block_filter() {
         return false;
     }
-
-    // Block range must be concrete numbers
-    let block_id = match transaction.get_block_id_filter() {
-        std::result::Result::Ok(id) => id,
-        Err(_) => return false,
-    };
-    if block_id_to_concrete_range(block_id).is_none() {
-        return false;
+    match transaction.get_block_id_filter() {
+        std::result::Result::Ok(id) => block_id_is_portal_eligible(id),
+        Err(_) => false,
     }
-
-    // All requested fields must be Portal-compatible
-    transaction
-        .fields()
-        .iter()
-        .all(|f| field_supported_by_portal(f))
 }
 
 pub async fn resolve_transaction_query(
@@ -171,7 +118,7 @@ async fn resolve_transactions_via_portal(
     let fields = transaction.fields();
 
     let block_id = transaction.get_block_id_filter()?;
-    let (from_block, to_block) = block_id_to_concrete_range(block_id).unwrap();
+    let (from_block, to_block) = resolve_block_id_range(dataset, block_id).await?;
 
     // Build Portal transaction field selection
     let mut tx_fields = serde_json::Map::new();
@@ -235,7 +182,15 @@ fn tx_field_to_portal_name(field: &TransactionField) -> Option<&'static str> {
         TransactionField::ChainId => Some("chainId"),
         TransactionField::MaxFeePerGas => Some("maxFeePerGas"),
         TransactionField::MaxPriorityFeePerGas => Some("maxPriorityFeePerGas"),
-        _ => None,
+        TransactionField::EffectiveGasPrice => Some("effectiveGasPrice"),
+        TransactionField::V => Some("v"),
+        TransactionField::R => Some("r"),
+        TransactionField::S => Some("s"),
+        TransactionField::MaxFeePerBlobGas => Some("maxFeePerBlobGas"),
+        TransactionField::YParity => Some("yParity"),
+        // Not requested from Portal:
+        TransactionField::Chain => None,             // set locally
+        TransactionField::AuthorizationList => None, // no Portal field (EIP-7702)
     }
 }
 
@@ -273,6 +228,9 @@ fn parse_portal_transaction(
             TransactionField::GasLimit => {
                 result.gas_limit = tx.get("gas").and_then(value_to_u64);
             }
+            TransactionField::EffectiveGasPrice => {
+                result.effective_gas_price = tx.get("effectiveGasPrice").and_then(value_to_u128);
+            }
             TransactionField::Status => {
                 result.status = tx.get("status").and_then(value_to_status_bool);
             }
@@ -286,10 +244,27 @@ fn parse_portal_transaction(
                 result.max_priority_fee_per_gas =
                     tx.get("maxPriorityFeePerGas").and_then(value_to_u128);
             }
+            TransactionField::V => {
+                result.v = tx.get("v").and_then(value_to_parity_bool);
+            }
+            TransactionField::R => {
+                result.r = tx.get("r").and_then(value_to_u256);
+            }
+            TransactionField::S => {
+                result.s = tx.get("s").and_then(value_to_u256);
+            }
+            TransactionField::MaxFeePerBlobGas => {
+                result.max_fee_per_blob_gas = tx.get("maxFeePerBlobGas").and_then(value_to_u128);
+            }
+            TransactionField::YParity => {
+                result.y_parity = tx.get("yParity").and_then(value_to_parity_bool);
+            }
             TransactionField::Chain => {
                 result.chain = Some(chain.clone());
             }
-            _ => {} // Non-Portal fields — should not be reached due to should_use_portal guard
+            TransactionField::AuthorizationList => {
+                // Not available on Portal (EIP-7702); left as None. By-hash queries (RPC) fill it.
+            }
         }
     }
 
@@ -456,4 +431,50 @@ async fn pick_transaction_fields(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_portal_transaction_decodes_signature_fields() {
+        use serde_json::json;
+        let tx = json!({
+            "effectiveGasPrice": 10209184711u64,
+            "v": "0x0",
+            "yParity": "0x0",
+            "maxFeePerBlobGas": null
+        });
+        let fields = vec![
+            TransactionField::EffectiveGasPrice,
+            TransactionField::V,
+            TransactionField::YParity,
+            TransactionField::MaxFeePerBlobGas,
+            TransactionField::AuthorizationList,
+        ];
+        let res = parse_portal_transaction(&tx, &fields, &Chain::Ethereum);
+        assert_eq!(res.effective_gas_price, Some(10209184711u128));
+        assert_eq!(res.v, Some(false));
+        assert_eq!(res.y_parity, Some(false));
+        assert_eq!(res.max_fee_per_blob_gas, None);
+        assert_eq!(res.authorization_list, None);
+    }
+
+    #[test]
+    fn test_tx_field_mapping_is_exhaustive() {
+        // all_variants() returns &'static [TransactionField]; `field` is already &TransactionField.
+        for field in TransactionField::all_variants() {
+            let mapped = tx_field_to_portal_name(field).is_some();
+            let local = matches!(
+                field,
+                TransactionField::Chain | TransactionField::AuthorizationList
+            );
+            assert!(
+                mapped || local,
+                "TransactionField {:?} not Portal-serviceable",
+                field
+            );
+        }
+    }
 }
