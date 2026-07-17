@@ -169,7 +169,7 @@ async fn resolve_logs_via_portal(
                 log_filter.insert("topic0".into(), json!([format!("{:?}", topic0)]));
             }
             LogFilter::BlockRange(_) => {} // Handled via fromBlock/toBlock
-            LogFilter::BlockHash(_) => {} // unreachable: gate excludes block_hash filter
+            LogFilter::BlockHash(_) => {}  // unreachable: gate excludes block_hash filter
         }
     }
 
