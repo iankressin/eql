@@ -63,30 +63,43 @@ impl Transaction {
     pub fn filter(&self, tx: &TransactionQueryRes) -> bool {
         if let Some(filters) = &self.filters {
             filters.iter().all(|filter| match filter {
-                TransactionFilter::Type(t) => t.compare(&tx.r#type.unwrap()),
-                TransactionFilter::Hash(h) => h.compare(&tx.hash.unwrap()),
-                TransactionFilter::From(f) => f.compare(&tx.from.unwrap()),
-                TransactionFilter::To(t) => t.compare(&tx.to.unwrap()),
-                TransactionFilter::Data(d) => d.compare(&tx.data.clone().unwrap()),
-                TransactionFilter::Value(v) => v.compare(&tx.value.unwrap()),
-                TransactionFilter::GasPrice(gp) => gp.compare(&tx.gas_price.unwrap()),
-                TransactionFilter::GasLimit(g) => g.compare(&tx.gas_limit.unwrap()),
-                TransactionFilter::EffectiveGasPrice(egp) => {
-                    egp.compare(&tx.effective_gas_price.unwrap())
+                TransactionFilter::Type(t) => tx.r#type.as_ref().is_some_and(|v| t.compare(v)),
+                TransactionFilter::Hash(h) => tx.hash.as_ref().is_some_and(|v| h.compare(v)),
+                TransactionFilter::From(f) => tx.from.as_ref().is_some_and(|v| f.compare(v)),
+                TransactionFilter::To(t) => tx.to.as_ref().is_some_and(|v| t.compare(v)),
+                TransactionFilter::Data(d) => tx.data.as_ref().is_some_and(|v| d.compare(v)),
+                TransactionFilter::Value(v) => tx.value.as_ref().is_some_and(|n| v.compare(n)),
+                TransactionFilter::GasPrice(gp) => {
+                    tx.gas_price.as_ref().is_some_and(|v| gp.compare(v))
                 }
-                TransactionFilter::ChainId(cid) => cid.compare(&tx.chain_id.unwrap()),
-                TransactionFilter::Status(s) => s.compare(&tx.status.unwrap()),
-                TransactionFilter::V(v) => v.compare(&tx.v.unwrap()),
-                TransactionFilter::R(r) => r.compare(&tx.r.unwrap()),
-                TransactionFilter::S(s) => s.compare(&tx.s.unwrap()),
-                TransactionFilter::MaxFeePerBlobGas(mfbg) => {
-                    mfbg.compare(&tx.max_fee_per_blob_gas.unwrap())
+                TransactionFilter::GasLimit(g) => {
+                    tx.gas_limit.as_ref().is_some_and(|v| g.compare(v))
                 }
-                TransactionFilter::MaxFeePerGas(mfg) => mfg.compare(&tx.max_fee_per_gas.unwrap()),
-                TransactionFilter::MaxPriorityFeePerGas(mpfpg) => {
-                    mpfpg.compare(&tx.max_priority_fee_per_gas.unwrap())
+                TransactionFilter::EffectiveGasPrice(egp) => tx
+                    .effective_gas_price
+                    .as_ref()
+                    .is_some_and(|v| egp.compare(v)),
+                TransactionFilter::ChainId(cid) => {
+                    tx.chain_id.as_ref().is_some_and(|v| cid.compare(v))
                 }
-                TransactionFilter::YParity(yp) => yp.compare(&tx.y_parity.unwrap()),
+                TransactionFilter::Status(s) => tx.status.as_ref().is_some_and(|v| s.compare(v)),
+                TransactionFilter::V(v) => tx.v.as_ref().is_some_and(|n| v.compare(n)),
+                TransactionFilter::R(r) => tx.r.as_ref().is_some_and(|v| r.compare(v)),
+                TransactionFilter::S(s) => tx.s.as_ref().is_some_and(|v| s.compare(v)),
+                TransactionFilter::MaxFeePerBlobGas(mfbg) => tx
+                    .max_fee_per_blob_gas
+                    .as_ref()
+                    .is_some_and(|v| mfbg.compare(v)),
+                TransactionFilter::MaxFeePerGas(mfg) => {
+                    tx.max_fee_per_gas.as_ref().is_some_and(|v| mfg.compare(v))
+                }
+                TransactionFilter::MaxPriorityFeePerGas(mpfpg) => tx
+                    .max_priority_fee_per_gas
+                    .as_ref()
+                    .is_some_and(|v| mpfpg.compare(v)),
+                TransactionFilter::YParity(yp) => {
+                    tx.y_parity.as_ref().is_some_and(|v| yp.compare(v))
+                }
                 // TODO: once we have implemented the transaction receipt fields, should validate the block id
                 TransactionFilter::BlockId(_) => true,
             })
@@ -511,5 +524,18 @@ mod tests {
         );
 
         assert_eq!(false, transaction.filter(&tx_query_res));
+    }
+
+    #[test]
+    fn test_nullable_transaction_filter_is_false_instead_of_panicking() {
+        let transaction = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::To(EqualityFilter::Eq(
+                Address::ZERO,
+            ))]),
+            vec![TransactionField::AuthorizationList],
+        );
+
+        assert!(!transaction.filter(&TransactionQueryRes::default()));
     }
 }

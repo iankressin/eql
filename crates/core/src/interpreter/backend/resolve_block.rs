@@ -1,6 +1,6 @@
 use super::resolve_portal::{
-    block_id_is_portal_eligible, portal_query, resolve_block_id_range, value_to_b256,
-    value_to_bloom, value_to_bytes, value_to_u256, value_to_u64,
+    block_id_is_portal_eligible, portal_query, portal_query_with_base_url, resolve_block_id_range,
+    value_to_b256, value_to_bloom, value_to_bytes, value_to_u256, value_to_u64,
 };
 use crate::common::{
     block::{get_block_number_from_tag, Block, BlockField, BlockId},
@@ -85,6 +85,14 @@ async fn resolve_blocks_via_portal(
     block: &Block,
     chain: &ChainOrRpc,
 ) -> Result<Vec<BlockQueryRes>> {
+    resolve_blocks_via_portal_with_base_url(block, chain, None).await
+}
+
+async fn resolve_blocks_via_portal_with_base_url(
+    block: &Block,
+    chain: &ChainOrRpc,
+    base_url: Option<&str>,
+) -> Result<Vec<BlockQueryRes>> {
     let chain_enum = match chain {
         ChainOrRpc::Chain(c) => c.clone(),
         _ => unreachable!("should_use_portal guards against Rpc variant"),
@@ -112,12 +120,16 @@ async fn resolve_blocks_via_portal(
             "type": "evm",
             "fromBlock": from_block,
             "toBlock": to_block,
+            "includeAllBlocks": true,
             "fields": {
                 "block": block_fields
             }
         });
 
-        let response = portal_query(dataset, &query).await?;
+        let response = match base_url {
+            Some(base_url) => portal_query_with_base_url(base_url, dataset, &query).await?,
+            None => portal_query(dataset, &query).await?,
+        };
 
         for portal_block in &response {
             let header = match portal_block.get("header") {
@@ -471,5 +483,47 @@ mod tests {
             result.unwrap_err().to_string(),
             "Start block must be less than end block"
         );
+    }
+
+    #[tokio::test]
+    async fn test_portal_block_range_requests_and_returns_every_block() {
+        let block = Block::new(
+            Some(vec![BlockId::Range(BlockRange::new(
+                BlockNumberOrTag::Number(50),
+                Some(BlockNumberOrTag::Number(52)),
+            ))]),
+            None,
+            vec![BlockField::Number],
+        );
+        let (base_url, requests, handle) =
+            super::super::resolve_portal::test_support::spawn_mock_portal(vec![concat!(
+                "{\"header\":{\"number\":\"0x32\"}}\n",
+                "{\"header\":{\"number\":\"0x33\"}}\n",
+                "{\"header\":{\"number\":\"0x34\"}}\n"
+            )
+            .to_string()]);
+
+        let results = resolve_blocks_via_portal_with_base_url(
+            &block,
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            Some(&base_url),
+        )
+        .await
+        .unwrap();
+        handle.join().expect("mock Portal thread");
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.number.unwrap())
+                .collect::<Vec<_>>(),
+            vec![50, 51, 52]
+        );
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["fromBlock"], json!(50));
+        assert_eq!(requests[0]["toBlock"], json!(52));
+        assert_eq!(requests[0]["includeAllBlocks"], json!(true));
     }
 }

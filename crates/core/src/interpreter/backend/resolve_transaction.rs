@@ -1,8 +1,8 @@
 use super::resolve_block::{batch_get_blocks, get_block};
 use super::resolve_portal::{
-    block_id_is_portal_eligible, portal_query, resolve_block_id_range, value_to_address,
-    value_to_b256, value_to_bytes, value_to_parity_bool, value_to_status_bool, value_to_u128,
-    value_to_u256, value_to_u64, value_to_u8,
+    block_id_is_portal_eligible, portal_query, portal_query_with_base_url, resolve_block_id_range,
+    value_to_address, value_to_b256, value_to_bytes, value_to_parity_bool, value_to_status_bool,
+    value_to_u128, value_to_u256, value_to_u64, value_to_u8,
 };
 use crate::common::{
     block::BlockId,
@@ -110,19 +110,42 @@ async fn resolve_transactions_via_portal(
     transaction: &Transaction,
     chain: &ChainOrRpc,
 ) -> Result<Vec<TransactionQueryRes>> {
+    resolve_transactions_via_portal_with_base_url(transaction, chain, None).await
+}
+
+async fn resolve_transactions_via_portal_with_base_url(
+    transaction: &Transaction,
+    chain: &ChainOrRpc,
+    base_url: Option<&str>,
+) -> Result<Vec<TransactionQueryRes>> {
     let chain_enum = match chain {
         ChainOrRpc::Chain(c) => c.clone(),
         _ => unreachable!("should_use_portal guards against Rpc variant"),
     };
     let dataset = chain_enum.portal_dataset().unwrap();
     let fields = transaction.fields();
+    let mut internal_fields = fields.clone();
+    if let Some(filters) = transaction.filters() {
+        for filter in filters {
+            if let Some(field) = tx_filter_field(filter) {
+                if !internal_fields.contains(&field) {
+                    internal_fields.push(field);
+                }
+            }
+        }
+    }
+    if internal_fields.contains(&TransactionField::YParity)
+        && !internal_fields.contains(&TransactionField::V)
+    {
+        internal_fields.push(TransactionField::V);
+    }
 
     let block_id = transaction.get_block_id_filter()?;
     let (from_block, to_block) = resolve_block_id_range(dataset, block_id).await?;
 
     // Build Portal transaction field selection
     let mut tx_fields = serde_json::Map::new();
-    for field in fields {
+    for field in &internal_fields {
         if let Some(portal_name) = tx_field_to_portal_name(field) {
             tx_fields.insert(portal_name.into(), json!(true));
         }
@@ -145,26 +168,54 @@ async fn resolve_transactions_via_portal(
         "fromBlock": from_block,
         "toBlock": to_block,
         "fields": {
+            "block": { "number": true },
             "transaction": tx_fields
         },
         "transactions": [tx_filter]
     });
 
-    let response = portal_query(dataset, &query).await?;
+    let response = match base_url {
+        Some(base_url) => portal_query_with_base_url(base_url, dataset, &query).await?,
+        None => portal_query(dataset, &query).await?,
+    };
 
     let mut results = Vec::new();
     for portal_block in &response {
         if let Some(txs) = portal_block.get("transactions").and_then(|t| t.as_array()) {
             for tx in txs {
-                let tx_res = parse_portal_transaction(tx, fields, &chain_enum);
-                if transaction.filter(&tx_res) {
-                    results.push(tx_res);
+                let internal_row = parse_portal_transaction(tx, &internal_fields, &chain_enum);
+                if transaction.filter(&internal_row) {
+                    results.push(parse_portal_transaction(tx, fields, &chain_enum));
                 }
             }
         }
     }
 
     Ok(results)
+}
+
+fn tx_filter_field(filter: &TransactionFilter) -> Option<TransactionField> {
+    match filter {
+        TransactionFilter::Type(_) => Some(TransactionField::Type),
+        TransactionFilter::Hash(_) => Some(TransactionField::Hash),
+        TransactionFilter::From(_) => Some(TransactionField::From),
+        TransactionFilter::To(_) => Some(TransactionField::To),
+        TransactionFilter::Data(_) => Some(TransactionField::Data),
+        TransactionFilter::Value(_) => Some(TransactionField::Value),
+        TransactionFilter::GasPrice(_) => Some(TransactionField::GasPrice),
+        TransactionFilter::GasLimit(_) => Some(TransactionField::GasLimit),
+        TransactionFilter::EffectiveGasPrice(_) => Some(TransactionField::EffectiveGasPrice),
+        TransactionFilter::ChainId(_) => Some(TransactionField::ChainId),
+        TransactionFilter::BlockId(_) => None,
+        TransactionFilter::Status(_) => Some(TransactionField::Status),
+        TransactionFilter::V(_) => Some(TransactionField::V),
+        TransactionFilter::R(_) => Some(TransactionField::R),
+        TransactionFilter::S(_) => Some(TransactionField::S),
+        TransactionFilter::MaxFeePerBlobGas(_) => Some(TransactionField::MaxFeePerBlobGas),
+        TransactionFilter::MaxFeePerGas(_) => Some(TransactionField::MaxFeePerGas),
+        TransactionFilter::MaxPriorityFeePerGas(_) => Some(TransactionField::MaxPriorityFeePerGas),
+        TransactionFilter::YParity(_) => Some(TransactionField::YParity),
+    }
 }
 
 /// Maps an EQL TransactionField to the Portal JSON field name.
@@ -257,7 +308,10 @@ fn parse_portal_transaction(
                 result.max_fee_per_blob_gas = tx.get("maxFeePerBlobGas").and_then(value_to_u128);
             }
             TransactionField::YParity => {
-                result.y_parity = tx.get("yParity").and_then(value_to_parity_bool);
+                result.y_parity = tx
+                    .get("yParity")
+                    .and_then(value_to_parity_bool)
+                    .or_else(|| tx.get("v").and_then(value_to_parity_bool));
             }
             TransactionField::Chain => {
                 result.chain = Some(chain.clone());
@@ -436,6 +490,14 @@ async fn pick_transaction_fields(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::{
+        block::BlockRange,
+        filters::{ComparisonFilter, EqualityFilter, FilterType},
+    };
+    use alloy::{
+        eips::BlockNumberOrTag,
+        primitives::{address, U256},
+    };
 
     #[test]
     fn test_parse_portal_transaction_decodes_signature_fields() {
@@ -476,5 +538,98 @@ mod tests {
                 field
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_portal_transaction_pagination_uses_internal_fields_without_projecting_them() {
+        let sender = address!("1000000000000000000000000000000000000001");
+        let transaction = Transaction::new(
+            None,
+            Some(vec![
+                TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                    BlockNumberOrTag::Number(10),
+                    Some(BlockNumberOrTag::Number(11)),
+                ))),
+                TransactionFilter::From(EqualityFilter::Eq(sender)),
+                TransactionFilter::Value(FilterType::Comparison(ComparisonFilter::Gte(
+                    U256::from(50),
+                ))),
+            ]),
+            vec![TransactionField::AuthorizationList],
+        );
+        let (base_url, requests, handle) =
+            super::super::resolve_portal::test_support::spawn_mock_portal(vec![
+                concat!(
+                    "{\"header\":{\"number\":\"0xa\"},\"transactions\":[{",
+                    "\"hash\":\"0x0000000000000000000000000000000000000000000000000000000000000001\",",
+                    "\"from\":\"0x1000000000000000000000000000000000000001\",",
+                    "\"value\":\"0x64\"}]}\n"
+                )
+                .to_string(),
+                concat!(
+                    "{\"header\":{\"number\":\"0xb\"},\"transactions\":[{",
+                    "\"hash\":\"0x0000000000000000000000000000000000000000000000000000000000000002\",",
+                    "\"from\":\"0x1000000000000000000000000000000000000001\",",
+                    "\"value\":\"0x65\"}]}\n"
+                )
+                .to_string(),
+            ]);
+
+        let results = resolve_transactions_via_portal_with_base_url(
+            &transaction,
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            Some(&base_url),
+        )
+        .await
+        .unwrap();
+        handle.join().expect("mock Portal thread");
+
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|result| !result.has_value()));
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0]["fromBlock"], json!(10));
+        assert_eq!(requests[1]["fromBlock"], json!(11));
+        for request in requests.iter() {
+            assert_eq!(request["fields"]["block"]["number"], json!(true));
+            assert_eq!(request["fields"]["transaction"]["from"], json!(true));
+            assert_eq!(request["fields"]["transaction"]["value"], json!(true));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_y_parity_projection_derives_legacy_v_without_exposing_v() {
+        let transaction = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::BlockId(BlockId::Range(
+                BlockRange::new(BlockNumberOrTag::Number(20), None),
+            ))]),
+            vec![TransactionField::YParity],
+        );
+        let (base_url, requests, handle) =
+            super::super::resolve_portal::test_support::spawn_mock_portal(vec![concat!(
+                "{\"header\":{\"number\":\"0x14\"},\"transactions\":[{",
+                "\"hash\":\"0x0000000000000000000000000000000000000000000000000000000000000003\",",
+                "\"v\":\"0x1b\",\"yParity\":null}]}\n"
+            )
+            .to_string()]);
+
+        let results = resolve_transactions_via_portal_with_base_url(
+            &transaction,
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            Some(&base_url),
+        )
+        .await
+        .unwrap();
+        handle.join().expect("mock Portal thread");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].y_parity, Some(false));
+        assert_eq!(results[0].v, None);
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(requests[0]["fields"]["transaction"]["yParity"], json!(true));
+        assert_eq!(requests[0]["fields"]["transaction"]["v"], json!(true));
     }
 }

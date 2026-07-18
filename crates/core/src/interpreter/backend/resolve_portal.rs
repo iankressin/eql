@@ -4,11 +4,11 @@ use anyhow::Result;
 use serde_json::Value;
 use std::str::FromStr;
 
-use crate::common::block::{BlockId, BlockRange};
+use crate::common::block::{BlockId, BlockRange, BlockRangeError};
 
 const PORTAL_BASE_URL: &str = "https://portal.sqd.dev/datasets";
 
-fn next_portal_page_start(page: &[Value], to_block: u64) -> Option<u64> {
+fn next_portal_page_start(page: &[Value], to_block: u64) -> Result<Option<u64>> {
     let last_block = page
         .iter()
         .filter_map(|block| {
@@ -17,16 +17,27 @@ fn next_portal_page_start(page: &[Value], to_block: u64) -> Option<u64> {
                 .and_then(|header| header.get("number"))
                 .and_then(value_to_u64)
         })
-        .max()?;
+        .max()
+        .ok_or_else(|| {
+            anyhow::anyhow!("Portal returned a nonempty page without a usable header.number")
+        })?;
 
-    (last_block < to_block).then_some(last_block + 1)
+    Ok((last_block < to_block).then_some(last_block + 1))
 }
 
 /// Send a query to the SQD Portal stream API and return parsed NDJSON response blocks.
 /// Automatically paginates by advancing `fromBlock` past the last returned block header
 /// until the full requested range is covered.
 pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
-    let url = format!("{}/{}/stream", PORTAL_BASE_URL, dataset);
+    portal_query_with_base_url(PORTAL_BASE_URL, dataset, query).await
+}
+
+pub(crate) async fn portal_query_with_base_url(
+    base_url: &str,
+    dataset: &str,
+    query: &Value,
+) -> Result<Vec<Value>> {
+    let url = format!("{}/{}/stream", base_url, dataset);
     let client = reqwest::Client::new();
 
     let to_block = query
@@ -72,7 +83,7 @@ pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
             break;
         }
 
-        let next_page_start = next_portal_page_start(&page, to_block);
+        let next_page_start = next_portal_page_start(&page, to_block)?;
 
         all_blocks.extend(page);
 
@@ -153,7 +164,14 @@ pub fn value_to_bloom(v: &Value) -> Option<Bloom> {
 
 /// Parse a JSON parity value (`v` / `yParity`) as a bool from int, hex string, or bool.
 pub fn value_to_parity_bool(v: &Value) -> Option<bool> {
-    value_to_u64(v).map(|n| n != 0).or_else(|| v.as_bool())
+    v.as_bool().or_else(|| {
+        value_to_u64(v).and_then(|n| match n {
+            0 | 27 => Some(false),
+            1 | 28 => Some(true),
+            35.. => Some((n - 35) % 2 != 0),
+            _ => None,
+        })
+    })
 }
 
 /// Returns true if a block tag can be resolved to a concrete number via Portal.
@@ -222,6 +240,21 @@ pub async fn resolve_portal_bound(dataset: &str, tag: &BlockNumberOrTag) -> Resu
     }
 }
 
+/// Resolve and validate a Portal block range after tags become concrete numbers.
+pub async fn resolve_portal_range(dataset: &str, range: &BlockRange) -> Result<(u64, u64)> {
+    let start = resolve_portal_bound(dataset, &range.start()).await?;
+    let end = match range.end() {
+        Some(end) => resolve_portal_bound(dataset, &end).await?,
+        None => start,
+    };
+
+    if start > end {
+        return Err(BlockRangeError::StartBlockMustBeLessThanEndBlock.into());
+    }
+
+    Ok((start, end))
+}
+
 /// Resolve a BlockId to a concrete (fromBlock, toBlock) range via Portal.
 pub async fn resolve_block_id_range(dataset: &str, id: &BlockId) -> Result<(u64, u64)> {
     match id {
@@ -229,14 +262,73 @@ pub async fn resolve_block_id_range(dataset: &str, id: &BlockId) -> Result<(u64,
             let n = resolve_portal_bound(dataset, t).await?;
             Ok((n, n))
         }
-        BlockId::Range(range) => {
-            let start = resolve_portal_bound(dataset, &range.start()).await?;
-            let end = match range.end() {
-                Some(e) => resolve_portal_bound(dataset, &e).await?,
-                None => start,
-            };
-            Ok((start, end))
+        BlockId::Range(range) => resolve_portal_range(dataset, range).await,
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use serde_json::Value;
+    use std::{
+        io::{BufRead, BufReader, Read, Write},
+        net::{TcpListener, TcpStream},
+        sync::{Arc, Mutex},
+        thread::{self, JoinHandle},
+    };
+
+    pub(crate) fn spawn_mock_portal(
+        responses: Vec<String>,
+    ) -> (String, Arc<Mutex<Vec<Value>>>, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock Portal");
+        let address = listener.local_addr().expect("read mock Portal address");
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured_requests = Arc::clone(&requests);
+
+        let handle = thread::spawn(move || {
+            for response_body in responses {
+                let (mut stream, _) = listener.accept().expect("accept mock Portal request");
+                let request = read_json_request(&stream);
+                captured_requests
+                    .lock()
+                    .expect("lock captured requests")
+                    .push(request);
+
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    response_body.len(),
+                    response_body
+                )
+                .expect("write mock Portal response");
+            }
+        });
+
+        (format!("http://{address}"), requests, handle)
+    }
+
+    fn read_json_request(stream: &TcpStream) -> Value {
+        let mut reader = BufReader::new(stream.try_clone().expect("clone mock Portal stream"));
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("read request line");
+
+        let mut content_length = None;
+        loop {
+            line.clear();
+            reader.read_line(&mut line).expect("read request header");
+            if line == "\r\n" {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                if name.eq_ignore_ascii_case("content-length") {
+                    content_length =
+                        Some(value.trim().parse::<usize>().expect("valid Content-Length"));
+                }
+            }
         }
+
+        let mut body = vec![0; content_length.expect("request Content-Length")];
+        reader.read_exact(&mut body).expect("read request body");
+        serde_json::from_slice(&body).expect("parse request JSON")
     }
 }
 
@@ -250,7 +342,32 @@ mod tests {
     fn test_next_portal_page_start_uses_hex_header_number() {
         let page = vec![json!({ "header": { "number": "0x2a" } })];
 
-        assert_eq!(next_portal_page_start(&page, 43), Some(43));
+        assert_eq!(next_portal_page_start(&page, 43).unwrap(), Some(43));
+    }
+
+    #[tokio::test]
+    async fn test_nonempty_page_without_header_number_is_an_error() {
+        let (base_url, _requests, handle) = test_support::spawn_mock_portal(vec![
+            "{\"transactions\":[{\"hash\":\"0x0000000000000000000000000000000000000000000000000000000000000001\"}]}\n"
+                .to_string(),
+        ]);
+        let query = json!({
+            "type": "evm",
+            "fromBlock": 1,
+            "toBlock": 2,
+            "transactions": [{}],
+            "fields": { "transaction": { "hash": true } }
+        });
+
+        let error = portal_query_with_base_url(&base_url, "test", &query)
+            .await
+            .expect_err("nonempty pages require pagination metadata");
+        handle.join().expect("mock Portal thread");
+
+        assert_eq!(
+            error.to_string(),
+            "Portal returned a nonempty page without a usable header.number"
+        );
     }
 
     #[test]
@@ -265,8 +382,17 @@ mod tests {
     fn test_value_to_parity_bool_handles_int_and_hex() {
         assert_eq!(value_to_parity_bool(&json!(0)), Some(false));
         assert_eq!(value_to_parity_bool(&json!(1)), Some(true));
+        assert_eq!(value_to_parity_bool(&json!(27)), Some(false));
+        assert_eq!(value_to_parity_bool(&json!(28)), Some(true));
+        assert_eq!(value_to_parity_bool(&json!(37)), Some(false));
+        assert_eq!(value_to_parity_bool(&json!(38)), Some(true));
         assert_eq!(value_to_parity_bool(&json!("0x0")), Some(false));
         assert_eq!(value_to_parity_bool(&json!("0x1")), Some(true));
+        assert_eq!(value_to_parity_bool(&json!("0x1b")), Some(false));
+        assert_eq!(value_to_parity_bool(&json!("0x1c")), Some(true));
+        assert_eq!(value_to_parity_bool(&json!("0x25")), Some(false));
+        assert_eq!(value_to_parity_bool(&json!("0x26")), Some(true));
+        assert_eq!(value_to_parity_bool(&json!(false)), Some(false));
         assert_eq!(value_to_parity_bool(&json!(true)), Some(true));
     }
 
@@ -293,5 +419,25 @@ mod tests {
         assert!(!tag_is_portal_eligible(&BlockNumberOrTag::Pending));
         assert!(!tag_is_portal_eligible(&BlockNumberOrTag::Finalized));
         assert!(!tag_is_portal_eligible(&BlockNumberOrTag::Safe));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_block_id_range_rejects_reversed_tagged_range() {
+        let id = BlockId::Range(BlockRange::new(
+            BlockNumberOrTag::Number(10),
+            Some(BlockNumberOrTag::Earliest),
+        ));
+
+        let error = resolve_block_id_range("unused", &id)
+            .await
+            .expect_err("resolved start must not exceed resolved end");
+        assert_eq!(error.to_string(), "Start block must be less than end block");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_block_id_range_omitted_end_is_one_resolved_block() {
+        let id = BlockId::Range(BlockRange::new(BlockNumberOrTag::Earliest, None));
+
+        assert_eq!(resolve_block_id_range("unused", &id).await.unwrap(), (0, 0));
     }
 }
