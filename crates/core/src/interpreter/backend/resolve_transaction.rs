@@ -123,22 +123,7 @@ async fn resolve_transactions_via_portal_with_base_url(
         _ => unreachable!("should_use_portal guards against Rpc variant"),
     };
     let dataset = chain_enum.portal_dataset().unwrap();
-    let fields = transaction.fields();
-    let mut internal_fields = fields.clone();
-    if let Some(filters) = transaction.filters() {
-        for filter in filters {
-            if let Some(field) = tx_filter_field(filter) {
-                if !internal_fields.contains(&field) {
-                    internal_fields.push(field);
-                }
-            }
-        }
-    }
-    if internal_fields.contains(&TransactionField::YParity)
-        && !internal_fields.contains(&TransactionField::V)
-    {
-        internal_fields.push(TransactionField::V);
-    }
+    let internal_fields = transaction_internal_fields(transaction);
 
     let block_id = transaction.get_block_id_filter()?;
     let (from_block, to_block) = resolve_block_id_range(dataset, block_id).await?;
@@ -184,8 +169,10 @@ async fn resolve_transactions_via_portal_with_base_url(
         if let Some(txs) = portal_block.get("transactions").and_then(|t| t.as_array()) {
             for tx in txs {
                 let internal_row = parse_portal_transaction(tx, &internal_fields, &chain_enum);
-                if transaction.filter(&internal_row) {
-                    results.push(parse_portal_transaction(tx, fields, &chain_enum));
+                if let Some(projected_row) =
+                    filter_and_project_transaction_row(transaction, &internal_row)
+                {
+                    results.push(projected_row);
                 }
             }
         }
@@ -216,6 +203,80 @@ fn tx_filter_field(filter: &TransactionFilter) -> Option<TransactionField> {
         TransactionFilter::MaxPriorityFeePerGas(_) => Some(TransactionField::MaxPriorityFeePerGas),
         TransactionFilter::YParity(_) => Some(TransactionField::YParity),
     }
+}
+
+fn transaction_internal_fields(transaction: &Transaction) -> Vec<TransactionField> {
+    let mut fields = transaction.fields().clone();
+
+    if let Some(filters) = transaction.filters() {
+        for filter in filters {
+            if let Some(field) = tx_filter_field(filter) {
+                if !fields.contains(&field) {
+                    fields.push(field);
+                }
+            }
+        }
+    }
+
+    // Portal may omit yParity for legacy transactions, so its internal row also needs v
+    // in order to derive the parity. Keeping the dependency here makes both routes use the
+    // same extraction contract while the final projection still hides v when unrequested.
+    if fields.contains(&TransactionField::YParity) && !fields.contains(&TransactionField::V) {
+        fields.push(TransactionField::V);
+    }
+
+    fields
+}
+
+fn project_transaction_row(
+    row: &TransactionQueryRes,
+    fields: &[TransactionField],
+) -> TransactionQueryRes {
+    let mut projected = TransactionQueryRes::default();
+
+    for field in fields {
+        match field {
+            TransactionField::Type => projected.r#type = row.r#type,
+            TransactionField::Hash => projected.hash = row.hash,
+            TransactionField::From => projected.from = row.from,
+            TransactionField::To => projected.to = row.to,
+            TransactionField::Data => projected.data = row.data.clone(),
+            TransactionField::Value => projected.value = row.value,
+            TransactionField::GasPrice => projected.gas_price = row.gas_price,
+            TransactionField::GasLimit => projected.gas_limit = row.gas_limit,
+            TransactionField::EffectiveGasPrice => {
+                projected.effective_gas_price = row.effective_gas_price
+            }
+            TransactionField::Status => projected.status = row.status,
+            TransactionField::ChainId => projected.chain_id = row.chain_id,
+            TransactionField::V => projected.v = row.v,
+            TransactionField::R => projected.r = row.r,
+            TransactionField::S => projected.s = row.s,
+            TransactionField::MaxFeePerBlobGas => {
+                projected.max_fee_per_blob_gas = row.max_fee_per_blob_gas
+            }
+            TransactionField::MaxFeePerGas => projected.max_fee_per_gas = row.max_fee_per_gas,
+            TransactionField::MaxPriorityFeePerGas => {
+                projected.max_priority_fee_per_gas = row.max_priority_fee_per_gas
+            }
+            TransactionField::YParity => projected.y_parity = row.y_parity,
+            TransactionField::Chain => projected.chain = row.chain.clone(),
+            TransactionField::AuthorizationList => {
+                projected.authorization_list = row.authorization_list.clone()
+            }
+        }
+    }
+
+    projected
+}
+
+fn filter_and_project_transaction_row(
+    transaction: &Transaction,
+    internal_row: &TransactionQueryRes,
+) -> Option<TransactionQueryRes> {
+    transaction
+        .filter(internal_row)
+        .then(|| project_transaction_row(internal_row, transaction.fields()))
 }
 
 /// Maps an EQL TransactionField to the Portal JSON field name.
@@ -343,14 +404,15 @@ async fn resolve_transactions_via_rpc(
         }
     };
 
+    let internal_fields = transaction_internal_fields(transaction);
     let result_futures = rpc_transactions
         .iter()
-        .map(|t| pick_transaction_fields(t, transaction.fields(), &provider, chain));
-    let tx_res = try_join_all(result_futures).await?;
+        .map(|t| pick_transaction_fields(t, &internal_fields, &provider, chain));
+    let internal_rows = try_join_all(result_futures).await?;
 
-    let filtered_tx_res: Vec<TransactionQueryRes> = tx_res
-        .into_iter()
-        .filter(|t| t.has_value() && transaction.filter(t))
+    let filtered_tx_res = internal_rows
+        .iter()
+        .filter_map(|row| filter_and_project_transaction_row(transaction, row))
         .collect();
 
     Ok(filtered_tx_res)
@@ -402,7 +464,7 @@ async fn get_transactions_by_block_id(
 
 async fn pick_transaction_fields(
     tx: &RpcTransaction,
-    fields: &Vec<TransactionField>,
+    fields: &[TransactionField],
     provider: &Arc<RootProvider<Http<Client>>>,
     chain: &ChainOrRpc,
 ) -> Result<TransactionQueryRes> {
@@ -596,6 +658,39 @@ mod tests {
             assert_eq!(request["fields"]["transaction"]["from"], json!(true));
             assert_eq!(request["fields"]["transaction"]["value"], json!(true));
         }
+    }
+
+    #[test]
+    fn test_rpc_filtering_uses_internal_fields_and_keeps_null_only_projection() {
+        let sender = address!("1000000000000000000000000000000000000001");
+        let transaction = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::From(EqualityFilter::Eq(sender))]),
+            vec![TransactionField::AuthorizationList],
+        );
+
+        assert_eq!(
+            transaction_internal_fields(&transaction),
+            vec![TransactionField::AuthorizationList, TransactionField::From]
+        );
+
+        let internal_row = TransactionQueryRes {
+            from: Some(sender),
+            authorization_list: None,
+            ..TransactionQueryRes::default()
+        };
+        let projected = filter_and_project_transaction_row(&transaction, &internal_row)
+            .expect("the RPC row should pass its unprojected sender filter");
+
+        assert_eq!(
+            projected.from, None,
+            "filter-only fields must stay internal"
+        );
+        assert_eq!(projected.authorization_list, None);
+        assert!(
+            !projected.has_value(),
+            "a legacy transaction projected only to authorization_list is a valid null-only row"
+        );
     }
 
     #[tokio::test]

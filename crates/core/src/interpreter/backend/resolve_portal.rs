@@ -8,7 +8,11 @@ use crate::common::block::{BlockId, BlockRange, BlockRangeError};
 
 const PORTAL_BASE_URL: &str = "https://portal.sqd.dev/datasets";
 
-fn next_portal_page_start(page: &[Value], to_block: u64) -> Result<Option<u64>> {
+fn next_portal_page_start(
+    page: &[Value],
+    current_from_block: u64,
+    to_block: u64,
+) -> Result<Option<u64>> {
     let last_block = page
         .iter()
         .filter_map(|block| {
@@ -21,6 +25,14 @@ fn next_portal_page_start(page: &[Value], to_block: u64) -> Result<Option<u64>> 
         .ok_or_else(|| {
             anyhow::anyhow!("Portal returned a nonempty page without a usable header.number")
         })?;
+
+    if last_block < current_from_block {
+        return Err(anyhow::anyhow!(
+            "Portal pagination made no forward progress: last header.number {} is below requested fromBlock {}",
+            last_block,
+            current_from_block
+        ));
+    }
 
     Ok((last_block < to_block).then_some(last_block + 1))
 }
@@ -44,6 +56,10 @@ pub(crate) async fn portal_query_with_base_url(
         .get("toBlock")
         .and_then(|v| v.as_u64())
         .unwrap_or(u64::MAX);
+    let mut current_from_block = query
+        .get("fromBlock")
+        .and_then(value_to_u64)
+        .unwrap_or_default();
 
     let mut all_blocks: Vec<Value> = Vec::new();
     let mut current_query = query.clone();
@@ -83,19 +99,20 @@ pub(crate) async fn portal_query_with_base_url(
             break;
         }
 
-        let next_page_start = next_portal_page_start(&page, to_block)?;
+        let next_page_start = next_portal_page_start(&page, current_from_block, to_block)?;
 
         all_blocks.extend(page);
 
         match next_page_start {
             Some(next_block) => {
                 // Advance fromBlock past the last returned block for the next page
+                current_from_block = next_block;
                 current_query
                     .as_object_mut()
                     .unwrap()
                     .insert("fromBlock".into(), Value::from(next_block));
             }
-            _ => break, // Reached or exceeded toBlock, or no header numbers found
+            _ => break, // Reached or exceeded toBlock
         }
     }
 
@@ -342,7 +359,32 @@ mod tests {
     fn test_next_portal_page_start_uses_hex_header_number() {
         let page = vec![json!({ "header": { "number": "0x2a" } })];
 
-        assert_eq!(next_portal_page_start(&page, 43).unwrap(), Some(43));
+        assert_eq!(next_portal_page_start(&page, 42, 43).unwrap(), Some(43));
+    }
+
+    #[test]
+    fn test_next_portal_page_start_rejects_non_forward_page() {
+        let page = vec![json!({ "header": { "number": "0x29" } })];
+
+        let error = next_portal_page_start(&page, 42, 50)
+            .expect_err("a page ending before its requested range must not paginate backward");
+
+        assert_eq!(
+            error.to_string(),
+            "Portal pagination made no forward progress: last header.number 41 is below requested fromBlock 42"
+        );
+    }
+
+    #[test]
+    fn test_next_portal_page_start_advances_and_terminates_normally() {
+        let first_page = vec![json!({ "header": { "number": "0x2a" } })];
+        let last_page = vec![json!({ "header": { "number": "0x2b" } })];
+
+        assert_eq!(
+            next_portal_page_start(&first_page, 42, 43).unwrap(),
+            Some(43)
+        );
+        assert_eq!(next_portal_page_start(&last_page, 43, 43).unwrap(), None);
     }
 
     #[tokio::test]
