@@ -21,27 +21,6 @@ pub enum LogResolverErrors {
     NoLogsFound,
 }
 
-/// Returns true if a LogField can be served by the SQD Portal.
-fn field_supported_by_portal(field: &LogField) -> bool {
-    matches!(
-        field,
-        LogField::Address
-            | LogField::Topic0
-            | LogField::Topic1
-            | LogField::Topic2
-            | LogField::Topic3
-            | LogField::Data
-            | LogField::BlockHash
-            | LogField::BlockNumber
-            | LogField::BlockTimestamp
-            | LogField::TransactionHash
-            | LogField::TransactionIndex
-            | LogField::LogIndex
-            | LogField::Removed
-            | LogField::Chain
-    )
-}
-
 /// Returns true if a LogFilter is supported by Portal.
 /// Portal does not support BlockHash filters.
 fn filter_supported_by_portal(filter: &LogFilter) -> bool {
@@ -73,11 +52,6 @@ fn should_use_portal(chain: &ChainOrRpc, logs: &Logs) -> bool {
     };
 
     if dataset.is_none() {
-        return false;
-    }
-
-    // All fields must be Portal-compatible
-    if !logs.fields().iter().all(|f| field_supported_by_portal(f)) {
         return false;
     }
 
@@ -210,7 +184,11 @@ async fn resolve_logs_via_portal(
             LogField::LogIndex => {
                 log_fields.insert("logIndex".into(), json!(true));
             }
-            _ => {} // BlockNumber, BlockTimestamp, Chain handled above or client-side
+            LogField::BlockHash
+            | LogField::BlockNumber
+            | LogField::BlockTimestamp
+            | LogField::Removed
+            | LogField::Chain => {}
         }
     }
 
