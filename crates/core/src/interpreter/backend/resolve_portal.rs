@@ -3,10 +3,28 @@ use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use anyhow::Result;
 use serde_json::Value;
 use std::str::FromStr;
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use crate::common::block::{BlockId, BlockRange, BlockRangeError};
 
 const PORTAL_BASE_URL: &str = "https://portal.sqd.dev/datasets";
+
+const PORTAL_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const PORTAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Shared HTTP client for all Portal traffic: one connection pool, and explicit
+/// timeouts so a stalled Portal endpoint cannot hang a query indefinitely.
+fn portal_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(PORTAL_CONNECT_TIMEOUT)
+            .timeout(PORTAL_REQUEST_TIMEOUT)
+            .build()
+            .expect("failed to build shared Portal HTTP client")
+    })
+}
 
 fn next_portal_page_start(
     page: &[Value],
@@ -53,7 +71,7 @@ pub(crate) async fn portal_query_with_base_url(
     query: &Value,
 ) -> Result<Vec<Value>> {
     let url = format!("{}/{}/stream", base_url, dataset);
-    let client = reqwest::Client::new();
+    let client = portal_client();
 
     let to_block = query
         .get("toBlock")
@@ -219,8 +237,7 @@ pub fn block_id_is_portal_eligible(id: &BlockId) -> bool {
 /// Fetch the current head block number for a dataset from Portal's `/head` endpoint.
 pub async fn portal_head(dataset: &str) -> Result<u64> {
     let url = format!("{}/{}/head", PORTAL_BASE_URL, dataset);
-    let client = reqwest::Client::new();
-    let response = client
+    let response = portal_client()
         .get(&url)
         .send()
         .await
@@ -502,5 +519,15 @@ mod tests {
         let id = BlockId::Range(BlockRange::new(BlockNumberOrTag::Earliest, None));
 
         assert_eq!(resolve_block_id_range("unused", &id).await.unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn test_portal_client_is_shared_across_calls() {
+        let first = portal_client() as *const reqwest::Client;
+        let second = portal_client() as *const reqwest::Client;
+        assert_eq!(
+            first, second,
+            "Portal requests must reuse one shared client"
+        );
     }
 }
