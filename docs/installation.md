@@ -144,12 +144,6 @@ The `~/eql-config.json` file contains RPC endpoints for different blockchain net
                 "https://ronin.drpc.org"
             ]
         },
-        "fantom": {
-            "default": "https://fantom.drpc.org",
-            "rpcs": [
-                "https://fantom.drpc.org"
-            ]
-        },
         "kava": {
             "default": "https://kava.drpc.org",
             "rpcs": [
@@ -183,7 +177,6 @@ The default configuration includes popular networks like Ethereum, BNB Chain, Ar
 - Moonbeam
 - Moonriver
 - Ronin
-- Fantom
 - Kava
 - Gnosis
 

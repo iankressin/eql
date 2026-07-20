@@ -59,7 +59,6 @@ pub enum Chain {
     Moonbeam,
     Moonriver,
     Ronin,
-    Fantom,
     Kava,
     Gnosis,
 
@@ -109,7 +108,6 @@ impl Chain {
             Chain::Zora => Some("zora-mainnet"),
             Chain::Moonbeam => Some("moonbeam-mainnet"),
             Chain::Moonriver => Some("moonriver-mainnet"),
-            Chain::Fantom => None,
             Chain::Gnosis => Some("gnosis-mainnet"),
             Chain::Ronin => None,
             Chain::Kava => None,
@@ -166,7 +164,6 @@ impl Chain {
             Chain::Moonbeam => "https://moonbeam.drpc.org",
             Chain::Moonriver => "https://moonriver.drpc.org",
             Chain::Ronin => "https://ronin.drpc.org",
-            Chain::Fantom => "https://fantom.drpc.org",
             Chain::Kava => "https://evm.kava.io",
             Chain::Gnosis => "https://gnosis.drpc.org",
             Chain::Mekong => "https://rpc.mekong.ethpandaops.io",
@@ -204,7 +201,6 @@ impl TryFrom<&str> for Chain {
             "moonbeam" => Ok(Chain::Moonbeam),
             "moonriver" => Ok(Chain::Moonriver),
             "ronin" => Ok(Chain::Ronin),
-            "fantom" => Ok(Chain::Fantom),
             "kava" => Ok(Chain::Kava),
             "gnosis" => Ok(Chain::Gnosis),
             "mekong" => Ok(Chain::Mekong),
@@ -235,7 +231,6 @@ impl From<&Chain> for u64 {
             Chain::Moonbeam => 1284,
             Chain::Moonriver => 1285,
             Chain::Ronin => 2020,
-            Chain::Fantom => 250,
             Chain::Kava => 2222,
             Chain::Gnosis => 100,
             Chain::Mekong => 7078815900,
@@ -267,7 +262,6 @@ impl TryFrom<u64> for Chain {
             1284 => Ok(Chain::Moonbeam),
             1285 => Ok(Chain::Moonriver),
             2020 => Ok(Chain::Ronin),
-            250 => Ok(Chain::Fantom),
             2222 => Ok(Chain::Kava),
             100 => Ok(Chain::Gnosis),
             _ => Err(ChainError::InvalidChain(chain_id.to_string())),
@@ -297,7 +291,6 @@ impl fmt::Display for Chain {
             Chain::Moonbeam => "moonbeam",
             Chain::Moonriver => "moonriver",
             Chain::Ronin => "ronin",
-            Chain::Fantom => "fantom",
             Chain::Kava => "kava",
             Chain::Gnosis => "gnosis",
             Chain::Mekong => "mekong",
@@ -311,9 +304,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_fantom_has_no_portal_dataset() {
-        // fantom-mainnet 404s on Portal (Fantom Opera dataset dropped); must fall back to RPC.
-        assert_eq!(Chain::Fantom.portal_dataset(), None);
+    fn test_fantom_name_is_unsupported() {
+        let result = Chain::try_from("fantom");
+        assert!(matches!(
+            result,
+            Err(ChainError::InvalidChain(ref value)) if value == "fantom"
+        ));
+    }
+
+    #[test]
+    fn test_fantom_chain_id_is_unsupported() {
+        let result = Chain::try_from(250_u64);
+        assert!(matches!(
+            result,
+            Err(ChainError::InvalidChain(ref value)) if value == "250"
+        ));
+    }
+
+    #[test]
+    fn test_wildcard_variants_exclude_fantom() {
+        assert!(Chain::all_variants()
+            .iter()
+            .all(|chain| chain.to_string() != "fantom"));
     }
 
     #[test]
