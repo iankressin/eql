@@ -123,12 +123,6 @@
                 "https://ronin.drpc.org"
             ]
         },
-        "fantom": {
-            "default": "https://fantom.drpc.org",
-            "rpcs": [
-                "https://fantom.drpc.org"
-            ]
-        },
         "kava": {
             "default": "https://kava.drpc.org",
             "rpcs": [
