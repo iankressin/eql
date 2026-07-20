@@ -236,7 +236,11 @@ pub fn block_id_is_portal_eligible(id: &BlockId) -> bool {
 
 /// Fetch the current head block number for a dataset from Portal's `/head` endpoint.
 pub async fn portal_head(dataset: &str) -> Result<u64> {
-    let url = format!("{}/{}/head", PORTAL_BASE_URL, dataset);
+    portal_head_with_base_url(PORTAL_BASE_URL, dataset).await
+}
+
+pub(crate) async fn portal_head_with_base_url(base_url: &str, dataset: &str) -> Result<u64> {
+    let url = format!("{}/{}/head", base_url, dataset);
     let response = portal_client()
         .get(&url)
         .send()
@@ -264,12 +268,14 @@ pub async fn portal_head(dataset: &str) -> Result<u64> {
         .ok_or_else(|| anyhow::anyhow!("Portal /head response missing 'number'"))
 }
 
-/// Resolve a single block tag to a concrete number using Portal.
-pub async fn resolve_portal_bound(dataset: &str, tag: &BlockNumberOrTag) -> Result<u64> {
+/// Resolve a single block tag against an optional pre-fetched head snapshot.
+fn resolve_bound_with_head(tag: &BlockNumberOrTag, head: Option<u64>) -> Result<u64> {
     match tag {
         BlockNumberOrTag::Number(n) => Ok(*n),
         BlockNumberOrTag::Earliest => Ok(0),
-        BlockNumberOrTag::Latest => portal_head(dataset).await,
+        BlockNumberOrTag::Latest => head.ok_or_else(|| {
+            anyhow::anyhow!("Portal head snapshot missing while resolving 'latest'")
+        }),
         other => Err(anyhow::anyhow!(
             "Block tag {:?} cannot be resolved via Portal",
             other
@@ -277,11 +283,41 @@ pub async fn resolve_portal_bound(dataset: &str, tag: &BlockNumberOrTag) -> Resu
     }
 }
 
+/// Resolve a single block tag to a concrete number using Portal.
+pub async fn resolve_portal_bound(dataset: &str, tag: &BlockNumberOrTag) -> Result<u64> {
+    let head = match tag {
+        BlockNumberOrTag::Latest => Some(portal_head(dataset).await?),
+        _ => None,
+    };
+    resolve_bound_with_head(tag, head)
+}
+
 /// Resolve and validate a Portal block range after tags become concrete numbers.
+/// `latest` bounds are resolved against a single `/head` snapshot, so a range
+/// like `latest:latest` cannot straddle two consecutive heads.
 pub async fn resolve_portal_range(dataset: &str, range: &BlockRange) -> Result<(u64, u64)> {
-    let start = resolve_portal_bound(dataset, &range.start()).await?;
-    let end = match range.end() {
-        Some(end) => resolve_portal_bound(dataset, &end).await?,
+    resolve_portal_range_with_base_url(PORTAL_BASE_URL, dataset, range).await
+}
+
+pub(crate) async fn resolve_portal_range_with_base_url(
+    base_url: &str,
+    dataset: &str,
+    range: &BlockRange,
+) -> Result<(u64, u64)> {
+    let start_tag = range.start();
+    let end_tag = range.end();
+
+    let needs_head = matches!(start_tag, BlockNumberOrTag::Latest)
+        || matches!(end_tag, Some(BlockNumberOrTag::Latest));
+    let head = if needs_head {
+        Some(portal_head_with_base_url(base_url, dataset).await?)
+    } else {
+        None
+    };
+
+    let start = resolve_bound_with_head(&start_tag, head)?;
+    let end = match end_tag {
+        Some(end) => resolve_bound_with_head(&end, head)?,
         None => start,
     };
 
@@ -363,7 +399,12 @@ pub(crate) mod test_support {
             }
         }
 
-        let mut body = vec![0; content_length.expect("request Content-Length")];
+        let body_len = content_length.unwrap_or(0);
+        if body_len == 0 {
+            // GET requests (e.g. /head) carry no body; record them as null.
+            return Value::Null;
+        }
+        let mut body = vec![0; body_len];
         reader.read_exact(&mut body).expect("read request body");
         serde_json::from_slice(&body).expect("parse request JSON")
     }
@@ -529,5 +570,46 @@ mod tests {
             first, second,
             "Portal requests must reuse one shared client"
         );
+    }
+
+    #[tokio::test]
+    async fn test_latest_latest_range_resolves_both_bounds_from_one_head_snapshot() {
+        // Two canned /head responses with DIFFERENT numbers: a correct
+        // implementation fetches the head once, so both bounds resolve to 100.
+        // A per-bound implementation would observe 100 then 101 and widen the
+        // single-block range. The handle is deliberately not joined: the second
+        // canned response must go unused.
+        let (base_url, requests, _handle) = test_support::spawn_mock_portal(vec![
+            "{\"number\":100}".to_string(),
+            "{\"number\":101}".to_string(),
+        ]);
+        let range = BlockRange::new(BlockNumberOrTag::Latest, Some(BlockNumberOrTag::Latest));
+
+        let resolved = resolve_portal_range_with_base_url(&base_url, "test", &range)
+            .await
+            .expect("latest:latest must resolve via a single head snapshot");
+
+        assert_eq!(resolved, (100, 100));
+        assert_eq!(
+            requests.lock().expect("captured requests").len(),
+            1,
+            "resolving latest:latest must hit /head exactly once"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_concrete_range_never_calls_head() {
+        // 127.0.0.1:9 (discard port) refuses connections — this only passes if
+        // no /head request is attempted for earliest/number bounds.
+        let range = BlockRange::new(
+            BlockNumberOrTag::Earliest,
+            Some(BlockNumberOrTag::Number(5)),
+        );
+
+        let resolved = resolve_portal_range_with_base_url("http://127.0.0.1:9", "unused", &range)
+            .await
+            .expect("concrete bounds must resolve without any network call");
+
+        assert_eq!(resolved, (0, 5));
     }
 }
