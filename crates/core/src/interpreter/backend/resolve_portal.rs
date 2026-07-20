@@ -189,8 +189,25 @@ pub fn value_to_bloom(v: &Value) -> Option<Bloom> {
 }
 
 /// Parse a JSON parity value (`v` / `yParity`) as a bool from int, hex string, or bool.
+///
+/// Portal serves RAW legacy transaction `v` values verbatim — pre-EIP-155 27/28 and
+/// EIP-155 `35 + chainId*2 + {0,1}` — with `yParity` null for those transactions, whereas
+/// `yParity` itself (and authorization-list `yParity`) is always modern 0/1 parity. A naive
+/// "nonzero is true" mapping wrongly decodes v=27 or v=37 (parity 0) as `Some(true)`, so this
+/// normalizes all three encodings to the actual parity bit:
+/// - `n >= 35` → EIP-155: parity = `(n - 35) % 2`
+/// - `n == 27 || n == 28` → pre-EIP-155: parity = `n == 28`
+/// - otherwise → already 0/1 parity (modern typed txs, `yParity`, authorization `yParity`)
+///
+/// Bool passthrough (`v.as_bool()`) is preserved for callers that already hand in a bool.
 pub fn value_to_parity_bool(v: &Value) -> Option<bool> {
-    value_to_u64(v).map(|n| n != 0).or_else(|| v.as_bool())
+    value_to_u64(v)
+        .map(|n| match n {
+            n if n >= 35 => (n - 35) % 2 == 1,
+            27 | 28 => n == 28,
+            _ => n != 0,
+        })
+        .or_else(|| v.as_bool())
 }
 
 /// Returns true if a block tag can be resolved to a concrete number via Portal.
@@ -340,6 +357,16 @@ mod tests {
         assert_eq!(value_to_parity_bool(&json!("0x0")), Some(false));
         assert_eq!(value_to_parity_bool(&json!("0x1")), Some(true));
         assert_eq!(value_to_parity_bool(&json!(true)), Some(true));
+
+        // Pre-EIP-155 legacy v (27/28) — parity 0/1 respectively.
+        assert_eq!(value_to_parity_bool(&json!("0x1b")), Some(false)); // 27
+        assert_eq!(value_to_parity_bool(&json!("0x1c")), Some(true)); // 28
+        assert_eq!(value_to_parity_bool(&json!(27)), Some(false));
+
+        // EIP-155 legacy v (35 + chainId*2 + parity) — chainId=1 here: 37/38.
+        assert_eq!(value_to_parity_bool(&json!("0x25")), Some(false)); // 37
+        assert_eq!(value_to_parity_bool(&json!("0x26")), Some(true)); // 38
+        assert_eq!(value_to_parity_bool(&json!(38)), Some(true));
     }
 
     #[test]
