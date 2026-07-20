@@ -107,7 +107,7 @@ pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
             .filter_map(|b| {
                 b.get("header")
                     .and_then(|h| h.get("number"))
-                    .and_then(|n| n.as_u64())
+                    .and_then(value_to_u64)
             })
             .max();
 
