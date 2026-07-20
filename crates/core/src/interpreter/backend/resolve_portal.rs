@@ -13,18 +13,21 @@ fn next_portal_page_start(
     current_from_block: u64,
     to_block: u64,
 ) -> Result<Option<u64>> {
-    let last_block = page
-        .iter()
-        .filter_map(|block| {
-            block
-                .get("header")
-                .and_then(|header| header.get("number"))
-                .and_then(value_to_u64)
-        })
-        .max()
-        .ok_or_else(|| {
-            anyhow::anyhow!("Portal returned a nonempty page without a usable header.number")
-        })?;
+    let mut last_block: Option<u64> = None;
+    for block in page {
+        let number = block
+            .get("header")
+            .and_then(|header| header.get("number"))
+            .and_then(value_to_u64)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Portal returned a page item without a usable header.number")
+            })?;
+        last_block = Some(last_block.map_or(number, |max| max.max(number)));
+    }
+
+    let last_block = last_block.ok_or_else(|| {
+        anyhow::anyhow!("Portal returned a nonempty page without a usable header.number")
+    })?;
 
     if last_block < current_from_block {
         return Err(anyhow::anyhow!(
@@ -356,6 +359,24 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn test_next_portal_page_start_rejects_page_with_item_missing_header_number() {
+        // A malformed item is appended to results but invisible to pagination:
+        // advancing from the remaining maximum could re-fetch (duplicate) its data.
+        let page = vec![
+            json!({ "header": { "number": "0x2a" } }),
+            json!({ "transactions": [{ "hash": "0x01" }] }),
+        ];
+
+        let error = next_portal_page_start(&page, 42, 50)
+            .expect_err("a page item without header.number must fail pagination");
+
+        assert_eq!(
+            error.to_string(),
+            "Portal returned a page item without a usable header.number"
+        );
+    }
+
+    #[test]
     fn test_next_portal_page_start_uses_hex_header_number() {
         let page = vec![json!({ "header": { "number": "0x2a" } })];
 
@@ -408,7 +429,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "Portal returned a nonempty page without a usable header.number"
+            "Portal returned a page item without a usable header.number"
         );
     }
 
