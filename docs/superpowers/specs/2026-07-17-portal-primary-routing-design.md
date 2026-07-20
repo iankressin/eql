@@ -91,7 +91,7 @@ Newly added:
 | YParity | yParity | `bool` | parity decode — see note |
 | **AuthorizationList** | *(none)* | `Option<Vec<SignedAuthorization>>` | left `None` |
 
-Implementation note: `v` and `y_parity` are both `Option<bool>` in EQL (parity semantics — the RPC path derives both from `signature().v()`). Decode both from Portal's parity value (`v`/`yParity`). **Do not reuse `value_to_status_bool` blindly** — it only handles JSON bool / integer, not hex strings, and Portal serializes numeric fields as hex strings (`"0x1"`). The plan must use/add a decoder that maps both integer `0/1` and hex `0x0`/`0x1` → `bool` (i.e. parse via `value_to_u64` first, then `!= 0`). Legacy-tx `v` values like `27/28` are an edge case; verify the actual Portal representation against a live type-0 tx and cover with a test. Confirm empirically whether Portal emits these as hex strings or JSON integers before finalizing the decoder.
+Implementation note: `v` and `y_parity` are both `Option<bool>` in EQL (parity semantics — the RPC path derives both from `signature().v()`). Decode both from Portal's parity value (`v`/`yParity`). **As implemented:** parity decoding uses the dedicated `value_to_parity_bool` (bool, int, or hex; maps `0/1`, legacy `27/28`, and EIP-155 `≥35` values to a parity bit), and `value_to_status_bool` itself was extended to decode hex strings as well as JSON bools/integers. Legacy-tx `v` values like `27/28` are an edge case; verify the actual Portal representation against a live type-0 tx and cover with a test. Confirm empirically whether Portal emits these as hex strings or JSON integers before finalizing the decoder.
 
 ### Log — `LogField` handling
 
@@ -138,7 +138,7 @@ Log filters — `filter_supported_by_portal` adds `EventSignature`, mapped to `t
 ## 7. Error handling & edge cases
 
 - `portal_head` failure → propagate (`latest` unresolvable). No silent RPC failover.
-- `authorization_list`-only query (`GET authorization_list FROM transaction WHERE block N`): every field is `None` from Portal, so `TransactionQueryRes::has_value()` is false and rows are dropped → empty result. Since the value is `null` anyway this is acceptable; note it in the plan (and it does not affect `GET *`, which always requests `hash`).
+- `authorization_list`-only query (`GET authorization_list FROM transaction WHERE block N`): Portal serves the field as `null`, and — as implemented — such null-only rows are **retained** (one row per matching transaction, `authorization_list: null`), matching the RPC path for legacy transactions. (`GET *` is unaffected; it always requests `hash`.)
 - Explicit block numbers beyond Portal head → Portal returns empty (not an error).
 - Portal head can lag the chain tip → `latest` via Portal may resolve a few blocks behind RPC's `latest`. Documented behavior change.
 

@@ -4,7 +4,7 @@
 
 **Goal:** Route all block/transaction/log field selections (including `GET *`) through SQD Portal, leaving RPC only for cases Portal structurally cannot serve.
 
-**Architecture:** Complete the per-resolver Portal field mappings + parse-back so every EQL field is Portal-serviceable (some via correct defaults), then delete the field-coverage routing gate — routing becomes purely query-shape based. Add shared Portal primitives (bloom decode, `/head`, tag→number resolution) so `latest`/`earliest` resolve via Portal. Fix Fantom's dead dataset mapping.
+**Architecture:** Complete the per-resolver Portal field mappings + parse-back so every EQL field is Portal-serviceable (some via correct defaults), then delete the field-coverage routing gate — routing becomes purely query-shape based. Add shared Portal primitives (bloom decode, `/head`, tag→number resolution) so `latest`/`earliest` resolve via Portal. Fix Fantom's dead dataset mapping. *(Superseded: Fantom was later removed as a chain entirely — see `2026-07-17-remove-fantom-support.md`.)*
 
 **Tech Stack:** Rust (Cargo workspace), `alloy 0.6.4`, `alloy-eip7702 0.4.1`, `reqwest`, `serde_json`, `anyhow`, `pest`. Tests are in-module `#[cfg(test)]`; CI runs plain `cargo test` (network-capable — existing e2e tests hit live Ethereum/Portal).
 
@@ -16,7 +16,7 @@
 - Portal base URL is `https://portal.sqd.dev/datasets` (`resolve_portal.rs:6`, `PORTAL_BASE_URL`).
 - Portal serializes numeric header/tx fields as **hex strings** (e.g. `"0x7ff800000"`) OR JSON integers depending on field; always decode with the hex-aware `value_to_*` helpers, never `as_u64()` directly.
 - Parse-back and field-name `match` blocks must be **exhaustive (no `_ => {}` wildcard)** so the compiler forces every future enum variant to be handled — this is the primary defense against the allowlist drift that caused this bug.
-- Preserve existing behavior for the true fallback cases: `account` entity, transaction-by-hash, `block_hash` log filter, `pending`/`finalized`/`safe` tags, and chains without a Portal dataset (`ronin`/`kava`/`mekong`/`fantom`) all stay on RPC.
+- Preserve existing behavior for the true fallback cases: `account` entity, transaction-by-hash, `block_hash` log filter, `pending`/`finalized`/`safe` tags, and chains without a Portal dataset (`ronin`/`kava`/`mekong`) all stay on RPC. *(`fantom` was originally in this list; it was later removed as a chain entirely — see `2026-07-17-remove-fantom-support.md`.)*
 - Decisions (from spec §3): `authorization_list` → `None` on Portal; `latest`→`/head`, `earliest`→`0`; log `removed`→`Some(false)`; log `block_hash`→from header; `EventSignature` filter → `topic0 = keccak256(sig)`.
 
 ---
@@ -205,6 +205,8 @@ git commit -m "feat(portal): add bloom/parity decoders and tag-resolution primit
 ---
 
 ## Task 2: Fantom → RPC (fix dead Portal dataset)
+
+> **SUPERSEDED — do not execute.** This task kept `Chain::Fantom` and routed it to RPC. The product decision changed to removing Fantom entirely, and `Chain::Fantom` no longer exists. See `docs/superpowers/plans/2026-07-17-remove-fantom-support.md` and `docs/superpowers/specs/2026-07-17-remove-fantom-support-design.md`.
 
 **Files:**
 - Modify: `crates/core/src/common/chain.rs:112`
@@ -924,7 +926,7 @@ git commit -m "chore(portal): clippy/fmt cleanup for Portal-primary routing"
 
 ## Self-Review notes (author)
 
-- **Spec coverage:** §2 block/tx/log completion → Tasks 3/4/5; §3 tag resolution → Task 1 + wired in 3/4/5; §4 Fantom → Task 2; §5 primitives → Task 1; §7 edge cases → covered (authorization_list None, block_hash filter → RPC, head-lag inherent). `account` explicitly untouched.
+- **Spec coverage:** §2 block/tx/log completion → Tasks 3/4/5; §3 tag resolution → Task 1 + wired in 3/4/5; §4 Fantom → Task 2 (superseded by the full Fantom removal — see Task 2 banner); §5 primitives → Task 1; §7 edge cases → covered (authorization_list None, block_hash filter → RPC, head-lag inherent). `account` explicitly untouched.
 - **Known network dependence:** Tasks 3/4/5 Step-5/6 e2e tests hit live Ethereum/Portal, consistent with the existing suite. The unit tests (parse-back, mapping exhaustiveness, filter support) are deterministic and offline.
 - **Drift guard:** every `match` over a field enum is exhaustive (no `_`), so a new enum variant fails compilation until handled — the structural fix for the original bug.
 - **Verify-before-finalize:** Task 4 Step 5 includes a curl to confirm the chosen block/sender returns a row before locking the test constants.
