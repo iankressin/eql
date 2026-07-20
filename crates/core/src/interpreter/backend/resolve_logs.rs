@@ -21,27 +21,6 @@ pub enum LogResolverErrors {
     NoLogsFound,
 }
 
-/// Returns true if a LogField can be served by the SQD Portal.
-fn field_supported_by_portal(field: &LogField) -> bool {
-    matches!(
-        field,
-        LogField::Address
-            | LogField::Topic0
-            | LogField::Topic1
-            | LogField::Topic2
-            | LogField::Topic3
-            | LogField::Data
-            | LogField::BlockNumber
-            | LogField::BlockTimestamp
-            | LogField::BlockHash
-            | LogField::TransactionHash
-            | LogField::TransactionIndex
-            | LogField::LogIndex
-            | LogField::Removed
-            | LogField::Chain
-    )
-}
-
 /// Returns true if a LogFilter is supported by Portal.
 /// Portal does not support BlockHash filters (those still route to RPC).
 fn filter_supported_by_portal(filter: &LogFilter) -> bool {
@@ -73,11 +52,6 @@ fn should_use_portal(chain: &ChainOrRpc, logs: &Logs) -> bool {
     };
 
     if dataset.is_none() {
-        return false;
-    }
-
-    // All fields must be Portal-compatible
-    if !logs.fields().iter().all(|f| field_supported_by_portal(f)) {
         return false;
     }
 
@@ -184,26 +158,8 @@ async fn resolve_logs_via_portal(
     }
 
     for field in fields {
-        match field {
-            LogField::Address => {
-                log_fields.insert("address".into(), json!(true));
-            }
-            LogField::Topic0 | LogField::Topic1 | LogField::Topic2 | LogField::Topic3 => {
-                log_fields.insert("topics".into(), json!(true));
-            }
-            LogField::Data => {
-                log_fields.insert("data".into(), json!(true));
-            }
-            LogField::TransactionHash => {
-                log_fields.insert("transactionHash".into(), json!(true));
-            }
-            LogField::TransactionIndex => {
-                log_fields.insert("transactionIndex".into(), json!(true));
-            }
-            LogField::LogIndex => {
-                log_fields.insert("logIndex".into(), json!(true));
-            }
-            _ => {} // BlockNumber, BlockTimestamp, Chain handled above or client-side
+        if let Some(portal_name) = log_field_to_portal_name(field) {
+            log_fields.insert(portal_name.into(), json!(true));
         }
     }
 
@@ -250,6 +206,32 @@ async fn resolve_logs_via_portal(
     }
 
     Ok(results)
+}
+
+/// Maps an EQL LogField to the Portal JSON log-level field name.
+///
+/// Exhaustive over `LogField` (no wildcard arm) so that adding a new variant fails to
+/// compile until it's explicitly categorized here — the routing gate that used to silently
+/// force RPC for unmapped fields (`field_supported_by_portal`) has been removed, so this
+/// match is now the only place a future field can slip through.
+///
+/// - Log-level fields (Address, Topic0..3, Data, TransactionHash, TransactionIndex,
+///   LogIndex) map to their Portal `fields.log` name.
+/// - Block-derived fields (BlockNumber, BlockTimestamp, BlockHash) are requested via
+///   `fields.block` in `resolve_logs_via_portal` instead, so they map to `None` here.
+/// - Removed and Chain are resolved locally and never requested from Portal, so they also
+///   map to `None`.
+fn log_field_to_portal_name(field: &LogField) -> Option<&'static str> {
+    match field {
+        LogField::Address => Some("address"),
+        LogField::Topic0 | LogField::Topic1 | LogField::Topic2 | LogField::Topic3 => Some("topics"),
+        LogField::Data => Some("data"),
+        LogField::TransactionHash => Some("transactionHash"),
+        LogField::TransactionIndex => Some("transactionIndex"),
+        LogField::LogIndex => Some("logIndex"),
+        LogField::BlockNumber | LogField::BlockTimestamp | LogField::BlockHash => None,
+        LogField::Removed | LogField::Chain => None,
+    }
 }
 
 fn parse_portal_log(
@@ -395,5 +377,23 @@ mod tests {
         assert!(!filter_supported_by_portal(&LogFilter::BlockHash(
             alloy::primitives::B256::ZERO
         )));
+    }
+
+    #[test]
+    fn test_log_field_mapping_is_exhaustive() {
+        // all_variants() returns &'static [LogField]; `field` is already &LogField.
+        for field in LogField::all_variants() {
+            let mapped = log_field_to_portal_name(field).is_some();
+            let block_derived = matches!(
+                field,
+                LogField::BlockNumber | LogField::BlockTimestamp | LogField::BlockHash
+            );
+            let local = matches!(field, LogField::Removed | LogField::Chain);
+            assert!(
+                mapped || block_derived || local,
+                "LogField {:?} not Portal-serviceable",
+                field
+            );
+        }
     }
 }

@@ -178,9 +178,9 @@ pub fn value_to_status_bool(v: &Value) -> Option<bool> {
     v.as_bool().or_else(|| v.as_u64().map(|n| n != 0))
 }
 
-/// Parse a JSON value as u8 from integer.
+/// Parse a JSON value as u8 — handles both JSON integers and hex strings (e.g. "0x2").
 pub fn value_to_u8(v: &Value) -> Option<u8> {
-    v.as_u64().map(|n| n as u8)
+    value_to_u64(v).map(|n| n as u8)
 }
 
 /// Parse a JSON value as a Bloom from a hex string.
@@ -367,6 +367,12 @@ mod tests {
         assert_eq!(value_to_parity_bool(&json!("0x25")), Some(false)); // 37
         assert_eq!(value_to_parity_bool(&json!("0x26")), Some(true)); // 38
         assert_eq!(value_to_parity_bool(&json!(38)), Some(true));
+    }
+
+    #[test]
+    fn test_value_to_u8_handles_int_and_hex() {
+        assert_eq!(value_to_u8(&json!(2)), Some(2));
+        assert_eq!(value_to_u8(&json!("0x2")), Some(2));
     }
 
     #[test]
