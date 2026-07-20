@@ -17,7 +17,7 @@
 - Portal serializes numeric header/tx fields as **hex strings** (e.g. `"0x7ff800000"`) OR JSON integers depending on field; always decode with the hex-aware `value_to_*` helpers, never `as_u64()` directly.
 - Parse-back and field-name `match` blocks must be **exhaustive (no `_ => {}` wildcard)** so the compiler forces every future enum variant to be handled — this is the primary defense against the allowlist drift that caused this bug.
 - Preserve existing behavior for the true fallback cases: `account` entity, transaction-by-hash, `block_hash` log filter, `pending`/`finalized`/`safe` tags, and chains without a Portal dataset (`ronin`/`kava`/`mekong`/`fantom`) all stay on RPC.
-- Decisions (from spec §3): `authorization_list` → `None` on Portal; `latest`→`/head`, `earliest`→`0`; log `removed`→`Some(false)`; log `block_hash`→from header; `EventSignature` filter → `topic0 = keccak256(sig)`.
+- Decisions (from spec §3): `authorization_list` → decoded from Portal's `authorizationList` field (empty array → `None`; wire format: `chainId`/`r`/`s` hex strings, `nonce` **decimal string**, `yParity` JSON int — verified live 2026-07-20); `latest`→`/head`, `earliest`→`0`; log `removed`→`Some(false)`; log `block_hash`→from header; `EventSignature` filter → `topic0 = keccak256(sig)`.
 
 ---
 
@@ -454,7 +454,7 @@ git commit -m "feat(portal): serve all block fields via Portal + resolve latest/
 
 **Interfaces:**
 - Consumes (Task 1): `value_to_parity_bool`, `value_to_u256`, `value_to_u128`, `block_id_is_portal_eligible`, `resolve_block_id_range`.
-- Produces: block-range transaction queries serve all `TransactionField`s (incl. `GET *`) via Portal; `authorization_list` is `None` on the Portal path; by-hash queries remain RPC.
+- Produces: block-range transaction queries serve all `TransactionField`s (incl. `GET *`) via Portal; `authorization_list` is decoded from Portal's `authorizationList` (`None` for non-type-4 txs); by-hash queries remain RPC.
 
 - [ ] **Step 1: Write the failing unit test**
 
@@ -468,7 +468,8 @@ Add to the `#[cfg(test)] mod tests` in `resolve_transaction.rs`:
             "effectiveGasPrice": 10209184711u64,
             "v": "0x0",
             "yParity": "0x0",
-            "maxFeePerBlobGas": null
+            "maxFeePerBlobGas": null,
+            "authorizationList": []
         });
         let fields = vec![
             TransactionField::EffectiveGasPrice,
@@ -482,7 +483,34 @@ Add to the `#[cfg(test)] mod tests` in `resolve_transaction.rs`:
         assert_eq!(res.v, Some(false));
         assert_eq!(res.y_parity, Some(false));
         assert_eq!(res.max_fee_per_blob_gas, None);
+        // Empty authorizationList (non-type-4 tx) decodes to None, matching RPC semantics.
         assert_eq!(res.authorization_list, None);
+    }
+
+    #[test]
+    fn test_value_to_authorization_list_decodes_portal_wire_format() {
+        use serde_json::json;
+        // Live-verified wire fixture (2026-07-20, tx 0x56eb…b85b): chainId hex string,
+        // nonce DECIMAL string (RPC cross-check: Portal "14" == RPC "0xe"), yParity int, r/s hex.
+        let v = json!([{
+            "chainId": "0x1",
+            "address": "0xe6b97aa1490c93c28a14d86c13c9dc9c950643ed",
+            "nonce": "14",
+            "yParity": 0,
+            "r": "0x175dd0b40b1ce179e1194da0ce6011fb98d1ab4738bbb81c1c842f654c914d07",
+            "s": "0x79e9f8ff24c50f9e528d045d04d386a8ede6161fa65ee4b9d07c83bf13b1452f"
+        }]);
+        let auths = value_to_authorization_list(&v).expect("should decode");
+        assert_eq!(auths.len(), 1);
+        assert_eq!(auths[0].inner().chain_id, 1);
+        assert_eq!(auths[0].inner().nonce, 14); // decimal, NOT 0x14=20
+        assert_eq!(
+            auths[0].inner().address,
+            alloy::primitives::address!("e6b97aa1490c93c28a14d86c13c9dc9c950643ed")
+        );
+        assert_eq!(auths[0].y_parity(), 0);
+        assert_eq!(value_to_authorization_list(&json!([])), None);
+        assert_eq!(value_to_authorization_list(&json!(null)), None);
     }
 
     #[test]
@@ -490,10 +518,7 @@ Add to the `#[cfg(test)] mod tests` in `resolve_transaction.rs`:
         // all_variants() returns &'static [TransactionField]; `field` is already &TransactionField.
         for field in TransactionField::all_variants() {
             let mapped = tx_field_to_portal_name(field).is_some();
-            let local = matches!(
-                field,
-                TransactionField::Chain | TransactionField::AuthorizationList
-            );
+            let local = matches!(field, TransactionField::Chain);
             assert!(mapped || local, "TransactionField {:?} not Portal-serviceable", field);
         }
     }
@@ -516,6 +541,7 @@ use super::resolve_portal::{
     value_to_b256, value_to_bytes, value_to_parity_bool, value_to_status_bool, value_to_u128,
     value_to_u256, value_to_u64, value_to_u8,
 };
+use alloy_eip7702::{Authorization, SignedAuthorization};
 ```
 
 Delete `field_supported_by_portal` (35-52) and `block_id_to_concrete_range` (55-72).
@@ -584,10 +610,52 @@ fn tx_field_to_portal_name(field: &TransactionField) -> Option<&'static str> {
         TransactionField::S => Some("s"),
         TransactionField::MaxFeePerBlobGas => Some("maxFeePerBlobGas"),
         TransactionField::YParity => Some("yParity"),
+        TransactionField::AuthorizationList => Some("authorizationList"),
         // Not requested from Portal:
-        TransactionField::Chain => None,            // set locally
-        TransactionField::AuthorizationList => None, // no Portal field (EIP-7702)
+        TransactionField::Chain => None, // set locally
     }
+}
+```
+
+Add the authorization-list decoder (near the other parse helpers in `resolve_transaction.rs`):
+
+```rust
+/// Parse an authorization nonce: JSON int, decimal string ("14"), or 0x-hex string ("0xe").
+/// Portal encodes authorization nonces as DECIMAL strings (verified live 2026-07-20);
+/// the generic `value_to_u64` treats bare strings as hex and would mis-parse "14" as 20.
+fn value_to_auth_nonce(v: &serde_json::Value) -> Option<u64> {
+    v.as_u64().or_else(|| {
+        v.as_str().and_then(|s| {
+            if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+                u64::from_str_radix(hex, 16).ok()
+            } else {
+                s.parse().ok()
+            }
+        })
+    })
+}
+
+/// Decode Portal's `authorizationList` into alloy `SignedAuthorization`s.
+/// Wire format: `chainId`/`r`/`s` hex strings, `nonce` decimal string, `yParity` JSON int.
+/// Empty array (non-type-4 tx) → `None`, matching RPC semantics.
+fn value_to_authorization_list(v: &serde_json::Value) -> Option<Vec<SignedAuthorization>> {
+    let entries = v.as_array()?;
+    if entries.is_empty() {
+        return None;
+    }
+    let mut auths = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let authorization = Authorization {
+            chain_id: entry.get("chainId").and_then(value_to_u64)?,
+            address: entry.get("address").and_then(value_to_address)?,
+            nonce: entry.get("nonce").and_then(value_to_auth_nonce)?,
+        };
+        let y_parity = entry.get("yParity").and_then(value_to_parity_bool)? as u8;
+        let r = entry.get("r").and_then(value_to_u256)?;
+        let s = entry.get("s").and_then(value_to_u256)?;
+        auths.push(SignedAuthorization::new_unchecked(authorization, y_parity, r, s));
+    }
+    Some(auths)
 }
 ```
 
@@ -613,11 +681,12 @@ Extend `parse_portal_transaction` (243-297) — replace the `_ => {}` arm with t
                 result.y_parity = tx.get("yParity").and_then(value_to_parity_bool);
             }
             TransactionField::AuthorizationList => {
-                // Not available on Portal (EIP-7702); left as None. By-hash queries (RPC) fill it.
+                result.authorization_list =
+                    tx.get("authorizationList").and_then(value_to_authorization_list);
             }
 ```
 
-> Implementation note: `v`/`y_parity` are `Option<bool>` (parity semantics). For legacy (type-0) txs Portal's `v` is `27/28` and `yParity` may be `null`, so both are lossy on the Portal path for legacy txs — matching EQL's pre-existing bool typing. The e2e test below uses type-2 txs where parity is cleanly `0/1`.
+> Implementation note: `v`/`y_parity` are `Option<bool>` (parity semantics). For legacy (type-0) txs Portal's `v` is `27/28` and `yParity` may be `null`, so both are lossy on the Portal path for legacy txs — matching EQL's pre-existing bool typing. The e2e test below uses type-2 txs where parity is cleanly `0/1`. The `SignedAuthorization` constructor is `new_unchecked(inner: Authorization, y_parity: u8, r: U256, s: U256)` and `Authorization { chain_id: u64, address: Address, nonce: u64 }` (alloy-eip7702 0.4.1).
 
 - [ ] **Step 4: Run unit tests to verify they pass**
 
@@ -658,7 +727,7 @@ The existing `test_get_transaction_fields` is a by-hash query (stays RPC), so it
         match &result[0].result {
             ExpressionResult::Transaction(txs) => {
                 assert!(!txs.is_empty(), "expected at least one tx from Portal");
-                // authorization_list is always None on the Portal path.
+                // Block 20000000 predates EIP-7702 (Pectra), so no tx carries an authorization list.
                 assert!(txs.iter().all(|t| t.authorization_list.is_none()));
                 // GET * populates hash + from on every row.
                 assert!(txs.iter().all(|t| t.hash.is_some() && t.from.is_some()));
