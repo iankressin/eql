@@ -102,6 +102,8 @@ Blocks supports the following identifiers:
 GET * FROM block latest ON eth
 ```
 
+> Note: For chains served by SQD Portal, `latest` resolves against the Portal dataset head, which can trail the RPC chain tip by a few blocks.
+
 #### Fetching a specific block
 ```sql
 GET * FROM block 17000000 ON eth
