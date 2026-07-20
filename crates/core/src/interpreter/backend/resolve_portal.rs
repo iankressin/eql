@@ -1,7 +1,10 @@
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::eips::BlockNumberOrTag;
+use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use anyhow::Result;
 use serde_json::Value;
 use std::str::FromStr;
+
+use crate::common::block::{BlockId, BlockRange};
 
 const PORTAL_BASE_URL: &str = "https://portal.sqd.dev/datasets";
 
@@ -58,7 +61,11 @@ pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
         // Find the highest block number in this page to continue from
         let last_block_num = page
             .iter()
-            .filter_map(|b| b.get("header").and_then(|h| h.get("number")).and_then(|n| n.as_u64()))
+            .filter_map(|b| {
+                b.get("header")
+                    .and_then(|h| h.get("number"))
+                    .and_then(|n| n.as_u64())
+            })
             .max();
 
         all_blocks.extend(page);
@@ -125,11 +132,138 @@ pub fn value_to_bytes(v: &Value) -> Option<Bytes> {
 
 /// Parse a JSON value as a boolean from integer (0/1) or bool.
 pub fn value_to_status_bool(v: &Value) -> Option<bool> {
-    v.as_bool()
-        .or_else(|| v.as_u64().map(|n| n != 0))
+    v.as_bool().or_else(|| v.as_u64().map(|n| n != 0))
 }
 
 /// Parse a JSON value as u8 from integer.
 pub fn value_to_u8(v: &Value) -> Option<u8> {
     v.as_u64().map(|n| n as u8)
+}
+
+/// Parse a JSON value as a Bloom from a hex string.
+pub fn value_to_bloom(v: &Value) -> Option<Bloom> {
+    v.as_str().and_then(|s| Bloom::from_str(s).ok())
+}
+
+/// Parse a JSON parity value (`v` / `yParity`) as a bool from int, hex string, or bool.
+pub fn value_to_parity_bool(v: &Value) -> Option<bool> {
+    value_to_u64(v).map(|n| n != 0).or_else(|| v.as_bool())
+}
+
+/// Returns true if a block tag can be resolved to a concrete number via Portal.
+pub fn tag_is_portal_eligible(tag: &BlockNumberOrTag) -> bool {
+    matches!(
+        tag,
+        BlockNumberOrTag::Number(_) | BlockNumberOrTag::Latest | BlockNumberOrTag::Earliest
+    )
+}
+
+/// Returns true if both bounds of a BlockRange are Portal-resolvable tags.
+pub fn block_range_is_portal_eligible(range: &BlockRange) -> bool {
+    tag_is_portal_eligible(&range.start())
+        && range.end().map_or(true, |e| tag_is_portal_eligible(&e))
+}
+
+/// Returns true if a BlockId is fully Portal-resolvable (concrete numbers / latest / earliest).
+pub fn block_id_is_portal_eligible(id: &BlockId) -> bool {
+    match id {
+        BlockId::Number(t) => tag_is_portal_eligible(t),
+        BlockId::Range(range) => block_range_is_portal_eligible(range),
+    }
+}
+
+/// Fetch the current head block number for a dataset from Portal's `/head` endpoint.
+pub async fn portal_head(dataset: &str) -> Result<u64> {
+    let url = format!("{}/{}/head", PORTAL_BASE_URL, dataset);
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Portal /head request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!(
+            "Portal /head returned status {}: {}",
+            status,
+            body
+        ));
+    }
+
+    let value: Value = response
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to parse Portal /head response: {}", e))?;
+
+    value
+        .get("number")
+        .and_then(value_to_u64)
+        .ok_or_else(|| anyhow::anyhow!("Portal /head response missing 'number'"))
+}
+
+/// Resolve a single block tag to a concrete number using Portal.
+pub async fn resolve_portal_bound(dataset: &str, tag: &BlockNumberOrTag) -> Result<u64> {
+    match tag {
+        BlockNumberOrTag::Number(n) => Ok(*n),
+        BlockNumberOrTag::Earliest => Ok(0),
+        BlockNumberOrTag::Latest => portal_head(dataset).await,
+        other => Err(anyhow::anyhow!(
+            "Block tag {:?} cannot be resolved via Portal",
+            other
+        )),
+    }
+}
+
+/// Resolve a BlockId to a concrete (fromBlock, toBlock) range via Portal.
+pub async fn resolve_block_id_range(dataset: &str, id: &BlockId) -> Result<(u64, u64)> {
+    match id {
+        BlockId::Number(t) => {
+            let n = resolve_portal_bound(dataset, t).await?;
+            Ok((n, n))
+        }
+        BlockId::Range(range) => {
+            let start = resolve_portal_bound(dataset, &range.start()).await?;
+            let end = match range.end() {
+                Some(e) => resolve_portal_bound(dataset, &e).await?,
+                None => start,
+            };
+            Ok((start, end))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::eips::BlockNumberOrTag;
+    use serde_json::json;
+
+    #[test]
+    fn test_value_to_bloom_parses_hex_string() {
+        let zeros = format!("0x{}", "0".repeat(512));
+        let bloom = value_to_bloom(&json!(zeros)).expect("should parse bloom");
+        assert_eq!(bloom, Bloom::ZERO);
+        assert!(value_to_bloom(&json!(123)).is_none());
+    }
+
+    #[test]
+    fn test_value_to_parity_bool_handles_int_and_hex() {
+        assert_eq!(value_to_parity_bool(&json!(0)), Some(false));
+        assert_eq!(value_to_parity_bool(&json!(1)), Some(true));
+        assert_eq!(value_to_parity_bool(&json!("0x0")), Some(false));
+        assert_eq!(value_to_parity_bool(&json!("0x1")), Some(true));
+        assert_eq!(value_to_parity_bool(&json!(true)), Some(true));
+    }
+
+    #[test]
+    fn test_tag_eligibility() {
+        assert!(tag_is_portal_eligible(&BlockNumberOrTag::Number(5)));
+        assert!(tag_is_portal_eligible(&BlockNumberOrTag::Latest));
+        assert!(tag_is_portal_eligible(&BlockNumberOrTag::Earliest));
+        assert!(!tag_is_portal_eligible(&BlockNumberOrTag::Pending));
+        assert!(!tag_is_portal_eligible(&BlockNumberOrTag::Finalized));
+        assert!(!tag_is_portal_eligible(&BlockNumberOrTag::Safe));
+    }
 }
