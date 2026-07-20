@@ -727,4 +727,69 @@ mod tests {
         assert_eq!(requests[0]["fields"]["transaction"]["yParity"], json!(true));
         assert_eq!(requests[0]["fields"]["transaction"]["v"], json!(true));
     }
+
+    #[test]
+    fn test_should_use_portal_accepts_the_e2e_block_range_shape() {
+        // Pins the routing decision the execution_engine Portal e2e tests rely
+        // on: their result-shape assertions alone would also pass via RPC.
+        let transaction = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::BlockId(BlockId::Range(
+                BlockRange::new(
+                    BlockNumberOrTag::Number(20_000_000),
+                    Some(BlockNumberOrTag::Number(20_000_000)),
+                ),
+            ))]),
+            vec![TransactionField::Hash],
+        );
+
+        assert!(should_use_portal(
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            &transaction
+        ));
+    }
+
+    #[test]
+    fn test_should_use_portal_rejects_rpc_only_shapes() {
+        let range_filter = || {
+            TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                BlockNumberOrTag::Number(1),
+                Some(BlockNumberOrTag::Number(2)),
+            )))
+        };
+        let ethereum = ChainOrRpc::Chain(Chain::Ethereum);
+
+        // By-hash queries: Portal has no hash filter.
+        let by_hash = Transaction::new(
+            Some(vec![FixedBytes::<32>::ZERO]),
+            Some(vec![range_filter()]),
+            vec![TransactionField::Hash],
+        );
+        assert!(!should_use_portal(&ethereum, &by_hash));
+
+        // No block filter: Portal needs a range to scan.
+        let no_block_filter = Transaction::new(None, None, vec![TransactionField::Hash]);
+        assert!(!should_use_portal(&ethereum, &no_block_filter));
+
+        // A pending bound is not Portal-resolvable.
+        let pending = Transaction::new(
+            None,
+            Some(vec![TransactionFilter::BlockId(BlockId::Range(
+                BlockRange::new(BlockNumberOrTag::Number(1), Some(BlockNumberOrTag::Pending)),
+            ))]),
+            vec![TransactionField::Hash],
+        );
+        assert!(!should_use_portal(&ethereum, &pending));
+
+        // Explicit RPC URLs must never route to Portal.
+        let eligible = Transaction::new(
+            None,
+            Some(vec![range_filter()]),
+            vec![TransactionField::Hash],
+        );
+        assert!(!should_use_portal(
+            &ChainOrRpc::Rpc("http://localhost:8545".parse().unwrap()),
+            &eligible
+        ));
+    }
 }
