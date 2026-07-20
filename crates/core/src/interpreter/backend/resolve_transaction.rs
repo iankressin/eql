@@ -1,7 +1,8 @@
 use super::resolve_block::{batch_get_blocks, get_block};
 use super::resolve_portal::{
-    portal_query, value_to_address, value_to_b256, value_to_bytes, value_to_status_bool,
-    value_to_u128, value_to_u256, value_to_u64, value_to_u8,
+    block_id_is_portal_eligible, portal_query, resolve_block_id_range, value_to_address,
+    value_to_b256, value_to_bytes, value_to_parity_bool, value_to_status_bool, value_to_u128,
+    value_to_u256, value_to_u64, value_to_u8,
 };
 use crate::common::{
     block::BlockId,
@@ -11,12 +12,12 @@ use crate::common::{
 };
 use alloy::{
     consensus::Transaction as ConsensusTransaction,
-    eips::BlockNumberOrTag,
     primitives::FixedBytes,
     providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::{BlockTransactions, Transaction as RpcTransaction},
     transports::http::{Client, Http},
 };
+use alloy_eip7702::{Authorization, SignedAuthorization};
 use anyhow::{Ok, Result};
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -31,50 +32,8 @@ pub enum TransactionResolverErrors {
     MissingTransactionHashOrFilter,
 }
 
-/// Returns true if a TransactionField can be served by the SQD Portal.
-fn field_supported_by_portal(field: &TransactionField) -> bool {
-    matches!(
-        field,
-        TransactionField::Type
-            | TransactionField::Hash
-            | TransactionField::From
-            | TransactionField::To
-            | TransactionField::Data
-            | TransactionField::Value
-            | TransactionField::GasPrice
-            | TransactionField::GasLimit
-            | TransactionField::Status
-            | TransactionField::ChainId
-            | TransactionField::MaxFeePerGas
-            | TransactionField::MaxPriorityFeePerGas
-            | TransactionField::Chain
-    )
-}
-
-/// Extract block range as concrete (u64, u64) from a BlockId, or None if it contains tags.
-fn block_id_to_concrete_range(block_id: &BlockId) -> Option<(u64, u64)> {
-    match block_id {
-        BlockId::Number(BlockNumberOrTag::Number(n)) => Some((*n, *n)),
-        BlockId::Range(range) => {
-            let start = match range.start() {
-                BlockNumberOrTag::Number(n) => n,
-                _ => return None,
-            };
-            let end = match range.end() {
-                Some(BlockNumberOrTag::Number(n)) => n,
-                Some(_) => return None,
-                None => start,
-            };
-            Some((start, end))
-        }
-        _ => None,
-    }
-}
-
 /// Extract from/to address filters from TransactionFilters for Portal server-side filtering.
-fn extract_address_filters(
-    filters: Option<&Vec<TransactionFilter>>,
-) -> (Vec<String>, Vec<String>) {
+fn extract_address_filters(filters: Option<&Vec<TransactionFilter>>) -> (Vec<String>, Vec<String>) {
     use crate::common::filters::EqualityFilter;
 
     let mut from_addrs = Vec::new();
@@ -99,7 +58,6 @@ fn extract_address_filters(
 
 /// Determines if a transaction query for a given chain should use the Portal.
 fn should_use_portal(chain: &ChainOrRpc, transaction: &Transaction) -> bool {
-    // Must be a named chain with Portal dataset
     let dataset = match chain {
         ChainOrRpc::Chain(c) => c.portal_dataset(),
         ChainOrRpc::Rpc(_) => None,
@@ -107,30 +65,18 @@ fn should_use_portal(chain: &ChainOrRpc, transaction: &Transaction) -> bool {
     if dataset.is_none() {
         return false;
     }
-
-    // Must be a block-range query (not hash-based)
+    // Portal has no transaction-by-hash filter.
     if transaction.ids().is_some() {
         return false;
     }
-
+    // Portal needs a block range to scan.
     if !transaction.has_block_filter() {
         return false;
     }
-
-    // Block range must be concrete numbers
-    let block_id = match transaction.get_block_id_filter() {
-        std::result::Result::Ok(id) => id,
-        Err(_) => return false,
-    };
-    if block_id_to_concrete_range(block_id).is_none() {
-        return false;
+    match transaction.get_block_id_filter() {
+        std::result::Result::Ok(id) => block_id_is_portal_eligible(id),
+        Err(_) => false,
     }
-
-    // All requested fields must be Portal-compatible
-    transaction
-        .fields()
-        .iter()
-        .all(|f| field_supported_by_portal(f))
 }
 
 pub async fn resolve_transaction_query(
@@ -171,7 +117,7 @@ async fn resolve_transactions_via_portal(
     let fields = transaction.fields();
 
     let block_id = transaction.get_block_id_filter()?;
-    let (from_block, to_block) = block_id_to_concrete_range(block_id).unwrap();
+    let (from_block, to_block) = resolve_block_id_range(dataset, block_id).await?;
 
     // Build Portal transaction field selection
     let mut tx_fields = serde_json::Map::new();
@@ -235,8 +181,59 @@ fn tx_field_to_portal_name(field: &TransactionField) -> Option<&'static str> {
         TransactionField::ChainId => Some("chainId"),
         TransactionField::MaxFeePerGas => Some("maxFeePerGas"),
         TransactionField::MaxPriorityFeePerGas => Some("maxPriorityFeePerGas"),
-        _ => None,
+        TransactionField::EffectiveGasPrice => Some("effectiveGasPrice"),
+        TransactionField::V => Some("v"),
+        TransactionField::R => Some("r"),
+        TransactionField::S => Some("s"),
+        TransactionField::MaxFeePerBlobGas => Some("maxFeePerBlobGas"),
+        TransactionField::YParity => Some("yParity"),
+        TransactionField::AuthorizationList => Some("authorizationList"),
+        // Not requested from Portal:
+        TransactionField::Chain => None, // set locally
     }
+}
+
+/// Parse an authorization nonce: JSON int, decimal string ("14"), or 0x-hex string ("0xe").
+/// Portal encodes authorization nonces as DECIMAL strings (verified live 2026-07-20);
+/// the generic `value_to_u64` treats bare strings as hex and would mis-parse "14" as 20.
+fn value_to_auth_nonce(v: &serde_json::Value) -> Option<u64> {
+    v.as_u64().or_else(|| {
+        v.as_str().and_then(|s| {
+            if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+                u64::from_str_radix(hex, 16).ok()
+            } else {
+                s.parse().ok()
+            }
+        })
+    })
+}
+
+/// Decode Portal's `authorizationList` into alloy `SignedAuthorization`s.
+/// Wire format: `chainId`/`r`/`s` hex strings, `nonce` decimal string, `yParity` JSON int.
+/// Empty array (non-type-4 tx) → `None`, matching RPC semantics.
+fn value_to_authorization_list(v: &serde_json::Value) -> Option<Vec<SignedAuthorization>> {
+    let entries = v.as_array()?;
+    if entries.is_empty() {
+        return None;
+    }
+    let mut auths = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let authorization = Authorization {
+            chain_id: entry.get("chainId").and_then(value_to_u64)?,
+            address: entry.get("address").and_then(value_to_address)?,
+            nonce: entry.get("nonce").and_then(value_to_auth_nonce)?,
+        };
+        let y_parity = entry.get("yParity").and_then(value_to_parity_bool)? as u8;
+        let r = entry.get("r").and_then(value_to_u256)?;
+        let s = entry.get("s").and_then(value_to_u256)?;
+        auths.push(SignedAuthorization::new_unchecked(
+            authorization,
+            y_parity,
+            r,
+            s,
+        ));
+    }
+    Some(auths)
 }
 
 /// Parse a Portal transaction JSON into a TransactionQueryRes.
@@ -286,10 +283,32 @@ fn parse_portal_transaction(
                 result.max_priority_fee_per_gas =
                     tx.get("maxPriorityFeePerGas").and_then(value_to_u128);
             }
+            TransactionField::EffectiveGasPrice => {
+                result.effective_gas_price = tx.get("effectiveGasPrice").and_then(value_to_u128);
+            }
+            TransactionField::V => {
+                result.v = tx.get("v").and_then(value_to_parity_bool);
+            }
+            TransactionField::R => {
+                result.r = tx.get("r").and_then(value_to_u256);
+            }
+            TransactionField::S => {
+                result.s = tx.get("s").and_then(value_to_u256);
+            }
+            TransactionField::MaxFeePerBlobGas => {
+                result.max_fee_per_blob_gas = tx.get("maxFeePerBlobGas").and_then(value_to_u128);
+            }
+            TransactionField::YParity => {
+                result.y_parity = tx.get("yParity").and_then(value_to_parity_bool);
+            }
+            TransactionField::AuthorizationList => {
+                result.authorization_list = tx
+                    .get("authorizationList")
+                    .and_then(value_to_authorization_list);
+            }
             TransactionField::Chain => {
                 result.chain = Some(chain.clone());
             }
-            _ => {} // Non-Portal fields — should not be reached due to should_use_portal guard
         }
     }
 
@@ -456,4 +475,74 @@ async fn pick_transaction_fields(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_portal_transaction_decodes_signature_fields() {
+        let tx = json!({
+            "effectiveGasPrice": 10209184711u64,
+            "v": "0x0",
+            "yParity": "0x0",
+            "maxFeePerBlobGas": null,
+            "authorizationList": []
+        });
+        let fields = vec![
+            TransactionField::EffectiveGasPrice,
+            TransactionField::V,
+            TransactionField::YParity,
+            TransactionField::MaxFeePerBlobGas,
+            TransactionField::AuthorizationList,
+        ];
+        let res = parse_portal_transaction(&tx, &fields, &Chain::Ethereum);
+        assert_eq!(res.effective_gas_price, Some(10209184711u128));
+        assert_eq!(res.v, Some(false));
+        assert_eq!(res.y_parity, Some(false));
+        assert_eq!(res.max_fee_per_blob_gas, None);
+        // Empty authorizationList (non-type-4 tx) decodes to None, matching RPC semantics.
+        assert_eq!(res.authorization_list, None);
+    }
+
+    #[test]
+    fn test_value_to_authorization_list_decodes_portal_wire_format() {
+        // Live-verified wire fixture (2026-07-20, tx 0x56eb…b85b): chainId hex string,
+        // nonce DECIMAL string (RPC cross-check: Portal "14" == RPC "0xe"), yParity int, r/s hex.
+        let v = json!([{
+            "chainId": "0x1",
+            "address": "0xe6b97aa1490c93c28a14d86c13c9dc9c950643ed",
+            "nonce": "14",
+            "yParity": 0,
+            "r": "0x175dd0b40b1ce179e1194da0ce6011fb98d1ab4738bbb81c1c842f654c914d07",
+            "s": "0x79e9f8ff24c50f9e528d045d04d386a8ede6161fa65ee4b9d07c83bf13b1452f"
+        }]);
+        let auths = value_to_authorization_list(&v).expect("should decode");
+        assert_eq!(auths.len(), 1);
+        assert_eq!(auths[0].inner().chain_id, 1);
+        assert_eq!(auths[0].inner().nonce, 14); // decimal, NOT 0x14=20
+        assert_eq!(
+            auths[0].inner().address,
+            alloy::primitives::address!("e6b97aa1490c93c28a14d86c13c9dc9c950643ed")
+        );
+        assert_eq!(auths[0].y_parity(), 0);
+        assert_eq!(value_to_authorization_list(&json!([])), None);
+        assert_eq!(value_to_authorization_list(&json!(null)), None);
+    }
+
+    #[test]
+    fn test_tx_field_mapping_is_exhaustive() {
+        // all_variants() returns &'static [TransactionField]; `field` is already &TransactionField.
+        for field in TransactionField::all_variants() {
+            let mapped = tx_field_to_portal_name(field).is_some();
+            let local = matches!(field, TransactionField::Chain);
+            assert!(
+                mapped || local,
+                "TransactionField {:?} not Portal-serviceable",
+                field
+            );
+        }
+    }
 }
