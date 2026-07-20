@@ -1,16 +1,59 @@
 use alloy::eips::BlockNumberOrTag;
 use alloy::primitives::{Address, Bloom, Bytes, B256, U256};
 use anyhow::Result;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::str::FromStr;
 
 use crate::common::block::{BlockId, BlockRange};
 
 const PORTAL_BASE_URL: &str = "https://portal.sqd.dev/datasets";
 
+/// Ensure a Portal query requests `fields.block.number`, merging with whatever `fields` /
+/// `fields.block` selection is already present rather than clobbering it.
+///
+/// `portal_query` paginates by reading `header.number` off every returned block to advance
+/// `fromBlock`. Callers that only select e.g. `fields.transaction` (transaction queries) or
+/// `fields.log` (log queries) never asked for block headers, so Portal would return
+/// `"header": {}` and pagination would silently stop after the first chunk, truncating
+/// multi-chunk ranges. Forcing `block.number` here — inside `portal_query` itself — makes the
+/// invariant hold for every caller regardless of what fields they request.
+fn ensure_block_number_selected(query: &Value) -> Value {
+    let mut query = query.clone();
+
+    let Some(obj) = query.as_object_mut() else {
+        // Not a JSON object; nothing sensible to merge into. Internally-constructed Portal
+        // queries are always objects, so this only guards against misuse.
+        return query;
+    };
+
+    let fields = obj.entry("fields").or_insert_with(|| json!({}));
+    if !fields.is_object() {
+        *fields = json!({});
+    }
+    let fields_obj = fields
+        .as_object_mut()
+        .expect("fields was just normalized to an object");
+
+    let block = fields_obj.entry("block").or_insert_with(|| json!({}));
+    if !block.is_object() {
+        *block = json!({});
+    }
+    let block_obj = block
+        .as_object_mut()
+        .expect("block was just normalized to an object");
+
+    block_obj.insert("number".into(), json!(true));
+
+    query
+}
+
 /// Send a query to the SQD Portal stream API and return parsed NDJSON response blocks.
 /// Automatically paginates by advancing `fromBlock` past the last returned block header
 /// until the full requested range is covered.
+///
+/// Forces `fields.block.number` on (merging with the caller's field selection) so
+/// pagination always has a block number to advance from, even for transaction/log queries
+/// that don't otherwise select any block-header fields.
 pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
     let url = format!("{}/{}/stream", PORTAL_BASE_URL, dataset);
     let client = reqwest::Client::new();
@@ -21,7 +64,7 @@ pub async fn portal_query(dataset: &str, query: &Value) -> Result<Vec<Value>> {
         .unwrap_or(u64::MAX);
 
     let mut all_blocks: Vec<Value> = Vec::new();
-    let mut current_query = query.clone();
+    let mut current_query = ensure_block_number_selected(query);
 
     loop {
         let response = client
@@ -239,6 +282,48 @@ mod tests {
     use super::*;
     use alloy::eips::BlockNumberOrTag;
     use serde_json::json;
+
+    #[test]
+    fn test_ensure_block_number_selected_adds_to_empty_fields() {
+        let query = json!({"type": "evm", "fromBlock": 1});
+        let result = ensure_block_number_selected(&query);
+        assert_eq!(result["fields"]["block"]["number"], json!(true));
+    }
+
+    #[test]
+    fn test_ensure_block_number_selected_preserves_existing_block_fields() {
+        let query = json!({
+            "fields": { "block": { "timestamp": true, "hash": true } }
+        });
+        let result = ensure_block_number_selected(&query);
+        assert_eq!(result["fields"]["block"]["number"], json!(true));
+        assert_eq!(result["fields"]["block"]["timestamp"], json!(true));
+        assert_eq!(result["fields"]["block"]["hash"], json!(true));
+    }
+
+    #[test]
+    fn test_ensure_block_number_selected_is_idempotent() {
+        let query = json!({
+            "fields": { "block": { "number": true } }
+        });
+        let result = ensure_block_number_selected(&query);
+        assert_eq!(result["fields"]["block"]["number"], json!(true));
+        assert_eq!(result["fields"]["block"].as_object().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_ensure_block_number_selected_preserves_transaction_fields() {
+        let query = json!({
+            "fields": { "transaction": { "hash": true } }
+        });
+        let result = ensure_block_number_selected(&query);
+        assert_eq!(result["fields"]["transaction"]["hash"], json!(true));
+        assert_eq!(
+            result["fields"]["transaction"].as_object().unwrap().len(),
+            1
+        );
+        assert_eq!(result["fields"]["block"]["number"], json!(true));
+    }
 
     #[test]
     fn test_value_to_bloom_parses_hex_string() {
