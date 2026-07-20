@@ -4,7 +4,7 @@
 
 **Goal:** Route all block/transaction/log field selections (including `GET *`) through SQD Portal, leaving RPC only for cases Portal structurally cannot serve.
 
-**Architecture:** Complete the per-resolver Portal field mappings + parse-back so every EQL field is Portal-serviceable (some via correct defaults), then delete the field-coverage routing gate — routing becomes purely query-shape based. Add shared Portal primitives (bloom decode, `/head`, tag→number resolution) so `latest`/`earliest` resolve via Portal. Fix Fantom's dead dataset mapping.
+**Architecture:** Complete the per-resolver Portal field mappings + parse-back so every EQL field is Portal-serviceable (some via correct defaults), then delete the field-coverage routing gate — routing becomes purely query-shape based. Add shared Portal primitives (bloom decode, `/head`, tag→number resolution) so `latest`/`earliest` resolve via Portal. Fantom is removed entirely (see `2026-07-17-remove-fantom-support.md`, which supersedes Task 2).
 
 **Tech Stack:** Rust (Cargo workspace), `alloy 0.6.4`, `alloy-eip7702 0.4.1`, `reqwest`, `serde_json`, `anyhow`, `pest`. Tests are in-module `#[cfg(test)]`; CI runs plain `cargo test` (network-capable — existing e2e tests hit live Ethereum/Portal).
 
@@ -16,7 +16,7 @@
 - Portal base URL is `https://portal.sqd.dev/datasets` (`resolve_portal.rs:6`, `PORTAL_BASE_URL`).
 - Portal serializes numeric header/tx fields as **hex strings** (e.g. `"0x7ff800000"`) OR JSON integers depending on field; always decode with the hex-aware `value_to_*` helpers, never `as_u64()` directly.
 - Parse-back and field-name `match` blocks must be **exhaustive (no `_ => {}` wildcard)** so the compiler forces every future enum variant to be handled — this is the primary defense against the allowlist drift that caused this bug.
-- Preserve existing behavior for the true fallback cases: `account` entity, transaction-by-hash, `block_hash` log filter, `pending`/`finalized`/`safe` tags, and chains without a Portal dataset (`ronin`/`kava`/`mekong`/`fantom`) all stay on RPC.
+- Preserve existing behavior for the true fallback cases: `account` entity, transaction-by-hash, `block_hash` log filter, `pending`/`finalized`/`safe` tags, and chains without a Portal dataset (`ronin`/`kava`/`mekong`) all stay on RPC. (`fantom` is removed from EQL entirely — see `2026-07-17-remove-fantom-support.md`.)
 - Decisions (from spec §3): `authorization_list` → decoded from Portal's `authorizationList` field (empty array → `None`; wire format: `chainId`/`r`/`s` hex strings, `nonce` **decimal string**, `yParity` JSON int — verified live 2026-07-20); `latest`→`/head`, `earliest`→`0`; log `removed`→`Some(false)`; log `block_hash`→from header; `EventSignature` filter → `topic0 = keccak256(sig)`.
 
 ---
@@ -205,6 +205,8 @@ git commit -m "feat(portal): add bloom/parity decoders and tag-resolution primit
 ---
 
 ## Task 2: Fantom → RPC (fix dead Portal dataset)
+
+> **SUPERSEDED:** this task's interim fallback landed as commit `26a6708`, but the product decision is full removal — `docs/superpowers/plans/2026-07-17-remove-fantom-support.md` replaces this task and lands as a follow-up commit.
 
 **Files:**
 - Modify: `crates/core/src/common/chain.rs:112`

@@ -32,7 +32,7 @@ Cross-referencing every EQL field against Portal's EVM OpenAPI schema (`https://
 
 1. **`authorization_list` (EIP-7702):** served via Portal, decoded to `Vec<SignedAuthorization>`. Portal added an `authorizationList` field after this doc was first written (verified live 2026-07-20: 101 type-4 txs in blocks 25575250–25575296 return fully populated lists; `[]` on non-type-4 txs). Wire format: `chainId` hex string, `address` hex string, `nonce` **decimal string** (RPC cross-check on tx `0x56eb…b85b`: Portal `"14"` = RPC `"0xe"`), `yParity` JSON integer, `r`/`s` hex strings. Empty array decodes to `None`, matching RPC semantics for non-type-4 txs. ⚠️ The generic `value_to_u64` parses non-`0x` strings as hex — the nonce needs a decimal-aware parser.
 2. **Block tags:** `latest` → Portal `/head`; `earliest` → `0`; `pending` (and `finalized`/`safe`) → RPC (Portal does not index unconfirmed blocks; head-vs-finalized semantics kept on RPC conservatively).
-3. **Fantom → RPC.** `portal_dataset()` returns `None` for `Fantom`. `fantom-mainnet` 404s (dataset dropped); `sonic-mainnet` is a *different* chain (id 146) and must not be substituted.
+3. **Fantom: removed entirely** — superseded by `2026-07-17-remove-fantom-support-design.md`. The interim "Fantom → RPC" fallback is replaced by deleting `Chain::Fantom`, the `fantom` parser selector, and chain id `250`. `sonic-mainnet` is a *different* chain (id 146) and must not be substituted.
 4. **Remove the field-based routing gate** for block/log/tx. Once mappings are complete, every field is Portal-serviceable (some via correct defaults), so the field check is always-true. The **field→Portal-name mapping becomes the single source of truth**; routing is decided by *query shape* only.
 5. **Log `Removed` → `Some(false)`** (correct for finalized/indexed data). **Log `BlockHash` → from the joined block header.** **`EventSignature` filter → `topic0 = keccak256(signature)`.**
 
@@ -133,7 +133,7 @@ Log filters — `filter_supported_by_portal` adds `EventSignature`, mapped to `t
 - Remove field gate from `should_use_portal` (75-101); keep filter-eligibility + resolvable-range checks. Extend `extract_block_range` (56-72) so a `latest`/`earliest` range bound is resolvable via Portal rather than returning `None`.
 
 **`chain.rs`**
-- `Chain::Fantom => None` in `portal_dataset()` (112). (Optional, out of scope: the pre-existing missing `Ronin`/`2020` arm in `TryFrom<u64>` at 246-276 — note only.)
+- Fantom: superseded — `Chain::Fantom` is deleted entirely per `2026-07-17-remove-fantom-support-design.md`. (Optional, out of scope: the pre-existing missing `Ronin`/`2020` arm in `TryFrom<u64>` at 246-276 — note only.)
 
 ## 7. Error handling & edge cases
 
@@ -146,7 +146,7 @@ Log filters — `filter_supported_by_portal` adds `EventSignature`, mapped to `t
 
 - **Mapping completeness guard (unit):** a test asserting every `BlockField`/`TransactionField`/`LogField` variant is either mapped to a Portal name or explicitly defaulted — so the allowlist-drift bug cannot recur.
 - **Decoder unit tests:** `value_to_bloom` round-trip; `v`/`y_parity` parity decoding; `size`/`total_difficulty` as `U256`.
-- **Routing tests:** `GET *` for block/log/tx → Portal; tx-by-hash, `pending` tag, `block_hash` log filter, and `fantom`/`ronin`/`kava`/`mekong` → RPC; `latest`/`earliest` block/range → Portal.
+- **Routing tests:** `GET *` for block/log/tx → Portal; tx-by-hash, `pending` tag, `block_hash` log filter, and `ronin`/`kava`/`mekong` → RPC; `latest`/`earliest` block/range → Portal. (`fantom` is no longer a valid chain — rejected at parse time.)
 - **Parity tests:** for a known block, transaction, and log, assert the Portal result equals the RPC result field-by-field, excluding the documented `removed` caveat. This is the primary proof the migration is faithful.
 - **Authorization-list decoder test:** decode the live-verified wire fixture (hex `chainId`, decimal-string `nonce`, int `yParity`) and assert field-level equality against the RPC representation; `[]` → `None`.
 
