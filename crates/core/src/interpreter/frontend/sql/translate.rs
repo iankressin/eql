@@ -29,14 +29,19 @@ use super::{
 use crate::common::{
     account::{Account, AccountField},
     block::{Block, BlockField, BlockId, BlockRange},
+    chain::Chain,
+    dump::{Dump, DumpFormat},
     ens::NameOrAddress,
     entity::Entity,
     filters::{ComparisonFilter, EqualityFilter, FilterType},
     logs::{LogField, LogFilter, Logs},
     transaction::{Transaction, TransactionField, TransactionFilter},
-    types::{Expression, GetExpression},
+    types::{Expression, GetExpression, SetRpcExpression},
 };
-use sqlparser::ast::{Expr, Select, SelectItem, SetExpr, Statement, TableFactor};
+use alloy::transports::http::reqwest::Url;
+use sqlparser::ast::{
+    CopySource, CopyTarget, Expr, Select, SelectItem, SetExpr, Statement, TableFactor,
+};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -56,7 +61,149 @@ fn joined<T: Display>(items: &[T]) -> String {
 pub fn statement_to_expression(stmt: &Statement) -> Result<Expression, EqlSqlError> {
     match stmt {
         Statement::Query(query) => query_to_get(query, None),
+        // Exhaustive over every `Statement::Copy` field — see `copy_to_expression`.
+        Statement::Copy {
+            source,
+            to,
+            target,
+            options,
+            legacy_options,
+            values,
+        } => copy_to_expression(source, *to, target, options, legacy_options, values),
+        // Exhaustive over every `Statement::SetVariable` field — see
+        // `set_variable_to_expression`.
+        Statement::SetVariable {
+            local,
+            hivevar,
+            variables,
+            value,
+        } => set_variable_to_expression(*local, *hivevar, variables, value),
         other => Err(EqlSqlError::NotSupported(format!("statement {other}"))),
+    }
+}
+
+/// Translates `COPY (SELECT …) TO '<name>.<ext>'` into a `Get` expression
+/// carrying a `Dump` — the SQL spelling of the legacy `>> file` dump syntax.
+///
+/// Every `Statement::Copy` field is checked by name rather than skipped via
+/// `..` (see the module doc comment): `options`, `legacy_options` and
+/// `values` aren't meaningful for the one shape EQL supports (copying a
+/// `SELECT` out to a file), but a `COPY (SELECT …) TO 'x.json' (FORMAT csv)`
+/// that silently dropped the `FORMAT csv` option would be exactly the
+/// silent-discard bug this module's exhaustive-destructure convention
+/// exists to prevent.
+fn copy_to_expression(
+    source: &CopySource,
+    to: bool,
+    target: &CopyTarget,
+    options: &[sqlparser::ast::CopyOption],
+    legacy_options: &[sqlparser::ast::CopyLegacyOption],
+    values: &[Option<String>],
+) -> Result<Expression, EqlSqlError> {
+    // Only ever populated for `COPY ... FROM STDIN` (inline TSV rows
+    // following the statement, per `sqlparser`'s `parse_copy`); unreachable
+    // when `to` is true, but checked defensively rather than dropped.
+    if !values.is_empty() {
+        return Err(EqlSqlError::NotSupported(
+            "COPY ... FROM STDIN inline values".into(),
+        ));
+    }
+    if !options.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "COPY options ({})",
+            joined(options)
+        )));
+    }
+    if !legacy_options.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "COPY options ({})",
+            joined(legacy_options)
+        )));
+    }
+    if !to {
+        return Err(EqlSqlError::NotSupported(
+            "COPY ... FROM (import); EQL only supports COPY (SELECT …) TO …".into(),
+        ));
+    }
+    let query = match source {
+        CopySource::Query(query) => query,
+        CopySource::Table {
+            table_name,
+            columns: _, // only meaningful for `COPY FROM`, which we reject above
+        } => {
+            return Err(EqlSqlError::NotSupported(format!(
+                "COPY of table {table_name}; wrap a SELECT: COPY (SELECT …) TO '…'"
+            )))
+        }
+    };
+    let filename = match target {
+        CopyTarget::File { filename } => filename,
+        other => return Err(EqlSqlError::NotSupported(format!("COPY TO {other}"))),
+    };
+    let (name, ext) = filename.rsplit_once('.').ok_or_else(|| {
+        EqlSqlError::Validation("export file needs a .json, .csv or .parquet extension".into())
+    })?;
+    let format = DumpFormat::try_from(ext).map_err(|e| EqlSqlError::Validation(e.to_string()))?;
+    query_to_get(query, Some(Dump::new(name.to_string(), format)))
+}
+
+/// Translates `SET rpc_<chain> = '<url>'` into `Expression::Set`, a
+/// session-scoped RPC override applied by the execution engine (not
+/// resolved into rows the way `Get` is — see `SetRpcExpression`'s doc
+/// comment for what "session-scoped" means here).
+///
+/// `local`/`hivevar` and multi-variable/multi-value forms are rejected by
+/// name: EQL has no notion of a `LOCAL`-scoped or Hive-style variable, and a
+/// `SET rpc_eth = 'a', 'b'` naming two values for one variable has no
+/// sensible translation, so both are rejected rather than silently taking
+/// the first value.
+fn set_variable_to_expression(
+    local: bool,
+    hivevar: bool,
+    variables: &sqlparser::ast::OneOrManyWithParens<sqlparser::ast::ObjectName>,
+    value: &[Expr],
+) -> Result<Expression, EqlSqlError> {
+    if local {
+        return Err(EqlSqlError::NotSupported("SET LOCAL".into()));
+    }
+    if hivevar {
+        return Err(EqlSqlError::NotSupported("SET HIVEVAR:...".into()));
+    }
+    let variable = variables_single_name(variables)?;
+    let chain_name = variable
+        .strip_prefix("rpc_")
+        .ok_or_else(|| EqlSqlError::NotSupported(format!("SET {variable}")))?;
+    let chain = Chain::try_from(chain_name).map_err(|e| EqlSqlError::Validation(e.to_string()))?;
+    if value.len() > 1 {
+        return Err(EqlSqlError::NotSupported(format!(
+            "SET {variable} with multiple values ({})",
+            joined(value)
+        )));
+    }
+    let value_expr = value
+        .first()
+        .ok_or_else(|| EqlSqlError::Validation(format!("SET {variable} needs a value")))?;
+    let url_text = values::expr_as_string(value_expr)?;
+    let url = Url::parse(&url_text)
+        .map_err(|e| EqlSqlError::Validation(format!("invalid url '{url_text}': {e}")))?;
+    Ok(Expression::Set(SetRpcExpression { chain, url }))
+}
+
+/// `variables` is `Many(...)` only for `SET (a, b) = (1, 2)`, syntax gated
+/// behind `Dialect::supports_parenthesized_set_variables()`, which
+/// `DuckDbDialect` does not implement — unreachable through `translate_one`
+/// today, but checked defensively rather than dropped (see the module doc
+/// comment).
+fn variables_single_name(
+    variables: &sqlparser::ast::OneOrManyWithParens<sqlparser::ast::ObjectName>,
+) -> Result<String, EqlSqlError> {
+    use sqlparser::ast::OneOrManyWithParens;
+    match variables {
+        OneOrManyWithParens::One(name) => Ok(name.to_string().to_ascii_lowercase()),
+        OneOrManyWithParens::Many(names) => Err(EqlSqlError::NotSupported(format!(
+            "SET ({})",
+            joined(names)
+        ))),
     }
 }
 
@@ -783,7 +930,9 @@ mod tests {
             "SELECT nonce, balance FROM accounts WHERE address = vitalik.eth AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         assert_eq!(get.chains, vec![ChainOrRpc::Chain(Chain::Ethereum)]);
         assert_eq!(
             get.entity,
@@ -801,7 +950,9 @@ mod tests {
             "SELECT * FROM accounts WHERE address IN (0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045, ian.eth) AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Account(account) = get.entity else {
             panic!()
         };
@@ -815,7 +966,9 @@ mod tests {
             "SELECT hash FROM blocks WHERE number BETWEEN 1 AND 100 AND chain = eth LIMIT 5",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         assert_eq!(get.limit, Some(5));
         let crate::common::entity::Entity::Block(block) = get.entity else {
             panic!()
@@ -833,7 +986,9 @@ mod tests {
     fn block_latest_tag() {
         let expr =
             translate_one("SELECT * FROM blocks WHERE number = latest AND chain = eth").unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Block(block) = get.entity else {
             panic!()
         };
@@ -849,7 +1004,9 @@ mod tests {
             "SELECT balance AS eth_balance FROM accounts WHERE address = ian.eth AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         assert_eq!(get.aliases.unwrap().get("balance").unwrap(), "eth_balance");
     }
 
@@ -913,7 +1070,9 @@ mod tests {
             "SELECT nonce, nonce FROM accounts WHERE address = ian.eth AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Account(account) = get.entity else {
             panic!()
         };
@@ -929,7 +1088,9 @@ mod tests {
             "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth LIMIT 0",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         assert_eq!(get.limit, Some(0));
     }
 
@@ -959,7 +1120,9 @@ mod tests {
             "SELECT chain, nonce FROM accounts WHERE address = ian.eth AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Account(account) = get.entity else {
             panic!()
         };
@@ -1227,7 +1390,9 @@ mod tests {
             "SELECT * FROM tx WHERE hash = 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Transaction(tx) = get.entity else {
             panic!()
         };
@@ -1245,7 +1410,9 @@ mod tests {
             "SELECT from_address, value FROM transactions WHERE block_number = latest AND value > 1 ether AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Transaction(tx) = get.entity else {
             panic!()
         };
@@ -1287,7 +1454,9 @@ mod tests {
              AND block_number BETWEEN 4638657 AND 4638758 AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Logs(logs) = get.entity else {
             panic!()
         };
@@ -1312,7 +1481,9 @@ mod tests {
              AND block_number = 4638757 AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Logs(logs) = get.entity else {
             panic!()
         };
@@ -1352,7 +1523,9 @@ mod tests {
             "SELECT * FROM tx WHERE block_number = latest AND data = 0x1234 AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Transaction(tx) = get.entity else {
             panic!()
         };
@@ -1375,7 +1548,9 @@ mod tests {
              AND block_number = latest AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Transaction(tx) = get.entity else {
             panic!()
         };
@@ -1407,7 +1582,9 @@ mod tests {
             "SELECT * FROM tx WHERE block_number = latest AND value > 1 AND value < 100 AND chain = eth",
         )
         .unwrap();
-        let Expression::Get(get) = expr;
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
         let crate::common::entity::Entity::Transaction(tx) = get.entity else {
             panic!()
         };
@@ -1523,5 +1700,190 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("removed"), "{err}");
+    }
+
+    // Task 8: `COPY ... TO` exports and `SET rpc_<chain>` session overrides.
+
+    #[test]
+    fn copy_to_becomes_dump() {
+        use crate::common::dump::{Dump, DumpFormat};
+        let expr = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out/blocks.parquet'",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
+        assert_eq!(
+            get.dump,
+            Some(Dump::new("out/blocks".into(), DumpFormat::Parquet))
+        );
+    }
+
+    #[test]
+    fn copy_rejects_unknown_extension() {
+        let err = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out.xlsx'",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("json") || err.contains("format"));
+    }
+
+    #[test]
+    fn set_rpc_translates() {
+        let expr = translate_one("SET rpc_eth = 'https://my-node:8545'").unwrap();
+        let Expression::Set(set) = expr else {
+            panic!("not a Set")
+        };
+        assert_eq!(set.chain, crate::common::chain::Chain::Ethereum);
+        assert_eq!(set.url.as_str(), "https://my-node:8545/");
+    }
+
+    #[test]
+    fn set_unknown_variable_errors() {
+        assert!(translate_one("SET foo = 'bar'").is_err());
+        assert!(translate_one("SET rpc_nochain = 'https://x'").is_err());
+    }
+
+    // Shapes the brief's tests above don't cover. Each is either rejected
+    // clearly (naming the real construct) or translated sensibly — never
+    // mis-translated silently and never a panic.
+
+    #[test]
+    fn copy_rejects_path_with_no_extension() {
+        let err = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out/blocks'",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("extension"), "{err}");
+    }
+
+    #[test]
+    fn copy_rejects_directory_like_path_without_a_real_extension() {
+        // The last `.` in the path lands inside a directory segment, not on
+        // a file extension; `DumpFormat::try_from` rejects the bogus
+        // "extension" it gets handed rather than misinterpreting the path.
+        let err = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out.dir/blocks'",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("dir/blocks"), "{err}");
+    }
+
+    #[test]
+    fn copy_rejects_extension_in_the_wrong_case() {
+        // Extension matching is case-sensitive, same as the legacy pest
+        // `Dump`/`DumpFormat` grammar this reuses — not a new restriction.
+        let err = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out.PARQUET'",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("PARQUET"), "{err}");
+    }
+
+    #[test]
+    fn copy_to_stdout_is_rejected_by_name() {
+        let err =
+            translate_one("COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO STDOUT")
+                .unwrap_err()
+                .to_string();
+        assert!(err.contains("STDOUT"), "{err}");
+    }
+
+    #[test]
+    fn copy_from_is_rejected_by_name() {
+        let err = translate_one("COPY blocks FROM 'in.csv'")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("FROM"), "{err}");
+    }
+
+    #[test]
+    fn copy_of_bare_table_names_the_table() {
+        let err = translate_one("COPY blocks TO 'out.json'")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("blocks") && err.contains("SELECT"), "{err}");
+    }
+
+    #[test]
+    fn copy_with_options_is_rejected_by_name() {
+        let err = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out.csv' (FORMAT csv)",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("FORMAT"), "{err}");
+    }
+
+    #[test]
+    fn set_local_is_rejected_by_name() {
+        let err = translate_one("SET LOCAL rpc_eth = 'https://my-node:8545'")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("LOCAL"), "{err}");
+    }
+
+    #[test]
+    fn set_multiple_values_is_rejected_by_name() {
+        let err = translate_one("SET rpc_eth = 'https://a', 'https://b'")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("multiple values"), "{err}");
+    }
+
+    #[test]
+    fn set_non_string_value_is_rejected_clearly() {
+        let err = translate_one("SET rpc_eth = 123").unwrap_err().to_string();
+        assert!(err.contains("123"), "{err}");
+    }
+
+    #[test]
+    fn set_invalid_url_is_rejected_clearly() {
+        let err = translate_one("SET rpc_eth = 'not-a-url'")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("not-a-url"), "{err}");
+    }
+
+    #[test]
+    fn set_accepts_any_url_scheme_by_design() {
+        // `Url::parse` doesn't restrict schemes, and neither does the
+        // legacy pest `rpc_url` rule (`types.rs`'s `Rule::rpc_url` arm) —
+        // an unsupported scheme surfaces later as a normal provider error
+        // when the override is actually used, not as a translation-time
+        // rejection.
+        let expr = translate_one("SET rpc_eth = 'ftp://my-node:21'").unwrap();
+        let Expression::Set(set) = expr else {
+            panic!("not a Set")
+        };
+        assert_eq!(set.url.scheme(), "ftp");
+    }
+
+    #[test]
+    fn set_many_variables_is_rejected_defensively() {
+        // `variables` is only ever `Many(...)` for `SET (a, b) = (1, 2)`,
+        // syntax gated behind `Dialect::supports_parenthesized_set_variables`,
+        // which `DuckDbDialect` does not implement — unreachable through
+        // `translate_one` today (see the module doc comment for why we
+        // still check it), so built by hand here the same way
+        // `prewhere_is_rejected_defensively` exercises other
+        // parser-unreachable shapes.
+        use sqlparser::ast::{Ident, ObjectName, OneOrManyWithParens, Value};
+        let stmt = Statement::SetVariable {
+            local: false,
+            hivevar: false,
+            variables: OneOrManyWithParens::Many(vec![
+                ObjectName(vec![Ident::new("rpc_eth")]),
+                ObjectName(vec![Ident::new("rpc_op")]),
+            ]),
+            value: vec![Expr::Value(Value::SingleQuotedString("x".into()))],
+        };
+        let err = statement_to_expression(&stmt).unwrap_err().to_string();
+        assert!(err.contains("rpc_eth") && err.contains("rpc_op"), "{err}");
     }
 }

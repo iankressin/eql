@@ -10,6 +10,19 @@ use pest::iterators::Pairs;
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Get(GetExpression),
+    Set(SetRpcExpression),
+}
+
+/// A session-scoped RPC override produced by `SET rpc_<chain> = '<url>'`.
+///
+/// The execution engine applies this by calling
+/// `Config::set_session_rpc`, which changes `Chain::rpc_url`'s behavior for
+/// every later query in the process (see `config.rs` for the blast radius).
+/// It never resolves into a `QueryResult` the way `GetExpression` does.
+#[derive(Debug, PartialEq)]
+pub struct SetRpcExpression {
+    pub chain: Chain,
+    pub url: Url,
 }
 
 #[derive(Debug, PartialEq)]

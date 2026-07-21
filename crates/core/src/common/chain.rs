@@ -20,7 +20,7 @@ pub enum ChainOrRpc {
 impl ChainOrRpc {
     pub fn rpc_url(&self) -> Result<Url> {
         match self {
-            ChainOrRpc::Chain(chain) => Ok(chain.rpc_url()?.clone()),
+            ChainOrRpc::Chain(chain) => chain.rpc_url(),
             ChainOrRpc::Rpc(url) => Ok(url.clone()),
         }
     }
@@ -38,7 +38,7 @@ impl ChainOrRpc {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, EnumVariants, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, EnumVariants, Serialize, Deserialize)]
 pub enum Chain {
     Ethereum,
     Sepolia,
@@ -135,7 +135,19 @@ impl Chain {
         }
     }
 
+    /// Resolves the RPC endpoint to use for this chain.
+    ///
+    /// Precedence: a session override set by `SET rpc_<chain> = '<url>'`
+    /// (`Config::session_rpc`, a process-wide store — see its doc comment)
+    /// wins over the on-disk config file, which in turn wins over the
+    /// built-in fallback. Once a session override is set, it applies to
+    /// every subsequent call for that chain for the rest of the process —
+    /// this is intentional: `SET` is meant to change how the rest of the
+    /// session resolves that chain's RPC, not just the next query.
     pub fn rpc_url(&self) -> Result<Url> {
+        if let Some(url) = Config::session_rpc(self) {
+            return Ok(url);
+        }
         match Config::new().get_chain_default_rpc(self) {
             Ok(Some(url)) => Ok(url),
             Ok(None) => Ok(self.rpc_fallback().parse()?),

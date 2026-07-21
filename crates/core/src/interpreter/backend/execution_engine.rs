@@ -34,6 +34,14 @@ impl ExecutionEngine {
                     let result = self.run_get_expr(&get_expr).await?;
                     query_results.push(QueryResult::new(result));
                 }
+                // `SET rpc_<chain> = '<url>'` applies a session-scoped RPC
+                // override rather than resolving into rows, so it produces
+                // no `QueryResult` (see `Config::set_session_rpc`'s and
+                // `Chain::rpc_url`'s doc comments for what "session-scoped"
+                // means in practice).
+                Expression::Set(set_expr) => {
+                    crate::common::config::Config::set_session_rpc(&set_expr.chain, set_expr.url);
+                }
             }
         }
 
@@ -504,5 +512,43 @@ mod test {
             let result = execution_engine.run(vec![expression]).await.unwrap();
             assert_eq!(result[0].result, expected);
         }
+    }
+
+    // Task 8: `Expression::Set` applies a session RPC override and never
+    // pushes a `QueryResult`. `Chain::Moonbeam` is used here rather than
+    // `Chain::Ethereum` (every other test in this file resolves real
+    // queries against Ethereum) precisely because `Config::set_session_rpc`
+    // is process-wide global state (see its doc comment in `config.rs`):
+    // overriding Ethereum's RPC here would silently redirect every other
+    // test in this binary that expects the real Ethereum endpoint.
+
+    #[tokio::test]
+    async fn test_set_expression_overrides_session_rpc_without_a_query_result() {
+        use crate::common::{config::Config, types::SetRpcExpression};
+        use alloy::transports::http::reqwest::Url;
+
+        let chain = Chain::Moonbeam;
+        let first = Url::parse("https://first-node:8545").unwrap();
+        let second = Url::parse("https://second-node:8545").unwrap();
+
+        let execution_engine = ExecutionEngine::new();
+        // Two `SET`s for the same chain in one program: last-write-wins,
+        // not an error (see `config.rs`'s
+        // `set_session_rpc_overwrites_a_previous_override_for_the_same_chain`).
+        let expressions = vec![
+            Expression::Set(SetRpcExpression {
+                chain: chain.clone(),
+                url: first,
+            }),
+            Expression::Set(SetRpcExpression {
+                chain: chain.clone(),
+                url: second.clone(),
+            }),
+        ];
+
+        let results = execution_engine.run(expressions).await.unwrap();
+
+        assert!(results.is_empty(), "SET must not push a QueryResult");
+        assert_eq!(Config::session_rpc(&chain), Some(second));
     }
 }
