@@ -3,10 +3,22 @@
 //!
 //! Covers `accounts` and `blocks`; `transactions` and `logs` are Task 7's
 //! job (see the `build_transaction` / `build_logs` stubs below). This module
-//! also owns every statement-level rejection that `where_clause` can't see:
-//! `JOIN`, `ORDER BY`, `GROUP BY`, `DISTINCT`, `HAVING`, `OFFSET`, non-`SELECT`
-//! query bodies, and SELECT-list expressions that aren't a plain field, `*`,
-//! or `field AS alias`.
+//! also owns every statement-level rejection that `where_clause` can't see.
+//!
+//! `query_to_get` and `validate_select_shape` destructure `sqlparser`'s
+//! `Query` and `Select` structs field-by-field, with no `..` catch-all. Each
+//! field is either handled elsewhere in this function and bound with `_`
+//! (with a comment saying where), or checked and rejected by name if it
+//! carries meaning we'd otherwise silently drop. This is deliberate: an
+//! allow-list of `if` checks lets a newly-added `sqlparser` field slip
+//! through unnoticed, silently discarding whatever the user wrote; an
+//! exhaustive destructure instead fails to *compile* the day `sqlparser`
+//! adds a field neither arm accounts for, so the gap can't silently regrow.
+//! Every field in both structs implements `Display` in a way that already
+//! renders the exact keyword text the user wrote (e.g. `Top`'s `Display` is
+//! `"TOP 5"`, `With`'s is `"WITH cte AS (...)"`), so the rejection messages
+//! below are built from that `Display` output rather than fixed strings —
+//! naming the actual construct, not a generic placeholder.
 
 use super::{
     schema::{self, EntityKind},
@@ -22,6 +34,19 @@ use crate::common::{
 };
 use sqlparser::ast::{Expr, Select, SelectItem, SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
+use std::fmt::Display;
+
+/// Renders a slice of `Display`-able AST nodes the way the user wrote them,
+/// comma-separated — used for the `Vec<_>`-typed `Query`/`Select` fields
+/// (`locks`, `cluster_by`, `named_window`, ...) where sqlparser doesn't
+/// provide a `Display` for the whole collection, only for each element.
+fn joined<T: Display>(items: &[T]) -> String {
+    items
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 pub fn statement_to_expression(stmt: &Statement) -> Result<Expression, EqlSqlError> {
     match stmt {
@@ -34,17 +59,77 @@ pub(super) fn query_to_get(
     query: &sqlparser::ast::Query,
     dump: Option<crate::common::dump::Dump>,
 ) -> Result<Expression, EqlSqlError> {
-    if query.order_by.is_some() {
+    // Exhaustive destructure — see the module doc comment.
+    let sqlparser::ast::Query {
+        with,
+        body,
+        order_by,
+        limit,
+        limit_by,
+        offset,
+        fetch,
+        locks,
+        for_clause,
+        settings,
+        format_clause,
+    } = query;
+
+    if let Some(with) = with {
+        return Err(EqlSqlError::NotSupported(format!("{with}")));
+    }
+    if order_by.is_some() {
         return Err(EqlSqlError::NotSupported("ORDER BY".into()));
     }
-    if query.offset.is_some() {
+    if offset.is_some() {
         return Err(EqlSqlError::NotSupported("OFFSET".into()));
     }
-    let limit = match &query.limit {
+    // ClickHouse/GenericDialect-only syntax (`LIMIT n BY expr, ...`); the
+    // parser never populates this under `DuckDbDialect`, but it's rejected
+    // by name rather than silently ignored in case that ever changes.
+    if !limit_by.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "LIMIT ... BY {}",
+            joined(limit_by)
+        )));
+    }
+    if let Some(fetch) = fetch {
+        return Err(EqlSqlError::NotSupported(format!("{fetch}")));
+    }
+    if !locks.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "locking clause ({})",
+            joined(locks)
+        )));
+    }
+    if let Some(for_clause) = for_clause {
+        return Err(EqlSqlError::NotSupported(format!("{for_clause}")));
+    }
+    // ClickHouse/GenericDialect-only syntax; unreachable under
+    // `DuckDbDialect` today (see the module doc comment for why we still
+    // check it).
+    if let Some(settings) = settings {
+        return Err(EqlSqlError::NotSupported(format!(
+            "SETTINGS {}",
+            joined(settings)
+        )));
+    }
+    // ClickHouse/GenericDialect-only syntax; unreachable under
+    // `DuckDbDialect` today.
+    if let Some(format_clause) = format_clause {
+        return Err(EqlSqlError::NotSupported(format!("{format_clause}")));
+    }
+
+    let limit = match limit {
         None => None,
-        Some(expr) => Some(values::parse_u64(expr)? as usize),
+        Some(expr) => {
+            let n = values::parse_u64(expr)?;
+            Some(
+                usize::try_from(n)
+                    .map_err(|e| EqlSqlError::Validation(format!("LIMIT {n} does not fit: {e}")))?,
+            )
+        }
     };
-    let select = match &*query.body {
+    let select = match &**body {
         SetExpr::Select(select) => select,
         other => return Err(EqlSqlError::NotSupported(format!("query form {other}"))),
     };
@@ -78,25 +163,106 @@ pub(super) fn query_to_get(
 }
 
 fn validate_select_shape(select: &Select) -> Result<(), EqlSqlError> {
-    if let Some(distinct) = &select.distinct {
+    // Exhaustive destructure — see the module doc comment. Fields handled
+    // elsewhere in `query_to_get`/`validate_select_shape` (or that are only
+    // ever meaningful alongside a field we already reject) are bound to `_`
+    // with a comment, never silently dropped via `..`.
+    let Select {
+        distinct,
+        top,
+        top_before_distinct: _, // only meaningful when `top` is Some, rejected below
+        projection: _,          // read by `projection()`, called separately
+        into,
+        from,
+        lateral_views,
+        prewhere,
+        selection: _, // read by `where_clause`, called separately
+        group_by,
+        cluster_by,
+        distribute_by,
+        sort_by,
+        having,
+        named_window,
+        qualify,
+        window_before_qualify: _, // only meaningful alongside `named_window`/`qualify`, rejected below
+        value_table_mode,
+        connect_by,
+    } = select;
+
+    if let Some(distinct) = distinct {
         return Err(EqlSqlError::NotSupported(format!("{distinct}")));
     }
-    if select.having.is_some() {
-        return Err(EqlSqlError::NotSupported("HAVING".into()));
+    if let Some(top) = top {
+        return Err(EqlSqlError::NotSupported(format!("{top}")));
     }
-    // group_by is GroupByExpr::Expressions(vec, _) when empty in 0.52 (the
-    // parser defaults to it when no GROUP BY clause is present at all).
-    match &select.group_by {
-        sqlparser::ast::GroupByExpr::Expressions(exprs, _) if exprs.is_empty() => {}
-        other => return Err(EqlSqlError::NotSupported(format!("{other}"))),
+    if let Some(into) = into {
+        return Err(EqlSqlError::NotSupported(format!("{into}")));
     }
-    if select.from.len() != 1 {
+    if from.len() != 1 {
         return Err(EqlSqlError::NotSupported(
             "multiple tables in FROM (JOIN)".into(),
         ));
     }
-    if !select.from[0].joins.is_empty() {
+    if !from[0].joins.is_empty() {
         return Err(EqlSqlError::NotSupported("JOIN".into()));
+    }
+    if !lateral_views.is_empty() {
+        return Err(EqlSqlError::NotSupported(
+            joined(lateral_views).trim().to_string(),
+        ));
+    }
+    // ClickHouse/GenericDialect-only syntax; unreachable under
+    // `DuckDbDialect` today.
+    if let Some(prewhere) = prewhere {
+        return Err(EqlSqlError::NotSupported(format!("PREWHERE {prewhere}")));
+    }
+    // group_by is GroupByExpr::Expressions(vec, _) when empty in 0.52 (the
+    // parser defaults to it when no GROUP BY clause is present at all).
+    match group_by {
+        sqlparser::ast::GroupByExpr::Expressions(exprs, _) if exprs.is_empty() => {}
+        other => return Err(EqlSqlError::NotSupported(format!("{other}"))),
+    }
+    if !cluster_by.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "CLUSTER BY {}",
+            joined(cluster_by)
+        )));
+    }
+    if !distribute_by.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "DISTRIBUTE BY {}",
+            joined(distribute_by)
+        )));
+    }
+    if !sort_by.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "SORT BY {}",
+            joined(sort_by)
+        )));
+    }
+    if let Some(having) = having {
+        return Err(EqlSqlError::NotSupported(format!("HAVING {having}")));
+    }
+    if !named_window.is_empty() {
+        return Err(EqlSqlError::NotSupported(format!(
+            "WINDOW {}",
+            joined(named_window)
+        )));
+    }
+    if let Some(qualify) = qualify {
+        return Err(EqlSqlError::NotSupported(format!("QUALIFY {qualify}")));
+    }
+    // BigQueryDialect-only syntax (`SELECT AS STRUCT`/`SELECT AS VALUE`);
+    // unreachable under `DuckDbDialect` today.
+    if let Some(value_table_mode) = value_table_mode {
+        return Err(EqlSqlError::NotSupported(format!(
+            "SELECT {value_table_mode}"
+        )));
+    }
+    // Requires `Dialect::supports_connect_by()`, which `DuckDbDialect` does
+    // not implement; unreachable today.
+    if let Some(connect_by) = connect_by {
+        return Err(EqlSqlError::NotSupported(format!("{connect_by}")));
     }
     Ok(())
 }
@@ -453,5 +619,232 @@ mod tests {
                 .unwrap_err()
                 .to_string();
         assert!(err.contains("SELECT 1"), "{err}");
+    }
+
+    // `Query`/`Select` clauses that parse successfully under `DuckDbDialect`
+    // but weren't read anywhere in this module — each would otherwise
+    // translate to a normal `GetExpression` with the clause silently
+    // dropped. One test per construct, asserting the error names it (not
+    // just that translation failed).
+
+    #[test]
+    fn top_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT TOP 5 nonce FROM accounts WHERE address = ian.eth AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("TOP 5"), "{err}");
+    }
+
+    #[test]
+    fn into_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce INTO foo FROM accounts WHERE address = ian.eth AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("INTO foo"), "{err}");
+    }
+
+    #[test]
+    fn lateral_view_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts LATERAL VIEW explode(x) t AS y WHERE address = ian.eth AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("LATERAL VIEW"), "{err}");
+    }
+
+    #[test]
+    fn cluster_by_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth CLUSTER BY nonce",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("CLUSTER BY") && err.contains("nonce"), "{err}");
+    }
+
+    #[test]
+    fn distribute_by_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth DISTRIBUTE BY nonce",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("DISTRIBUTE BY") && err.contains("nonce"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn sort_by_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth SORT BY nonce",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("SORT BY") && err.contains("nonce"), "{err}");
+    }
+
+    #[test]
+    fn qualify_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth QUALIFY nonce > 1",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("QUALIFY") && err.contains("nonce > 1"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn window_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth WINDOW w AS (PARTITION BY nonce)",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("WINDOW") && err.contains("PARTITION BY"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn cte_with_is_rejected_by_name() {
+        let err = translate_one(
+            "WITH cte AS (SELECT 1) SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("WITH") && err.contains("cte"), "{err}");
+    }
+
+    #[test]
+    fn fetch_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth FETCH FIRST 5 ROWS ONLY",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("FETCH FIRST"), "{err}");
+    }
+
+    #[test]
+    fn locking_clause_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth FOR UPDATE",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("FOR UPDATE"), "{err}");
+    }
+
+    #[test]
+    fn for_json_clause_is_rejected_by_name() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth FOR JSON AUTO",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("FOR JSON"), "{err}");
+    }
+
+    // The remaining `Query`/`Select` fields below (`prewhere`, `limit_by`,
+    // `settings`, `format_clause`, `value_table_mode`, `connect_by`) are
+    // confirmed unreachable through this module's only entry point: each is
+    // gated in `sqlparser`'s parser behind a dialect other than
+    // `DuckDbDialect` (verified by reading `sqlparser` 0.52.0's parser
+    // source), so `translate_one` can never produce a non-default value for
+    // them. They're still checked in `validate_select_shape`/`query_to_get`
+    // for defense-in-depth (see the module doc comment), so we exercise that
+    // defensive code directly by building the AST by hand — the same
+    // technique `where_clause`'s `rejects_empty_in_list` test uses for an
+    // input shape the parser itself refuses to produce.
+
+    fn base_query(sql: &str) -> sqlparser::ast::Query {
+        let prelexed = crate::interpreter::frontend::sql::prelex::prelex(sql).unwrap();
+        let stmts =
+            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, &prelexed)
+                .unwrap();
+        match stmts.into_iter().next().unwrap() {
+            Statement::Query(q) => *q,
+            other => panic!("not a query: {other}"),
+        }
+    }
+
+    fn base_select(query: &mut sqlparser::ast::Query) -> &mut Select {
+        match &mut *query.body {
+            SetExpr::Select(select) => select,
+            other => panic!("not a select: {other}"),
+        }
+    }
+
+    #[test]
+    fn prewhere_is_rejected_defensively() {
+        let mut query =
+            base_query("SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth");
+        base_select(&mut query).prewhere = Some(Expr::Identifier(sqlparser::ast::Ident::new("x")));
+        let err = query_to_get(&query, None).unwrap_err().to_string();
+        assert!(err.contains("PREWHERE"), "{err}");
+    }
+
+    #[test]
+    fn limit_by_is_rejected_defensively() {
+        let mut query =
+            base_query("SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth");
+        query.limit_by = vec![Expr::Identifier(sqlparser::ast::Ident::new("nonce"))];
+        let err = query_to_get(&query, None).unwrap_err().to_string();
+        assert!(err.contains("BY") && err.contains("nonce"), "{err}");
+    }
+
+    #[test]
+    fn settings_is_rejected_defensively() {
+        let mut query =
+            base_query("SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth");
+        query.settings = Some(vec![sqlparser::ast::Setting {
+            key: sqlparser::ast::Ident::new("max_threads"),
+            value: sqlparser::ast::Value::Number("1".into(), false),
+        }]);
+        let err = query_to_get(&query, None).unwrap_err().to_string();
+        assert!(err.contains("SETTINGS"), "{err}");
+    }
+
+    #[test]
+    fn format_clause_is_rejected_defensively() {
+        let mut query =
+            base_query("SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth");
+        query.format_clause = Some(sqlparser::ast::FormatClause::Identifier(
+            sqlparser::ast::Ident::new("JSON"),
+        ));
+        let err = query_to_get(&query, None).unwrap_err().to_string();
+        assert!(err.contains("FORMAT"), "{err}");
+    }
+
+    #[test]
+    fn value_table_mode_is_rejected_defensively() {
+        let mut query =
+            base_query("SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth");
+        base_select(&mut query).value_table_mode = Some(sqlparser::ast::ValueTableMode::AsStruct);
+        let err = query_to_get(&query, None).unwrap_err().to_string();
+        assert!(err.contains("STRUCT"), "{err}");
+    }
+
+    #[test]
+    fn connect_by_is_rejected_defensively() {
+        let mut query =
+            base_query("SELECT nonce FROM accounts WHERE address = ian.eth AND chain = eth");
+        base_select(&mut query).connect_by = Some(sqlparser::ast::ConnectBy {
+            condition: Expr::Identifier(sqlparser::ast::Ident::new("x")),
+            relationships: vec![Expr::Identifier(sqlparser::ast::Ident::new("y"))],
+        });
+        let err = query_to_get(&query, None).unwrap_err().to_string();
+        assert!(err.contains("CONNECT BY"), "{err}");
     }
 }
