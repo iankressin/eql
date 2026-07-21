@@ -106,8 +106,9 @@ pub struct TransactionQueryRes {
     pub chain: Option<Chain>,
     pub r#type: Option<u8>,
     pub hash: Option<FixedBytes<32>>,
-    pub from: Option<Address>,
-    pub to: Option<Address>,
+    pub block_number: Option<u64>,
+    pub from_address: Option<Address>,
+    pub to_address: Option<Address>,
     pub data: Option<Bytes>,
     #[serde(serialize_with = "serialize_option_u256")]
     pub value: Option<U256>,
@@ -132,8 +133,9 @@ impl Default for TransactionQueryRes {
             chain: None,
             r#type: None,
             hash: None,
-            from: None,
-            to: None,
+            block_number: None,
+            from_address: None,
+            to_address: None,
             data: None,
             value: None,
             gas_price: None,
@@ -158,8 +160,9 @@ impl TransactionQueryRes {
         self.chain.is_some()
             || self.r#type.is_some()
             || self.hash.is_some()
-            || self.from.is_some()
-            || self.to.is_some()
+            || self.block_number.is_some()
+            || self.from_address.is_some()
+            || self.to_address.is_some()
             || self.data.is_some()
             || self.value.is_some()
             || self.gas_price.is_some()
@@ -188,11 +191,14 @@ impl TransactionQueryRes {
         if let Some(hash) = &self.hash {
             fields.push(("hash", Some(format!("{hash:?}"))));
         }
-        if let Some(from) = &self.from {
-            fields.push(("from", Some(from.to_string())));
+        if let Some(block_number) = &self.block_number {
+            fields.push(("block_number", Some(block_number.to_string())));
         }
-        if let Some(to) = &self.to {
-            fields.push(("to", Some(to.to_string())));
+        if let Some(from) = &self.from_address {
+            fields.push(("from_address", Some(from.to_string())));
+        }
+        if let Some(to) = &self.to_address {
+            fields.push(("to_address", Some(to.to_string())));
         }
         if let Some(data) = &self.data {
             fields.push(("data", Some(format!("{data:?}"))));
@@ -348,7 +354,8 @@ mod test {
     use std::str::FromStr;
 
     use super::serialize_option_u256;
-    use alloy::primitives::U256;
+    use super::TransactionQueryRes;
+    use alloy::primitives::{Address, U256};
     use serde::Serialize;
     use serde_json::json;
 
@@ -364,5 +371,19 @@ mod test {
         let u256 = U256Serializable { value: Some(value) };
         let u256_str = json!(u256).to_string();
         assert_eq!("{\"value\":\"100\"}", u256_str);
+    }
+
+    #[test]
+    fn transaction_res_serializes_renamed_keys() {
+        let mut res = TransactionQueryRes::default();
+        res.from_address = Some(Address::ZERO);
+        res.to_address = Some(Address::ZERO);
+        res.block_number = Some(1u64);
+        let json = serde_json::to_value(&res).unwrap();
+        assert!(json.get("from_address").is_some());
+        assert!(json.get("to_address").is_some());
+        assert!(json.get("block_number").is_some());
+        assert!(json.get("from").is_none());
+        assert!(json.get("to").is_none());
     }
 }

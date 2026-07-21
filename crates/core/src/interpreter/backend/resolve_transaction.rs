@@ -32,9 +32,7 @@ pub enum TransactionResolverErrors {
 }
 
 /// Extract from/to address filters from TransactionFilters for Portal server-side filtering.
-fn extract_address_filters(
-    filters: Option<&Vec<TransactionFilter>>,
-) -> (Vec<String>, Vec<String>) {
+fn extract_address_filters(filters: Option<&Vec<TransactionFilter>>) -> (Vec<String>, Vec<String>) {
     use crate::common::filters::EqualityFilter;
 
     let mut from_addrs = Vec::new();
@@ -166,9 +164,15 @@ async fn resolve_transactions_via_portal_with_base_url(
 
     let mut results = Vec::new();
     for portal_block in &response {
+        let block_number = portal_block
+            .get("header")
+            .and_then(|h| h.get("number"))
+            .and_then(value_to_u64);
+
         if let Some(txs) = portal_block.get("transactions").and_then(|t| t.as_array()) {
             for tx in txs {
-                let internal_row = parse_portal_transaction(tx, &internal_fields, &chain_enum);
+                let internal_row =
+                    parse_portal_transaction(tx, &internal_fields, &chain_enum, block_number);
                 if let Some(projected_row) =
                     filter_and_project_transaction_row(transaction, &internal_row)
                 {
@@ -238,8 +242,9 @@ fn project_transaction_row(
         match field {
             TransactionField::Type => projected.r#type = row.r#type,
             TransactionField::Hash => projected.hash = row.hash,
-            TransactionField::From => projected.from = row.from,
-            TransactionField::To => projected.to = row.to,
+            TransactionField::BlockNumber => projected.block_number = row.block_number,
+            TransactionField::From => projected.from_address = row.from_address,
+            TransactionField::To => projected.to_address = row.to_address,
             TransactionField::Data => projected.data = row.data.clone(),
             TransactionField::Value => projected.value = row.value,
             TransactionField::GasPrice => projected.gas_price = row.gas_price,
@@ -303,14 +308,22 @@ fn tx_field_to_portal_name(field: &TransactionField) -> Option<&'static str> {
         // Not requested from Portal:
         TransactionField::Chain => None,             // set locally
         TransactionField::AuthorizationList => None, // no Portal field (EIP-7702)
+        // Block-derived: portal_query forces `fields.block.number` on for every query (for
+        // pagination), so this is read from the block header in resolve_transactions_via_portal
+        // rather than requested as a transaction-level field here.
+        TransactionField::BlockNumber => None,
     }
 }
 
 /// Parse a Portal transaction JSON into a TransactionQueryRes.
+///
+/// `block_number` comes from the enclosing block's header (portal_query forces
+/// `fields.block.number` on for every query), not from the transaction object itself.
 fn parse_portal_transaction(
     tx: &serde_json::Value,
     fields: &[TransactionField],
     chain: &Chain,
+    block_number: Option<u64>,
 ) -> TransactionQueryRes {
     let mut result = TransactionQueryRes::default();
 
@@ -322,11 +335,14 @@ fn parse_portal_transaction(
             TransactionField::Hash => {
                 result.hash = tx.get("hash").and_then(value_to_b256).map(|b| b.into());
             }
+            TransactionField::BlockNumber => {
+                result.block_number = block_number;
+            }
             TransactionField::From => {
-                result.from = tx.get("from").and_then(value_to_address);
+                result.from_address = tx.get("from").and_then(value_to_address);
             }
             TransactionField::To => {
-                result.to = tx.get("to").and_then(value_to_address);
+                result.to_address = tx.get("to").and_then(value_to_address);
             }
             TransactionField::Data => {
                 result.data = tx.get("input").and_then(value_to_bytes);
@@ -482,11 +498,14 @@ async fn pick_transaction_fields(
             TransactionField::Hash => {
                 result.hash = Some(tx.inner.tx_hash().clone());
             }
+            TransactionField::BlockNumber => {
+                result.block_number = tx.block_number;
+            }
             TransactionField::From => {
-                result.from = Some(tx.from);
+                result.from_address = Some(tx.from);
             }
             TransactionField::To => {
-                result.to = tx.inner.to().clone();
+                result.to_address = tx.inner.to().clone();
             }
             TransactionField::Data => {
                 result.data = Some(tx.inner.input().clone());
@@ -577,7 +596,7 @@ mod tests {
             TransactionField::MaxFeePerBlobGas,
             TransactionField::AuthorizationList,
         ];
-        let res = parse_portal_transaction(&tx, &fields, &Chain::Ethereum);
+        let res = parse_portal_transaction(&tx, &fields, &Chain::Ethereum, None);
         assert_eq!(res.effective_gas_price, Some(10209184711u128));
         assert_eq!(res.v, Some(false));
         assert_eq!(res.y_parity, Some(false));
@@ -590,12 +609,13 @@ mod tests {
         // all_variants() returns &'static [TransactionField]; `field` is already &TransactionField.
         for field in TransactionField::all_variants() {
             let mapped = tx_field_to_portal_name(field).is_some();
+            let block_derived = matches!(field, TransactionField::BlockNumber);
             let local = matches!(
                 field,
                 TransactionField::Chain | TransactionField::AuthorizationList
             );
             assert!(
-                mapped || local,
+                mapped || block_derived || local,
                 "TransactionField {:?} not Portal-serviceable",
                 field
             );
@@ -675,7 +695,7 @@ mod tests {
         );
 
         let internal_row = TransactionQueryRes {
-            from: Some(sender),
+            from_address: Some(sender),
             authorization_list: None,
             ..TransactionQueryRes::default()
         };
@@ -683,7 +703,7 @@ mod tests {
             .expect("the RPC row should pass its unprojected sender filter");
 
         assert_eq!(
-            projected.from, None,
+            projected.from_address, None,
             "filter-only fields must stay internal"
         );
         assert_eq!(projected.authorization_list, None);
