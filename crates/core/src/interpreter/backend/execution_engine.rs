@@ -524,12 +524,23 @@ mod test {
 
     #[tokio::test]
     async fn test_set_expression_overrides_session_rpc_without_a_query_result() {
-        use crate::common::{config::Config, types::SetRpcExpression};
+        use crate::common::{
+            config::{Config, SessionRpcTestGuard},
+            types::SetRpcExpression,
+        };
         use alloy::transports::http::reqwest::Url;
 
         let chain = Chain::Moonbeam;
         let first = Url::parse("https://first-node:8545").unwrap();
         let second = Url::parse("https://second-node:8545").unwrap();
+
+        // `ExecutionEngine::run` calls `Config::set_session_rpc` itself, so
+        // this test can't go through `SessionRpcTestGuard::acquire` — it
+        // reserves the claim (panicking loudly if `Moonbeam` is already
+        // claimed, or isn't a reserved test chain) and clears the override
+        // on drop, same as every other session-RPC test. See
+        // `SessionRpcTestGuard`'s doc comment in `config.rs`.
+        let _guard = SessionRpcTestGuard::reserve(chain.clone());
 
         let execution_engine = ExecutionEngine::new();
         // Two `SET`s for the same chain in one program: last-write-wins,

@@ -116,7 +116,7 @@ fn copy_to_expression(
     }
     if !legacy_options.is_empty() {
         return Err(EqlSqlError::NotSupported(format!(
-            "COPY options ({})",
+            "COPY legacy options ({})",
             joined(legacy_options)
         )));
     }
@@ -1817,7 +1817,22 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
-        assert!(err.contains("FORMAT"), "{err}");
+        assert!(err.contains("FORMAT") && err.contains("options"), "{err}");
+    }
+
+    #[test]
+    fn copy_with_legacy_options_is_rejected_by_name_distinctly_from_options() {
+        // `options` (parenthesized, e.g. `(FORMAT csv)`) and `legacy_options`
+        // (bare keywords predating PostgreSQL 9.0, e.g. `BINARY`) are two
+        // different `Statement::Copy` fields; the error text must say which
+        // one the user actually wrote rather than sharing one ambiguous
+        // "COPY options (...)" prefix for both.
+        let err = translate_one(
+            "COPY (SELECT * FROM blocks WHERE number = 1 AND chain = eth) TO 'out.csv' BINARY",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("BINARY") && err.contains("legacy"), "{err}");
     }
 
     #[test]
