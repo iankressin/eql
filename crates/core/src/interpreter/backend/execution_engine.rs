@@ -104,6 +104,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
         let expected = vec![LogQueryRes {
@@ -152,6 +154,8 @@ mod test {
                 BlockField::all_variants().to_vec(),
             )),
             dump: None,
+            limit: None,
+            aliases: None,
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
         })];
         let expected = ExpressionResult::Block(vec![
@@ -210,6 +214,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let execution_result = execution_engine.run(expressions).await;
         assert!(execution_result.is_err())
@@ -229,6 +235,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let expected = vec![ExpressionResult::Transaction(vec![
             TransactionQueryRes {
@@ -315,6 +323,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         let result = execution_engine.run(expressions).await.unwrap();
@@ -353,6 +363,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         let result = execution_engine.run(expressions).await.unwrap();
@@ -381,6 +393,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let result = execution_engine.run(expressions).await.unwrap();
 
@@ -398,6 +412,8 @@ mod test {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: Some(Dump::new(String::from("test"), DumpFormat::Json)),
+            limit: None,
+            aliases: None,
         })];
         execution_engine.run(expressions).await.unwrap();
 
@@ -436,6 +452,8 @@ mod test {
                     )),
                     chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                     dump: None,
+                    limit: None,
+                    aliases: None,
                 }),
                 ExpressionResult::Block(vec![BlockQueryRes {
                     chain: Some(Chain::Ethereum),
@@ -453,6 +471,8 @@ mod test {
                     )),
                     chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                     dump: None,
+                    limit: None,
+                    aliases: None,
                 }),
                 ExpressionResult::Account(vec![AccountQueryRes {
                     chain: Some(Chain::Ethereum),
@@ -470,6 +490,8 @@ mod test {
                     )),
                     chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                     dump: None,
+                    limit: None,
+                    aliases: None,
                 }),
                 ExpressionResult::Transaction(vec![TransactionQueryRes {
                     chain: Some(Chain::Ethereum),

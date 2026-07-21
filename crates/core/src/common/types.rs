@@ -17,14 +17,24 @@ pub struct GetExpression {
     pub entity: Entity,
     pub chains: Vec<ChainOrRpc>,
     pub dump: Option<Dump>,
+    pub limit: Option<usize>,
+    pub aliases: Option<std::collections::HashMap<String, String>>,
 }
 
 impl GetExpression {
-    fn new(entity: Entity, chains: Vec<ChainOrRpc>, dump: Option<Dump>) -> Self {
+    fn new(
+        entity: Entity,
+        chains: Vec<ChainOrRpc>,
+        dump: Option<Dump>,
+        limit: Option<usize>,
+        aliases: Option<std::collections::HashMap<String, String>>,
+    ) -> Self {
         Self {
             entity,
             chains,
             dump,
+            limit,
+            aliases,
         }
     }
 }
@@ -83,6 +93,8 @@ impl TryFrom<Pairs<'_, Rule>> for GetExpression {
             entity.ok_or(GetExpressionError::MissingEntity)?,
             chains.ok_or(GetExpressionError::MissingChainOrRpc)?,
             dump,
+            None,
+            None,
         ))
     }
 }
