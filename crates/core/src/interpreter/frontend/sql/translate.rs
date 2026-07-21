@@ -1,9 +1,9 @@
 //! Translates a parsed SQL `Statement` into the existing `Expression` /
 //! `GetExpression` / `Entity` structs the backend already executes.
 //!
-//! Covers `accounts` and `blocks`; `transactions` and `logs` are Task 7's
-//! job (see the `build_transaction` / `build_logs` stubs below). This module
-//! also owns every statement-level rejection that `where_clause` can't see.
+//! Covers all four entities (`accounts`, `blocks`, `transactions`/`tx`,
+//! `logs`). This module also owns every statement-level rejection that
+//! `where_clause` can't see.
 //!
 //! `query_to_get` and `validate_select_shape` destructure `sqlparser`'s
 //! `Query` and `Select` structs field-by-field, with no `..` catch-all. Each
@@ -29,12 +29,17 @@ use super::{
 use crate::common::{
     account::{Account, AccountField},
     block::{Block, BlockField, BlockId, BlockRange},
+    ens::NameOrAddress,
     entity::Entity,
+    filters::{ComparisonFilter, EqualityFilter, FilterType},
+    logs::{LogField, LogFilter, Logs},
+    transaction::{Transaction, TransactionField, TransactionFilter},
     types::{Expression, GetExpression},
 };
 use sqlparser::ast::{Expr, Select, SelectItem, SetExpr, Statement, TableFactor};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::str::FromStr;
 
 /// Renders a slice of `Display`-able AST nodes the way the user wrote them,
 /// comma-separated — used for the `Vec<_>`-typed `Query`/`Select` fields
@@ -378,12 +383,378 @@ fn build_block(fields: &[String], conds: Vec<Condition>) -> Result<Entity, EqlSq
     Ok(Entity::Block(Block::new(Some(ids), None, fields)))
 }
 
-fn build_transaction(_fields: &[String], _conds: Vec<Condition>) -> Result<Entity, EqlSqlError> {
-    Err(EqlSqlError::NotSupported("transactions (Task 7)".into()))
+/// Renders a `CondOp` the way the user wrote it, for error messages that
+/// must name the actual operator rather than a fixed placeholder — mirrors
+/// `where_clause`'s private `cond_op_text`, duplicated here rather than
+/// exported since it's a one-line lookup and `where_clause` is otherwise a
+/// stable, already-reviewed dependency of this module.
+fn op_text(op: CondOp) -> &'static str {
+    match op {
+        CondOp::Eq => "=",
+        CondOp::Neq => "!=",
+        CondOp::Gt => ">",
+        CondOp::Gte => ">=",
+        CondOp::Lt => "<",
+        CondOp::Lte => "<=",
+        CondOp::In => "IN",
+        CondOp::Between => "BETWEEN",
+    }
 }
 
-fn build_logs(_fields: &[String], _conds: Vec<Condition>) -> Result<Entity, EqlSqlError> {
-    Err(EqlSqlError::NotSupported("logs (Task 7)".into()))
+/// Builds an `EqualityFilter` for columns that only ever support `=`/`!=`
+/// (identity-like columns: addresses, type, status, y_parity, data). Any
+/// other operator is rejected by name — both the column (`what`) and the
+/// actual operator the user wrote.
+fn eq_only<T>(op: CondOp, value: T, what: &str) -> Result<EqualityFilter<T>, EqlSqlError> {
+    match op {
+        CondOp::Eq => Ok(EqualityFilter::Eq(value)),
+        CondOp::Neq => Ok(EqualityFilter::Neq(value)),
+        other => Err(EqlSqlError::NotSupported(format!(
+            "{what} {} (only = and != are supported)",
+            op_text(other)
+        ))),
+    }
+}
+
+/// Builds a `FilterType` for numeric columns that support the full
+/// equality+comparison set but not `IN`/`BETWEEN` (no `TransactionFilter`
+/// variant carries a list or a range for these columns).
+fn cmp_filter<T>(op: CondOp, value: T, what: &str) -> Result<FilterType<T>, EqlSqlError> {
+    Ok(match op {
+        CondOp::Eq => FilterType::Equality(EqualityFilter::Eq(value)),
+        CondOp::Neq => FilterType::Equality(EqualityFilter::Neq(value)),
+        CondOp::Gt => FilterType::Comparison(ComparisonFilter::Gt(value)),
+        CondOp::Gte => FilterType::Comparison(ComparisonFilter::Gte(value)),
+        CondOp::Lt => FilterType::Comparison(ComparisonFilter::Lt(value)),
+        CondOp::Lte => FilterType::Comparison(ComparisonFilter::Lte(value)),
+        other @ (CondOp::In | CondOp::Between) => {
+            return Err(EqlSqlError::NotSupported(format!(
+                "{what} {} (only =, !=, >, >=, <, <= are supported)",
+                op_text(other)
+            )))
+        }
+    })
+}
+
+fn tx_address(cond: &Condition) -> Result<alloy::primitives::Address, EqlSqlError> {
+    match values::parse_name_or_address(&cond.values[0])? {
+        NameOrAddress::Address(address) => Ok(address),
+        NameOrAddress::Name(_) => Err(EqlSqlError::NotSupported(
+            "ENS names outside accounts.address".into(),
+        )),
+    }
+}
+
+/// `data` has no dedicated parser in `values` (it's the only transaction
+/// filter column typed as raw bytes rather than a fixed-width value), so
+/// it's parsed locally rather than growing `values`'s public surface for a
+/// single caller.
+fn tx_data(cond: &Condition) -> Result<alloy::primitives::Bytes, EqlSqlError> {
+    let s = values::expr_as_string(&cond.values[0])?;
+    alloy::primitives::Bytes::from_str(&s)
+        .map_err(|e| EqlSqlError::Validation(format!("invalid data '{s}': {e}")))
+}
+
+/// Pushes a `TransactionFilter::BlockId`, rejecting a second one by name.
+/// Two `BlockId` filters can't both be honored: the backend
+/// (`Transaction::get_block_id_filter`) picks the *first* one it finds and
+/// silently ignores any other, so letting a second one through here would
+/// silently discard whatever block predicate the user wrote second (e.g.
+/// `block_number = 1 AND block_number BETWEEN 2 AND 3`).
+fn push_block_id_filter(
+    filters: &mut Vec<TransactionFilter>,
+    block_id: BlockId,
+) -> Result<(), EqlSqlError> {
+    if filters
+        .iter()
+        .any(|f| matches!(f, TransactionFilter::BlockId(_)))
+    {
+        return Err(EqlSqlError::NotSupported(
+            "transactions.block_number given more than once".into(),
+        ));
+    }
+    filters.push(TransactionFilter::BlockId(block_id));
+    Ok(())
+}
+
+fn build_transaction(fields: &[String], conds: Vec<Condition>) -> Result<Entity, EqlSqlError> {
+    let fields = if fields == ["*"] {
+        TransactionField::all_variants().to_vec()
+    } else {
+        fields
+            .iter()
+            .map(|f| schema::resolve_transaction_field(f))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    let mut ids: Vec<alloy::primitives::B256> = Vec::new();
+    let mut filters: Vec<TransactionFilter> = Vec::new();
+
+    for cond in &conds {
+        match (cond.column.as_str(), cond.op) {
+            ("hash", CondOp::Eq) | ("hash", CondOp::In) => {
+                for value in &cond.values {
+                    ids.push(values::parse_b256(value)?);
+                }
+            }
+            ("block_number", CondOp::Eq) => push_block_id_filter(
+                &mut filters,
+                BlockId::Number(values::parse_block_number_or_tag(&cond.values[0])?),
+            )?,
+            ("block_number", CondOp::Between) => push_block_id_filter(
+                &mut filters,
+                BlockId::Range(BlockRange::new(
+                    values::parse_block_number_or_tag(&cond.values[0])?,
+                    Some(values::parse_block_number_or_tag(&cond.values[1])?),
+                )),
+            )?,
+            ("from_address", _) => filters.push(TransactionFilter::From(eq_only(
+                cond.op,
+                tx_address(cond)?,
+                "from_address",
+            )?)),
+            ("to_address", _) => filters.push(TransactionFilter::To(eq_only(
+                cond.op,
+                tx_address(cond)?,
+                "to_address",
+            )?)),
+            ("value", _) => filters.push(TransactionFilter::Value(cmp_filter(
+                cond.op,
+                values::parse_u256(&cond.values[0])?,
+                "value",
+            )?)),
+            ("gas_price", _) => filters.push(TransactionFilter::GasPrice(cmp_filter(
+                cond.op,
+                values::parse_u128(&cond.values[0])?,
+                "gas_price",
+            )?)),
+            ("gas_limit", _) => filters.push(TransactionFilter::GasLimit(cmp_filter(
+                cond.op,
+                values::parse_u64(&cond.values[0])?,
+                "gas_limit",
+            )?)),
+            ("effective_gas_price", _) => {
+                filters.push(TransactionFilter::EffectiveGasPrice(cmp_filter(
+                    cond.op,
+                    values::parse_u128(&cond.values[0])?,
+                    "effective_gas_price",
+                )?))
+            }
+            ("max_fee_per_gas", _) => filters.push(TransactionFilter::MaxFeePerGas(cmp_filter(
+                cond.op,
+                values::parse_u128(&cond.values[0])?,
+                "max_fee_per_gas",
+            )?)),
+            ("max_fee_per_blob_gas", _) => {
+                filters.push(TransactionFilter::MaxFeePerBlobGas(cmp_filter(
+                    cond.op,
+                    values::parse_u128(&cond.values[0])?,
+                    "max_fee_per_blob_gas",
+                )?))
+            }
+            ("max_priority_fee_per_gas", _) => {
+                filters.push(TransactionFilter::MaxPriorityFeePerGas(cmp_filter(
+                    cond.op,
+                    values::parse_u128(&cond.values[0])?,
+                    "max_priority_fee_per_gas",
+                )?))
+            }
+            ("type", _) => filters.push(TransactionFilter::Type(eq_only(
+                cond.op,
+                values::parse_u8(&cond.values[0])?,
+                "type",
+            )?)),
+            ("status", _) => filters.push(TransactionFilter::Status(eq_only(
+                cond.op,
+                values::parse_bool(&cond.values[0])?,
+                "status",
+            )?)),
+            ("y_parity", _) => filters.push(TransactionFilter::YParity(eq_only(
+                cond.op,
+                values::parse_bool(&cond.values[0])?,
+                "y_parity",
+            )?)),
+            ("data", _) => filters.push(TransactionFilter::Data(eq_only(
+                cond.op,
+                tx_data(cond)?,
+                "data",
+            )?)),
+            (col, op) => {
+                return Err(EqlSqlError::NotSupported(format!(
+                    "filter on transactions.{col} {}",
+                    op_text(op)
+                )))
+            }
+        }
+    }
+
+    let has_block = filters
+        .iter()
+        .any(|f| matches!(f, TransactionFilter::BlockId(_)));
+    if ids.is_empty() && !has_block {
+        return Err(EqlSqlError::Validation(
+            "transactions queries need hash (=/IN) or block_number (=/BETWEEN)".into(),
+        ));
+    }
+    Ok(Entity::Transaction(Transaction::new(
+        if ids.is_empty() { None } else { Some(ids) },
+        if filters.is_empty() {
+            None
+        } else {
+            Some(filters)
+        },
+        fields,
+    )))
+}
+
+fn log_eq<'a>(cond: &'a Condition, what: &str) -> Result<&'a Expr, EqlSqlError> {
+    if cond.op != CondOp::Eq {
+        return Err(EqlSqlError::NotSupported(format!(
+            "logs.{what} {} (only = is supported)",
+            op_text(cond.op)
+        )));
+    }
+    Ok(&cond.values[0])
+}
+
+/// Rejects a second occurrence of the same log filter column by name. Every
+/// `LogFilter` variant ends up as a single slot in a downstream builder — an
+/// `alloy::rpc::types::Filter` for the RPC path (`Logs::build_filter`'s
+/// `.address()`/`.topic1()`/... each simply overwrite the previous value)
+/// and a `serde_json::Map` keyed by column for the Portal path
+/// (`resolve_logs_via_portal` inserts by the same key) — so a second filter
+/// on the same column doesn't compose with the first, it silently replaces
+/// it (or, for `block_number`, is silently ignored: `find_block_range` keeps
+/// only the first match). Rejecting outright means the user's second
+/// condition is never quietly dropped.
+fn reject_duplicate_log_filter(
+    filters: &[LogFilter],
+    col: &str,
+    already_present: impl Fn(&LogFilter) -> bool,
+) -> Result<(), EqlSqlError> {
+    if filters.iter().any(already_present) {
+        return Err(EqlSqlError::NotSupported(format!(
+            "logs.{col} given more than once"
+        )));
+    }
+    Ok(())
+}
+
+fn build_logs(fields: &[String], conds: Vec<Condition>) -> Result<Entity, EqlSqlError> {
+    let fields = if fields == ["*"] {
+        LogField::all_variants().to_vec()
+    } else {
+        fields
+            .iter()
+            .map(|f| schema::resolve_log_field(f))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    let mut filters: Vec<LogFilter> = Vec::new();
+    for cond in &conds {
+        match cond.column.as_str() {
+            "address" => {
+                reject_duplicate_log_filter(&filters, "address", |f| {
+                    matches!(f, LogFilter::EmitterAddress(_))
+                })?;
+                filters.push(LogFilter::EmitterAddress(values::parse_address(log_eq(
+                    cond, "address",
+                )?)?));
+            }
+            "topic0" => {
+                reject_duplicate_log_filter(&filters, "topic0", |f| {
+                    matches!(f, LogFilter::Topic0(_))
+                })?;
+                filters.push(LogFilter::Topic0(values::parse_b256(log_eq(
+                    cond, "topic0",
+                )?)?));
+            }
+            "topic1" => {
+                reject_duplicate_log_filter(&filters, "topic1", |f| {
+                    matches!(f, LogFilter::Topic1(_))
+                })?;
+                filters.push(LogFilter::Topic1(values::parse_b256(log_eq(
+                    cond, "topic1",
+                )?)?));
+            }
+            "topic2" => {
+                reject_duplicate_log_filter(&filters, "topic2", |f| {
+                    matches!(f, LogFilter::Topic2(_))
+                })?;
+                filters.push(LogFilter::Topic2(values::parse_b256(log_eq(
+                    cond, "topic2",
+                )?)?));
+            }
+            "topic3" => {
+                reject_duplicate_log_filter(&filters, "topic3", |f| {
+                    matches!(f, LogFilter::Topic3(_))
+                })?;
+                filters.push(LogFilter::Topic3(values::parse_b256(log_eq(
+                    cond, "topic3",
+                )?)?));
+            }
+            "block_hash" => {
+                reject_duplicate_log_filter(&filters, "block_hash", |f| {
+                    matches!(f, LogFilter::BlockHash(_))
+                })?;
+                filters.push(LogFilter::BlockHash(values::parse_b256(log_eq(
+                    cond,
+                    "block_hash",
+                )?)?));
+            }
+            "event_signature" => {
+                reject_duplicate_log_filter(&filters, "event_signature", |f| {
+                    matches!(f, LogFilter::EventSignature(_))
+                })?;
+                filters.push(LogFilter::EventSignature(values::expr_as_string(log_eq(
+                    cond,
+                    "event_signature",
+                )?)?));
+            }
+            "block_number" => match cond.op {
+                CondOp::Eq => {
+                    reject_duplicate_log_filter(&filters, "block_number", |f| {
+                        matches!(f, LogFilter::BlockRange(_))
+                    })?;
+                    filters.push(LogFilter::BlockRange(BlockRange::new(
+                        values::parse_block_number_or_tag(&cond.values[0])?,
+                        None,
+                    )));
+                }
+                CondOp::Between => {
+                    reject_duplicate_log_filter(&filters, "block_number", |f| {
+                        matches!(f, LogFilter::BlockRange(_))
+                    })?;
+                    filters.push(LogFilter::BlockRange(BlockRange::new(
+                        values::parse_block_number_or_tag(&cond.values[0])?,
+                        Some(values::parse_block_number_or_tag(&cond.values[1])?),
+                    )));
+                }
+                other => {
+                    return Err(EqlSqlError::NotSupported(format!(
+                        "logs.block_number {} (only = and BETWEEN are supported)",
+                        op_text(other)
+                    )))
+                }
+            },
+            col => {
+                return Err(EqlSqlError::NotSupported(format!(
+                    "filter on logs.{col} {}",
+                    op_text(cond.op)
+                )))
+            }
+        }
+    }
+
+    let has_block = filters
+        .iter()
+        .any(|f| matches!(f, LogFilter::BlockRange(_) | LogFilter::BlockHash(_)));
+    if !has_block {
+        return Err(EqlSqlError::Validation(
+            "logs queries need block_number (=/BETWEEN) or block_hash".into(),
+        ));
+    }
+    Ok(Entity::Logs(Logs::new(filters, fields)))
 }
 
 #[cfg(test)]
@@ -846,5 +1217,311 @@ mod tests {
         });
         let err = query_to_get(&query, None).unwrap_err().to_string();
         assert!(err.contains("CONNECT BY"), "{err}");
+    }
+
+    // Task 7: transactions and logs translation.
+
+    #[test]
+    fn tx_by_hash() {
+        let expr = translate_one(
+            "SELECT * FROM tx WHERE hash = 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Transaction(tx) = get.entity else {
+            panic!()
+        };
+        assert_eq!(tx.ids().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn tx_by_block_with_value_filter() {
+        use crate::common::{
+            filters::{ComparisonFilter, FilterType},
+            transaction::TransactionFilter,
+        };
+        use alloy::primitives::U256;
+        let expr = translate_one(
+            "SELECT from_address, value FROM transactions WHERE block_number = latest AND value > 1 ether AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Transaction(tx) = get.entity else {
+            panic!()
+        };
+        let filters = tx.filters().unwrap();
+        assert!(filters
+            .iter()
+            .any(|f| matches!(f, TransactionFilter::BlockId(_))));
+        assert!(filters.iter().any(|f| matches!(
+            f,
+            TransactionFilter::Value(FilterType::Comparison(ComparisonFilter::Gt(v)))
+                if *v == U256::from(10).pow(U256::from(18))
+        )));
+    }
+
+    #[test]
+    fn tx_requires_hash_or_block() {
+        let err = translate_one("SELECT value FROM tx WHERE value > 0 AND chain = eth")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("block_number") || err.contains("hash"));
+    }
+
+    #[test]
+    fn tx_ens_in_address_filter_not_supported_yet() {
+        let err = translate_one(
+            "SELECT value FROM tx WHERE block_number = latest AND from_address = vitalik.eth AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("ENS"));
+    }
+
+    #[test]
+    fn logs_full_filter_set() {
+        use crate::common::logs::LogFilter;
+        let expr = translate_one(
+            "SELECT * FROM logs WHERE address = 0xdAC17F958D2ee523a2206206994597C13D831ec7 \
+             AND topic0 = 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a \
+             AND block_number BETWEEN 4638657 AND 4638758 AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Logs(logs) = get.entity else {
+            panic!()
+        };
+        assert!(logs
+            .filter()
+            .iter()
+            .any(|f| matches!(f, LogFilter::EmitterAddress(_))));
+        assert!(logs
+            .filter()
+            .iter()
+            .any(|f| matches!(f, LogFilter::Topic0(_))));
+        assert!(logs
+            .filter()
+            .iter()
+            .any(|f| matches!(f, LogFilter::BlockRange(_))));
+    }
+
+    #[test]
+    fn logs_event_signature_and_required_block() {
+        let expr = translate_one(
+            "SELECT * FROM logs WHERE event_signature = 'Confirmation(address,uint256)' \
+             AND block_number = 4638757 AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Logs(logs) = get.entity else {
+            panic!()
+        };
+        assert!(logs.filter().iter().any(|f| matches!(
+            f,
+            crate::common::logs::LogFilter::EventSignature(s) if s == "Confirmation(address,uint256)"
+        )));
+
+        let err = translate_one(
+            "SELECT * FROM logs WHERE address = 0xdAC17F958D2ee523a2206206994597C13D831ec7 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("block"));
+    }
+
+    #[test]
+    fn logs_reject_non_eq_operators() {
+        let err = translate_one(
+            "SELECT * FROM logs WHERE topic0 > 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a AND block_number = 1 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("="));
+    }
+
+    // Filter reconciliation: `TransactionFilter::Data` exists and was
+    // reachable through the legacy pest grammar's `data_filter` (an
+    // `EqualityFilter<Bytes>` on the raw tx payload), but the brief's
+    // reference implementation didn't wire it up. Added here to keep parity
+    // with what a user could previously express.
+
+    #[test]
+    fn tx_data_filter_translates() {
+        use crate::common::transaction::TransactionFilter;
+        let expr = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest AND data = 0x1234 AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Transaction(tx) = get.entity else {
+            panic!()
+        };
+        assert!(tx
+            .filters()
+            .unwrap()
+            .iter()
+            .any(|f| matches!(f, TransactionFilter::Data(_))));
+    }
+
+    // Shapes the brief's tests don't cover. Each is either rejected clearly
+    // (naming the real column and operator) or translated sensibly — never
+    // mis-translated silently and never a panic.
+
+    #[test]
+    fn tx_hash_and_block_number_together_translates() {
+        use crate::common::transaction::TransactionFilter;
+        let expr = translate_one(
+            "SELECT * FROM tx WHERE hash = 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 \
+             AND block_number = latest AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Transaction(tx) = get.entity else {
+            panic!()
+        };
+        assert_eq!(tx.ids().unwrap().len(), 1);
+        assert!(tx
+            .filters()
+            .unwrap()
+            .iter()
+            .any(|f| matches!(f, TransactionFilter::BlockId(_))));
+    }
+
+    #[test]
+    fn tx_duplicate_block_number_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM tx WHERE block_number = 1 AND block_number BETWEEN 2 AND 3 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("block_number"), "{err}");
+    }
+
+    #[test]
+    fn tx_value_range_via_two_conditions_translates() {
+        // The same column given twice is fine for a comparison filter: both
+        // conditions are ANDed by `Transaction::filter`, unlike `BlockId`
+        // (see `push_block_id_filter`), so this must NOT be rejected.
+        use crate::common::{filters::ComparisonFilter, transaction::TransactionFilter};
+        let expr = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest AND value > 1 AND value < 100 AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr;
+        let crate::common::entity::Entity::Transaction(tx) = get.entity else {
+            panic!()
+        };
+        let filters = tx.filters().unwrap();
+        assert!(filters.iter().any(|f| matches!(
+            f,
+            TransactionFilter::Value(crate::common::filters::FilterType::Comparison(
+                ComparisonFilter::Gt(_)
+            ))
+        )));
+        assert!(filters.iter().any(|f| matches!(
+            f,
+            TransactionFilter::Value(crate::common::filters::FilterType::Comparison(
+                ComparisonFilter::Lt(_)
+            ))
+        )));
+    }
+
+    #[test]
+    fn tx_to_address_in_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest \
+             AND to_address IN (0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045, 0x0000000000000000000000000000000000000001) \
+             AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("to_address") && err.contains("IN"), "{err}");
+    }
+
+    #[test]
+    fn tx_value_between_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest AND value BETWEEN 1 AND 2 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("value") && err.contains("BETWEEN"), "{err}");
+    }
+
+    #[test]
+    fn tx_gas_limit_in_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest AND gas_limit IN (1, 2) AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("gas_limit") && err.contains("IN"), "{err}");
+    }
+
+    #[test]
+    fn tx_status_non_boolean_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest AND status = 1 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        // `1` parses as a number, not a `Value::Boolean`, so `values::parse_bool`
+        // rejects it by shape rather than translating it as truthy.
+        assert!(err.contains("true/false"), "{err}");
+    }
+
+    #[test]
+    fn tx_unknown_filter_column_names_it() {
+        let err = translate_one(
+            "SELECT * FROM tx WHERE block_number = latest AND chain_id = 1 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("chain_id"), "{err}");
+    }
+
+    #[test]
+    fn logs_duplicate_address_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM logs WHERE block_number = 1 \
+             AND address = 0xdAC17F958D2ee523a2206206994597C13D831ec7 \
+             AND address = 0x0000000000000000000000000000000000000001 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("address"), "{err}");
+    }
+
+    #[test]
+    fn logs_duplicate_block_number_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM logs WHERE block_number = 1 AND block_number BETWEEN 2 AND 3 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("block_number"), "{err}");
+    }
+
+    #[test]
+    fn logs_topic_wrong_length_hash_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT * FROM logs WHERE block_number = 1 \
+             AND topic0 = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        // A 20-byte address is the wrong length for a 32-byte topic hash;
+        // `values::parse_b256` rejects it rather than truncating/padding it.
+        assert!(err.contains("hash"), "{err}");
+    }
+
+    #[test]
+    fn logs_unknown_filter_column_names_it() {
+        let err = translate_one(
+            "SELECT * FROM logs WHERE block_number = 1 AND removed = true AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("removed"), "{err}");
     }
 }
