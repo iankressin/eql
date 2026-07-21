@@ -6,8 +6,8 @@ served by SQD Portal with RPC fallback.
 ## Language
 
 **Entity**:
-A queryable blockchain dataset with a fixed schema — `account`, `block`, `tx`,
-or `log`. Analogous to a table.
+A queryable blockchain dataset with a fixed schema — `accounts`, `blocks`,
+`transactions` (alias `tx`), or `logs`. Analogous to a table.
 _Avoid_: model, resource, table (reserve "table" for real SQL tables)
 
 **Chain**:
@@ -20,8 +20,9 @@ The portion of DuckDB SQL that EQL accepts. Anything inside the subset behaves
 exactly as SQL says; anything outside is rejected with an explicit error.
 
 **Sugar**:
-An EQL-specific first-class notation (bare hex, ENS names, chain names, block
-ranges) layered over the dialect subset.
+An EQL-specific first-class notation for blockchain *values* — bare hex, ENS
+names, chain names, block tags, unit suffixes. Sugar never changes query
+structure: clauses and statement shape are pure DuckDB SQL.
 _Avoid_: extension (reserved for DuckDB extensions)
 
 **Desugar rule**:
