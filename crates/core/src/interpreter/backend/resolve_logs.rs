@@ -1,12 +1,14 @@
 use super::resolve_portal::{
-    portal_query, value_to_address, value_to_b256, value_to_bytes, value_to_u64,
+    block_range_is_portal_eligible, portal_query, portal_query_with_base_url, resolve_portal_range,
+    value_to_address, value_to_b256, value_to_bytes, value_to_u64,
 };
 use crate::common::{
+    block::BlockRange,
     chain::{Chain, ChainOrRpc},
     logs::{LogField, LogFilter, Logs},
     query_result::LogQueryRes,
 };
-use alloy::eips::BlockNumberOrTag;
+use alloy::primitives::keccak256;
 use alloy::providers::{Provider, ProviderBuilder};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -17,34 +19,18 @@ use std::sync::Arc;
 pub enum LogResolverErrors {
     #[error("Query returned no results within the given filters")]
     NoLogsFound,
-}
-
-/// Returns true if a LogField can be served by the SQD Portal.
-fn field_supported_by_portal(field: &LogField) -> bool {
-    matches!(
-        field,
-        LogField::Address
-            | LogField::Topic0
-            | LogField::Topic1
-            | LogField::Topic2
-            | LogField::Topic3
-            | LogField::Data
-            | LogField::BlockNumber
-            | LogField::BlockTimestamp
-            | LogField::TransactionHash
-            | LogField::TransactionIndex
-            | LogField::LogIndex
-            | LogField::Chain
-    )
+    #[error("EventSignature and Topic0 filters cannot be combined")]
+    ConflictingTopic0Filters,
 }
 
 /// Returns true if a LogFilter is supported by Portal.
-/// Portal does not support BlockHash or EventSignature filters.
+/// Portal does not support BlockHash filters.
 fn filter_supported_by_portal(filter: &LogFilter) -> bool {
     matches!(
         filter,
         LogFilter::BlockRange(_)
             | LogFilter::EmitterAddress(_)
+            | LogFilter::EventSignature(_)
             | LogFilter::Topic0(_)
             | LogFilter::Topic1(_)
             | LogFilter::Topic2(_)
@@ -52,23 +38,12 @@ fn filter_supported_by_portal(filter: &LogFilter) -> bool {
     )
 }
 
-/// Extract the block range from log filters. Returns None if no block range filter is found.
-fn extract_block_range(filters: &[LogFilter]) -> Option<(u64, u64)> {
-    for filter in filters {
-        if let LogFilter::BlockRange(range) = filter {
-            let start = match range.start() {
-                BlockNumberOrTag::Number(n) => n,
-                _ => return None,
-            };
-            let end = match range.end() {
-                Some(BlockNumberOrTag::Number(n)) => n,
-                Some(_) => return None,
-                None => start,
-            };
-            return Some((start, end));
-        }
-    }
-    None
+/// Find the BlockRange filter, if present.
+fn find_block_range(filters: &[LogFilter]) -> Option<&BlockRange> {
+    filters.iter().find_map(|f| match f {
+        LogFilter::BlockRange(range) => Some(range),
+        _ => None,
+    })
 }
 
 /// Determines if a log query for a given chain should use the Portal.
@@ -82,11 +57,6 @@ fn should_use_portal(chain: &ChainOrRpc, logs: &Logs) -> bool {
         return false;
     }
 
-    // All fields must be Portal-compatible
-    if !logs.fields().iter().all(|f| field_supported_by_portal(f)) {
-        return false;
-    }
-
     // All filters must be Portal-compatible
     if !logs
         .filter()
@@ -96,14 +66,29 @@ fn should_use_portal(chain: &ChainOrRpc, logs: &Logs) -> bool {
         return false;
     }
 
-    // Must have a concrete block range
-    extract_block_range(logs.filter()).is_some()
+    // Must have a Portal-resolvable block range.
+    match find_block_range(logs.filter()) {
+        Some(range) => block_range_is_portal_eligible(range),
+        None => false,
+    }
 }
 
 pub async fn resolve_log_query(
     logs: &Logs,
     chain_or_rpcs: &[ChainOrRpc],
 ) -> Result<Vec<LogQueryRes>> {
+    let has_event_signature = logs
+        .filter()
+        .iter()
+        .any(|filter| matches!(filter, LogFilter::EventSignature(_)));
+    let has_topic0 = logs
+        .filter()
+        .iter()
+        .any(|filter| matches!(filter, LogFilter::Topic0(_)));
+    if has_event_signature && has_topic0 {
+        return Err(LogResolverErrors::ConflictingTopic0Filters.into());
+    }
+
     let mut all_results = Vec::new();
 
     for chain_or_rpc in chain_or_rpcs {
@@ -130,6 +115,14 @@ async fn resolve_logs_via_portal(
     logs: &Logs,
     chain_or_rpc: &ChainOrRpc,
 ) -> Result<Vec<LogQueryRes>> {
+    resolve_logs_via_portal_with_base_url(logs, chain_or_rpc, None).await
+}
+
+async fn resolve_logs_via_portal_with_base_url(
+    logs: &Logs,
+    chain_or_rpc: &ChainOrRpc,
+    base_url: Option<&str>,
+) -> Result<Vec<LogQueryRes>> {
     let chain_enum = match chain_or_rpc {
         ChainOrRpc::Chain(c) => c.clone(),
         _ => unreachable!("should_use_portal guards against Rpc variant"),
@@ -138,7 +131,8 @@ async fn resolve_logs_via_portal(
     let fields = logs.fields();
     let filters = logs.filter();
 
-    let (from_block, to_block) = extract_block_range(filters).unwrap();
+    let range = find_block_range(filters).expect("should_use_portal guarantees a block range");
+    let (from_block, to_block) = resolve_portal_range(dataset, range).await?;
 
     // Build log filter object for Portal
     let mut log_filter = serde_json::Map::new();
@@ -162,22 +156,28 @@ async fn resolve_logs_via_portal(
             LogFilter::Topic3(topic) => {
                 log_filter.insert("topic3".into(), json!([format!("{:?}", topic)]));
             }
+            LogFilter::EventSignature(sig) => {
+                let topic0 = keccak256(sig.as_bytes());
+                log_filter.insert("topic0".into(), json!([format!("{:?}", topic0)]));
+            }
             LogFilter::BlockRange(_) => {} // Handled via fromBlock/toBlock
-            _ => {}
+            LogFilter::BlockHash(_) => {}  // unreachable: gate excludes block_hash filter
         }
     }
 
     // Build field selection
     let mut log_fields = serde_json::Map::new();
     let mut block_fields = serde_json::Map::new();
-    let needs_block_number = fields.iter().any(|f| matches!(f, LogField::BlockNumber));
     let needs_block_timestamp = fields.iter().any(|f| matches!(f, LogField::BlockTimestamp));
 
-    if needs_block_number {
-        block_fields.insert("number".into(), json!(true));
-    }
+    // Pagination metadata is always requested but only projected when selected.
+    block_fields.insert("number".into(), json!(true));
     if needs_block_timestamp {
         block_fields.insert("timestamp".into(), json!(true));
+    }
+    let needs_block_hash = fields.iter().any(|f| matches!(f, LogField::BlockHash));
+    if needs_block_hash {
+        block_fields.insert("hash".into(), json!(true));
     }
 
     for field in fields {
@@ -200,7 +200,11 @@ async fn resolve_logs_via_portal(
             LogField::LogIndex => {
                 log_fields.insert("logIndex".into(), json!(true));
             }
-            _ => {} // BlockNumber, BlockTimestamp, Chain handled above or client-side
+            LogField::BlockHash
+            | LogField::BlockNumber
+            | LogField::BlockTimestamp
+            | LogField::Removed
+            | LogField::Chain => {}
         }
     }
 
@@ -220,7 +224,10 @@ async fn resolve_logs_via_portal(
         "logs": [log_filter]
     });
 
-    let response = portal_query(dataset, &query).await?;
+    let response = match base_url {
+        Some(base_url) => portal_query_with_base_url(base_url, dataset, &query).await?,
+        None => portal_query(dataset, &query).await?,
+    };
 
     let mut results = Vec::new();
     for portal_block in &response {
@@ -229,11 +236,18 @@ async fn resolve_logs_via_portal(
         let block_timestamp = header
             .and_then(|h| h.get("timestamp"))
             .and_then(value_to_u64);
+        let block_hash = header.and_then(|h| h.get("hash")).and_then(value_to_b256);
 
         if let Some(portal_logs) = portal_block.get("logs").and_then(|l| l.as_array()) {
             for log in portal_logs {
-                let result =
-                    parse_portal_log(log, fields, &chain_enum, block_number, block_timestamp);
+                let result = parse_portal_log(
+                    log,
+                    fields,
+                    &chain_enum,
+                    block_number,
+                    block_timestamp,
+                    block_hash,
+                );
                 results.push(result);
             }
         }
@@ -248,6 +262,7 @@ fn parse_portal_log(
     chain: &Chain,
     block_number: Option<u64>,
     block_timestamp: Option<u64>,
+    block_hash: Option<alloy::primitives::B256>,
 ) -> LogQueryRes {
     let mut result = LogQueryRes::default();
 
@@ -281,6 +296,9 @@ fn parse_portal_log(
             LogField::Data => {
                 result.data = log.get("data").and_then(value_to_bytes);
             }
+            LogField::BlockHash => {
+                result.block_hash = block_hash;
+            }
             LogField::BlockNumber => {
                 result.block_number = block_number;
             }
@@ -296,10 +314,12 @@ fn parse_portal_log(
             LogField::LogIndex => {
                 result.log_index = log.get("logIndex").and_then(value_to_u64);
             }
+            LogField::Removed => {
+                result.removed = Some(false);
+            }
             LogField::Chain => {
                 result.chain = Some(chain.clone());
             }
-            _ => {} // BlockHash, Removed — not supported by Portal
         }
     }
 
@@ -359,4 +379,151 @@ async fn resolve_logs_via_rpc(
         .collect();
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::chain::Chain;
+    use alloy::{
+        eips::BlockNumberOrTag,
+        primitives::{address, b256},
+    };
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_portal_log_sets_block_hash_and_removed() {
+        let log = json!({
+            "logIndex": 5,
+            "transactionIndex": 9,
+            "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "topics": ["0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"]
+        });
+        let fields = vec![LogField::BlockHash, LogField::Removed, LogField::LogIndex];
+        let block_hash = Some(b256!(
+            "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
+        ));
+        let res = parse_portal_log(
+            &log,
+            &fields,
+            &Chain::Ethereum,
+            Some(4638757),
+            Some(1511886266),
+            block_hash,
+        );
+        assert_eq!(res.block_hash, block_hash);
+        assert_eq!(res.removed, Some(false));
+        assert_eq!(res.log_index, Some(5));
+    }
+
+    #[test]
+    fn test_event_signature_filter_is_portal_supported() {
+        assert!(filter_supported_by_portal(&LogFilter::EventSignature(
+            "Transfer(address,address,uint256)".to_string()
+        )));
+        // block_hash filter is NOT Portal-serviceable.
+        assert!(!filter_supported_by_portal(&LogFilter::BlockHash(
+            alloy::primitives::B256::ZERO
+        )));
+    }
+
+    #[tokio::test]
+    async fn test_portal_log_pagination_uses_internal_block_number_without_projecting_it() {
+        let emitter = address!("2000000000000000000000000000000000000002");
+        let logs = Logs::new(
+            vec![
+                LogFilter::BlockRange(BlockRange::new(
+                    BlockNumberOrTag::Number(30),
+                    Some(BlockNumberOrTag::Number(31)),
+                )),
+                LogFilter::EmitterAddress(emitter),
+            ],
+            vec![LogField::Address],
+        );
+        let (base_url, requests, handle) =
+            super::super::resolve_portal::test_support::spawn_mock_portal(vec![
+                concat!(
+                    "{\"header\":{\"number\":\"0x1e\"},\"logs\":[{",
+                    "\"address\":\"0x2000000000000000000000000000000000000002\"}]}\n"
+                )
+                .to_string(),
+                concat!(
+                    "{\"header\":{\"number\":\"0x1f\"},\"logs\":[{",
+                    "\"address\":\"0x2000000000000000000000000000000000000002\"}]}\n"
+                )
+                .to_string(),
+            ]);
+
+        let results = resolve_logs_via_portal_with_base_url(
+            &logs,
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            Some(&base_url),
+        )
+        .await
+        .unwrap();
+        handle.join().expect("mock Portal thread");
+
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|result| result.address == Some(emitter)));
+        assert!(results.iter().all(|result| result.block_number.is_none()));
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0]["fromBlock"], json!(30));
+        assert_eq!(requests[1]["fromBlock"], json!(31));
+        for request in requests.iter() {
+            assert_eq!(request["fields"]["block"]["number"], json!(true));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_event_signature_and_topic0_are_rejected_together() {
+        let logs = Logs::new(
+            vec![
+                LogFilter::EventSignature("Transfer(address,address,uint256)".to_string()),
+                LogFilter::Topic0(b256!(
+                    "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+                )),
+            ],
+            vec![LogField::Address],
+        );
+
+        let error = resolve_log_query(&logs, &[])
+            .await
+            .expect_err("ambiguous topic0 filters must be rejected");
+        assert_eq!(
+            error.to_string(),
+            "EventSignature and Topic0 filters cannot be combined"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_signature_payload_uses_exact_keccak_topic0() {
+        let logs = Logs::new(
+            vec![
+                LogFilter::BlockRange(BlockRange::new(BlockNumberOrTag::Number(40), None)),
+                LogFilter::EventSignature("Transfer(address,address,uint256)".to_string()),
+            ],
+            vec![LogField::Address],
+        );
+        let (base_url, requests, handle) =
+            super::super::resolve_portal::test_support::spawn_mock_portal(vec![
+                "{\"header\":{\"number\":\"0x28\"},\"logs\":[]}\n".to_string(),
+            ]);
+
+        resolve_logs_via_portal_with_base_url(
+            &logs,
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            Some(&base_url),
+        )
+        .await
+        .unwrap();
+        handle.join().expect("mock Portal thread");
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(
+            requests[0]["logs"][0]["topic0"],
+            json!(["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"])
+        );
+    }
 }

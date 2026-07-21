@@ -1,4 +1,7 @@
-use super::resolve_portal::{portal_query, value_to_b256, value_to_u64};
+use super::resolve_portal::{
+    block_id_is_portal_eligible, portal_query, portal_query_with_base_url, resolve_block_id_range,
+    value_to_b256, value_to_bloom, value_to_bytes, value_to_u256, value_to_u64,
+};
 use crate::common::{
     block::{get_block_number_from_tag, Block, BlockField, BlockId},
     chain::{Chain, ChainOrRpc},
@@ -26,46 +29,13 @@ pub enum BlockResolverErrors {
     IdsNotSet,
 }
 
-/// Returns true if a BlockField can be served by the SQD Portal.
-fn field_supported_by_portal(field: &BlockField) -> bool {
-    matches!(
-        field,
-        BlockField::Number
-            | BlockField::Timestamp
-            | BlockField::Hash
-            | BlockField::ParentHash
-            | BlockField::StateRoot
-            | BlockField::TransactionsRoot
-            | BlockField::ReceiptsRoot
-            | BlockField::BaseFeePerGas
-            | BlockField::Chain
-    )
-}
-
-/// Returns true if a BlockId is a concrete number (not a tag like latest/earliest/pending).
-fn block_id_is_concrete(id: &BlockId) -> bool {
-    match id {
-        BlockId::Number(BlockNumberOrTag::Number(_)) => true,
-        BlockId::Range(range) => {
-            matches!(range.start(), BlockNumberOrTag::Number(_))
-                && range
-                    .end()
-                    .map_or(true, |e| matches!(e, BlockNumberOrTag::Number(_)))
-        }
-        _ => false,
-    }
-}
-
 /// Determines if a block query for a given chain should use the Portal.
-fn should_use_portal(chain: &ChainOrRpc, fields: &[BlockField], ids: &[BlockId]) -> bool {
+fn should_use_portal(chain: &ChainOrRpc, ids: &[BlockId]) -> bool {
     let dataset = match chain {
         ChainOrRpc::Chain(c) => c.portal_dataset(),
         ChainOrRpc::Rpc(_) => None,
     };
-
-    dataset.is_some()
-        && fields.iter().all(|f| field_supported_by_portal(f))
-        && ids.iter().all(block_id_is_concrete)
+    dataset.is_some() && ids.iter().all(block_id_is_portal_eligible)
 }
 
 pub async fn resolve_block_query(
@@ -96,7 +66,7 @@ pub async fn resolve_block_query(
     let mut all_results = Vec::new();
 
     for chain in chains {
-        let results = if should_use_portal(chain, block.fields(), ids) {
+        let results = if should_use_portal(chain, ids) {
             resolve_blocks_via_portal(block, chain).await?
         } else {
             resolve_blocks_via_rpc(block, chain).await?
@@ -115,6 +85,14 @@ async fn resolve_blocks_via_portal(
     block: &Block,
     chain: &ChainOrRpc,
 ) -> Result<Vec<BlockQueryRes>> {
+    resolve_blocks_via_portal_with_base_url(block, chain, None).await
+}
+
+async fn resolve_blocks_via_portal_with_base_url(
+    block: &Block,
+    chain: &ChainOrRpc,
+    base_url: Option<&str>,
+) -> Result<Vec<BlockQueryRes>> {
     let chain_enum = match chain {
         ChainOrRpc::Chain(c) => c.clone(),
         _ => unreachable!("should_use_portal guards against Rpc variant"),
@@ -126,7 +104,7 @@ async fn resolve_blocks_via_portal(
     let mut all_results = Vec::new();
 
     for id in ids {
-        let (from_block, to_block) = block_id_to_range(id);
+        let (from_block, to_block) = resolve_block_id_range(dataset, id).await?;
 
         // Build field selection for Portal
         let mut block_fields = serde_json::Map::new();
@@ -142,12 +120,16 @@ async fn resolve_blocks_via_portal(
             "type": "evm",
             "fromBlock": from_block,
             "toBlock": to_block,
+            "includeAllBlocks": true,
             "fields": {
                 "block": block_fields
             }
         });
 
-        let response = portal_query(dataset, &query).await?;
+        let response = match base_url {
+            Some(base_url) => portal_query_with_base_url(base_url, dataset, &query).await?,
+            None => portal_query(dataset, &query).await?,
+        };
 
         for portal_block in &response {
             let header = match portal_block.get("header") {
@@ -163,25 +145,6 @@ async fn resolve_blocks_via_portal(
     Ok(all_results)
 }
 
-/// Converts a BlockId to a (fromBlock, toBlock) range of concrete u64 numbers.
-fn block_id_to_range(id: &BlockId) -> (u64, u64) {
-    match id {
-        BlockId::Number(BlockNumberOrTag::Number(n)) => (*n, *n),
-        BlockId::Range(range) => {
-            let start = match range.start() {
-                BlockNumberOrTag::Number(n) => n,
-                _ => unreachable!("block_id_is_concrete guards this"),
-            };
-            let end = range.end().map_or(start, |e| match e {
-                BlockNumberOrTag::Number(n) => n,
-                _ => unreachable!("block_id_is_concrete guards this"),
-            });
-            (start, end)
-        }
-        _ => unreachable!("block_id_is_concrete guards this"),
-    }
-}
-
 /// Maps an EQL BlockField to the Portal JSON field name.
 fn block_field_to_portal_name(field: &BlockField) -> Option<&'static str> {
     match field {
@@ -193,7 +156,16 @@ fn block_field_to_portal_name(field: &BlockField) -> Option<&'static str> {
         BlockField::TransactionsRoot => Some("transactionsRoot"),
         BlockField::ReceiptsRoot => Some("receiptsRoot"),
         BlockField::BaseFeePerGas => Some("baseFeePerGas"),
-        _ => None,
+        BlockField::Size => Some("size"),
+        BlockField::LogsBloom => Some("logsBloom"),
+        BlockField::ExtraData => Some("extraData"),
+        BlockField::MixHash => Some("mixHash"),
+        BlockField::TotalDifficulty => Some("totalDifficulty"),
+        BlockField::WithdrawalsRoot => Some("withdrawalsRoot"),
+        BlockField::BlobGasUsed => Some("blobGasUsed"),
+        BlockField::ExcessBlobGas => Some("excessBlobGas"),
+        BlockField::ParentBeaconBlockRoot => Some("parentBeaconBlockRoot"),
+        BlockField::Chain => None,
     }
 }
 
@@ -223,8 +195,7 @@ fn parse_portal_block_header(
                 result.state_root = header.get("stateRoot").and_then(value_to_b256);
             }
             BlockField::TransactionsRoot => {
-                result.transactions_root =
-                    header.get("transactionsRoot").and_then(value_to_b256);
+                result.transactions_root = header.get("transactionsRoot").and_then(value_to_b256);
             }
             BlockField::ReceiptsRoot => {
                 result.receipts_root = header.get("receiptsRoot").and_then(value_to_b256);
@@ -232,10 +203,37 @@ fn parse_portal_block_header(
             BlockField::BaseFeePerGas => {
                 result.base_fee_per_gas = header.get("baseFeePerGas").and_then(value_to_u64);
             }
+            BlockField::Size => {
+                result.size = header.get("size").and_then(value_to_u256);
+            }
+            BlockField::LogsBloom => {
+                result.logs_bloom = header.get("logsBloom").and_then(value_to_bloom);
+            }
+            BlockField::ExtraData => {
+                result.extra_data = header.get("extraData").and_then(value_to_bytes);
+            }
+            BlockField::MixHash => {
+                result.mix_hash = header.get("mixHash").and_then(value_to_b256);
+            }
+            BlockField::TotalDifficulty => {
+                result.total_difficulty = header.get("totalDifficulty").and_then(value_to_u256);
+            }
+            BlockField::WithdrawalsRoot => {
+                result.withdrawals_root = header.get("withdrawalsRoot").and_then(value_to_b256);
+            }
+            BlockField::BlobGasUsed => {
+                result.blob_gas_used = header.get("blobGasUsed").and_then(value_to_u64);
+            }
+            BlockField::ExcessBlobGas => {
+                result.excess_blob_gas = header.get("excessBlobGas").and_then(value_to_u64);
+            }
+            BlockField::ParentBeaconBlockRoot => {
+                result.parent_beacon_block_root =
+                    header.get("parentBeaconBlockRoot").and_then(value_to_b256);
+            }
             BlockField::Chain => {
                 result.chain = Some(chain.clone());
             }
-            _ => {} // Non-Portal fields — should not be reached due to should_use_portal guard
         }
     }
 
@@ -246,10 +244,7 @@ fn parse_portal_block_header(
 // RPC path (original logic, extracted)
 // ---------------------------------------------------------------------------
 
-async fn resolve_blocks_via_rpc(
-    block: &Block,
-    chain: &ChainOrRpc,
-) -> Result<Vec<BlockQueryRes>> {
+async fn resolve_blocks_via_rpc(block: &Block, chain: &ChainOrRpc) -> Result<Vec<BlockQueryRes>> {
     let fields = block.fields().clone();
     let ids = block.ids().unwrap();
 
@@ -425,6 +420,47 @@ mod tests {
     use super::*;
     use crate::common::{block::BlockRange, chain::Chain};
 
+    #[test]
+    fn test_parse_portal_block_header_decodes_all_fields() {
+        use serde_json::json;
+        let header = json!({
+            "number": 1,
+            "timestamp": 1438269988u64,
+            "hash": "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
+            "size": 537,
+            "totalDifficulty": "0x7ff800000",
+            "baseFeePerGas": null
+        });
+        let fields = vec![
+            BlockField::Number,
+            BlockField::Size,
+            BlockField::TotalDifficulty,
+            BlockField::BaseFeePerGas,
+        ];
+        let res = parse_portal_block_header(&header, &fields, &Chain::Ethereum);
+        assert_eq!(res.number, Some(1));
+        assert_eq!(res.size, Some(alloy::primitives::U256::from(537)));
+        assert_eq!(
+            res.total_difficulty,
+            Some(alloy::primitives::U256::from(34351349760u64))
+        );
+        assert_eq!(res.base_fee_per_gas, None);
+    }
+
+    #[test]
+    fn test_block_field_mapping_is_exhaustive() {
+        // all_variants() returns &'static [BlockField], so `field` is already &BlockField.
+        for field in BlockField::all_variants() {
+            let mapped = block_field_to_portal_name(field).is_some();
+            let local = matches!(field, BlockField::Chain);
+            assert!(
+                mapped || local,
+                "BlockField {:?} not Portal-serviceable",
+                field
+            );
+        }
+    }
+
     #[tokio::test]
     async fn test_error_when_start_block_is_greater_than_end_block() {
         let start_block = 10;
@@ -447,5 +483,47 @@ mod tests {
             result.unwrap_err().to_string(),
             "Start block must be less than end block"
         );
+    }
+
+    #[tokio::test]
+    async fn test_portal_block_range_requests_and_returns_every_block() {
+        let block = Block::new(
+            Some(vec![BlockId::Range(BlockRange::new(
+                BlockNumberOrTag::Number(50),
+                Some(BlockNumberOrTag::Number(52)),
+            ))]),
+            None,
+            vec![BlockField::Number],
+        );
+        let (base_url, requests, handle) =
+            super::super::resolve_portal::test_support::spawn_mock_portal(vec![concat!(
+                "{\"header\":{\"number\":\"0x32\"}}\n",
+                "{\"header\":{\"number\":\"0x33\"}}\n",
+                "{\"header\":{\"number\":\"0x34\"}}\n"
+            )
+            .to_string()]);
+
+        let results = resolve_blocks_via_portal_with_base_url(
+            &block,
+            &ChainOrRpc::Chain(Chain::Ethereum),
+            Some(&base_url),
+        )
+        .await
+        .unwrap();
+        handle.join().expect("mock Portal thread");
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| result.number.unwrap())
+                .collect::<Vec<_>>(),
+            vec![50, 51, 52]
+        );
+
+        let requests = requests.lock().expect("captured requests");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["fromBlock"], json!(50));
+        assert_eq!(requests[0]["toBlock"], json!(52));
+        assert_eq!(requests[0]["includeAllBlocks"], json!(true));
     }
 }

@@ -120,8 +120,7 @@ mod test {
                 "d34e3b2957865fe76c73ec91d798f78de95f2b0e0cddfc47e341b5f235dc4d58"
             )),
             block_number: Some(4638757),
-            // TODO: the provider is returning None for block_timestamp
-            block_timestamp: None,
+            block_timestamp: Some(1511886266),
             transaction_hash: Some(b256!(
                 "8cfc4f5f4729423f59dd1d263ead2f824b3f133b02b9e27383964c7d50cd47cb"
             )),
@@ -293,6 +292,77 @@ mod test {
                 assert_eq!(results[0].result, expected[0]);
             }
             Err(_) => panic!("Error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_transactions_via_portal_block_range() {
+        use crate::common::filters::EqualityFilter;
+        use crate::common::transaction::TransactionFilter;
+
+        let execution_engine = ExecutionEngine::new();
+        // A single concrete block, filtered by sender, GET * -> must route through Portal.
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Transaction(Transaction::new(
+                None,
+                Some(vec![
+                    TransactionFilter::BlockId(BlockId::Range(BlockRange::new(
+                        BlockNumberOrTag::Number(20000000),
+                        Some(BlockNumberOrTag::Number(20000000)),
+                    ))),
+                    TransactionFilter::From(EqualityFilter::Eq(address!(
+                        "95222290dd7278aa3ddd389cc1e1d165cc4bafe5"
+                    ))),
+                ]),
+                TransactionField::all_variants().to_vec(),
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+        })];
+
+        let result = execution_engine.run(expressions).await.unwrap();
+        match &result[0].result {
+            ExpressionResult::Transaction(txs) => {
+                assert!(!txs.is_empty(), "expected at least one tx from Portal");
+                // authorization_list is always None on the Portal path.
+                assert!(txs.iter().all(|t| t.authorization_list.is_none()));
+                // GET * populates hash + from on every row.
+                assert!(txs.iter().all(|t| t.hash.is_some() && t.from.is_some()));
+            }
+            other => panic!("expected Transaction result, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_transactions_via_portal_authorization_list_only_retains_rows() {
+        use crate::common::transaction::TransactionFilter;
+
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Transaction(Transaction::new(
+                None,
+                Some(vec![TransactionFilter::BlockId(BlockId::Range(
+                    BlockRange::new(
+                        BlockNumberOrTag::Number(20000000),
+                        Some(BlockNumberOrTag::Number(20000000)),
+                    ),
+                ))]),
+                vec![TransactionField::AuthorizationList],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+        })];
+
+        let result = execution_engine.run(expressions).await.unwrap();
+        match &result[0].result {
+            ExpressionResult::Transaction(txs) => {
+                assert!(
+                    !txs.is_empty(),
+                    "expected Portal to retain rows whose only projected field is None"
+                );
+                assert!(txs.iter().all(|tx| tx.authorization_list.is_none()));
+            }
+            other => panic!("expected Transaction result, got {:?}", other),
         }
     }
 
