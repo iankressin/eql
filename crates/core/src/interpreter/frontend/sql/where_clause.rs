@@ -129,6 +129,21 @@ fn collect(expr: &Expr, out: &mut Vec<Condition>) -> Result<(), EqlSqlError> {
     }
 }
 
+/// Renders a `CondOp` the way the user wrote it, for error messages that
+/// must name the actual construct rather than a fixed placeholder.
+fn cond_op_text(op: CondOp) -> &'static str {
+    match op {
+        CondOp::Eq => "=",
+        CondOp::Neq => "!=",
+        CondOp::Gt => ">",
+        CondOp::Gte => ">=",
+        CondOp::Lt => "<",
+        CondOp::Lte => "<=",
+        CondOp::In => "IN",
+        CondOp::Between => "BETWEEN",
+    }
+}
+
 fn chain_value(expr: &Expr) -> Result<Vec<ChainOrRpc>, EqlSqlError> {
     let text = expr_as_string(expr)?;
     if text == "*" {
@@ -157,10 +172,11 @@ pub fn extract_chains(conds: &mut Vec<Condition>) -> Result<Vec<ChainOrRpc>, Eql
                         chains.extend(chain_value(value)?);
                     }
                 }
-                _ => {
-                    return Err(EqlSqlError::NotSupported(
-                        "chain supports only = and IN".into(),
-                    ))
+                other_op => {
+                    return Err(EqlSqlError::NotSupported(format!(
+                        "chain operator {} (only chain = ... or chain IN (...))",
+                        cond_op_text(other_op)
+                    )))
                 }
             }
         } else {
@@ -248,6 +264,23 @@ mod tests {
             extract_chains(&mut conds).unwrap()[0],
             crate::common::chain::ChainOrRpc::Rpc(_)
         ));
+    }
+
+    #[test]
+    fn unsupported_chain_operators_name_their_own_operator() {
+        let sel = where_of("SELECT a FROM t WHERE chain > eth");
+        let mut conds = split_conditions(sel.as_ref()).unwrap();
+        let gt_err = extract_chains(&mut conds).unwrap_err().to_string();
+        assert!(gt_err.contains('>'));
+
+        let sel = where_of("SELECT a FROM t WHERE chain BETWEEN a AND b");
+        let mut conds = split_conditions(sel.as_ref()).unwrap();
+        let between_err = extract_chains(&mut conds).unwrap_err().to_string();
+        assert!(between_err.contains("BETWEEN"));
+
+        // The two messages must actually differ, naming their own operator —
+        // not collapse to one fixed string regardless of what was written.
+        assert_ne!(gt_err, between_err);
     }
 
     #[test]
