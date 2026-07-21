@@ -1,6 +1,7 @@
 pub mod prelex;
 pub mod schema;
 pub mod values;
+pub mod where_clause;
 
 #[derive(thiserror::Error, Debug)]
 pub enum EqlSqlError {
