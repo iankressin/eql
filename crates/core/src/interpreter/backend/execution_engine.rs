@@ -5,9 +5,10 @@ use super::{
 use crate::common::{
     entity::Entity,
     query_result::{ExpressionResult, QueryResult},
-    serializer::dump_results,
+    serializer::{dump_results, dump_results_with_aliases},
     types::{Expression, GetExpression},
 };
+use crate::interpreter::frontend::sql::EqlSqlError;
 use anyhow::Result;
 
 pub struct ExecutionEngine;
@@ -49,7 +50,7 @@ impl ExecutionEngine {
     }
 
     async fn run_get_expr(&self, expr: &GetExpression) -> Result<ExpressionResult> {
-        let result = match &expr.entity {
+        let mut result = match &expr.entity {
             Entity::Block(block) => {
                 ExpressionResult::Block(resolve_block_query(block, &expr.chains).await?)
             }
@@ -64,8 +65,36 @@ impl ExecutionEngine {
             }
         };
 
+        // v1 shape: rows for every chain in `expr.chains` are already
+        // flattened into `result` by the resolvers above, so `LIMIT` caps
+        // the combined row count across all chains, not per chain. It also
+        // truncates after the full fetch rather than pushing the limit down
+        // to Portal.
+        if let Some(limit) = expr.limit {
+            result.truncate(limit);
+        }
+
         if let Some(dump) = &expr.dump {
-            let _ = dump_results(&result, dump);
+            match (&expr.aliases, &dump.format) {
+                (Some(aliases), crate::common::dump::DumpFormat::Json) => {
+                    dump_results_with_aliases(&result, dump, aliases)?;
+                }
+                (Some(_), other_format) => {
+                    return Err(EqlSqlError::NotSupported(format!(
+                        "AS aliases with {other_format} exports"
+                    ))
+                    .into());
+                }
+                // No aliases: preserve the pre-existing behavior of
+                // discarding a failed dump rather than failing the whole
+                // query. Aliases apply to JSON exports only (CSV/Parquet
+                // exports and the REPL table are out of scope for this v1);
+                // a query with aliases but no `dump` at all never reaches
+                // this block, so the aliases are silently unused.
+                (None, _) => {
+                    let _ = dump_results(&result, dump);
+                }
+            }
         }
 
         Ok(result)
@@ -445,6 +474,133 @@ mod test {
 
     fn flatten_string(s: &str) -> String {
         s.replace('\n', "").replace('\r', "").replace(" ", "")
+    }
+
+    #[tokio::test]
+    async fn test_limit_truncates_the_combined_result() {
+        // Blocks 1-3 resolve to 3 rows on a single chain; `limit: Some(2)`
+        // must cap that to 2 regardless of how many rows were fetched.
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Range(BlockRange::new(
+                    BlockNumberOrTag::Number(1),
+                    Some(BlockNumberOrTag::Number(3)),
+                ))]),
+                None,
+                vec![BlockField::Number],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+            limit: Some(2),
+            aliases: None,
+        })];
+
+        let result = execution_engine.run(expressions).await.unwrap();
+        match &result[0].result {
+            ExpressionResult::Block(rows) => assert_eq!(rows.len(), 2),
+            other => panic!("expected Block result, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dump_results_with_aliases_renames_json_keys() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Range(BlockRange::new(1.into(), None))]),
+                None,
+                vec![BlockField::Timestamp],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: Some(Dump::new(String::from("test_alias_dump"), DumpFormat::Json)),
+            limit: None,
+            aliases: Some(std::collections::HashMap::from([(
+                "timestamp".to_string(),
+                "ts".to_string(),
+            )])),
+        })];
+        execution_engine.run(expressions).await.unwrap();
+
+        let path = std::path::Path::new("test_alias_dump.json");
+        // Same top-level `{"<entity>": [...]}` shape as the unaliased dump
+        // (see `test_dump_results` above) — only the inner row key differs.
+        let expected_content = r#"
+        {
+            "block": [
+                {
+                    "ts": 1438269988
+                }
+            ]
+        }"#;
+
+        assert!(path.exists());
+
+        let content = std::fs::read_to_string(path).unwrap();
+        assert_eq!(flatten_string(&content), flatten_string(expected_content));
+
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_alias_with_csv_dump_is_rejected_naming_csv() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Range(BlockRange::new(1.into(), None))]),
+                None,
+                vec![BlockField::Timestamp],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: Some(Dump::new(String::from("test_alias_csv"), DumpFormat::Csv)),
+            limit: None,
+            aliases: Some(std::collections::HashMap::from([(
+                "timestamp".to_string(),
+                "ts".to_string(),
+            )])),
+        })];
+
+        let result = execution_engine.run(expressions).await;
+        let err = result
+            .err()
+            .expect("expected AS aliases + csv to be rejected");
+        assert!(
+            err.to_string().contains("csv"),
+            "error should name the format the user asked for, got: {err}"
+        );
+        assert!(!std::path::Path::new("test_alias_csv.csv").exists());
+    }
+
+    #[tokio::test]
+    async fn test_alias_with_parquet_dump_is_rejected_naming_parquet() {
+        let execution_engine = ExecutionEngine::new();
+        let expressions = vec![Expression::Get(GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![BlockId::Range(BlockRange::new(1.into(), None))]),
+                None,
+                vec![BlockField::Timestamp],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: Some(Dump::new(
+                String::from("test_alias_parquet"),
+                DumpFormat::Parquet,
+            )),
+            limit: None,
+            aliases: Some(std::collections::HashMap::from([(
+                "timestamp".to_string(),
+                "ts".to_string(),
+            )])),
+        })];
+
+        let result = execution_engine.run(expressions).await;
+        let err = result
+            .err()
+            .expect("expected AS aliases + parquet to be rejected");
+        assert!(
+            err.to_string().contains("parquet"),
+            "error should name the format the user asked for, got: {err}"
+        );
+        assert!(!std::path::Path::new("test_alias_parquet.parquet").exists());
     }
 
     #[tokio::test]

@@ -27,6 +27,22 @@ pub enum ExpressionResult {
     Log(Vec<LogQueryRes>),
 }
 
+impl ExpressionResult {
+    /// Caps the row count to `n`, applying `LIMIT` after the rows have
+    /// already been fetched (v1: no pushdown to Portal). Every arm truncates
+    /// the same underlying `Vec`, so there's deliberately no wildcard arm —
+    /// a variant added to `ExpressionResult` later without a matching arm
+    /// here is a compile error, not a silent no-op for that entity type.
+    pub fn truncate(&mut self, n: usize) {
+        match self {
+            ExpressionResult::Account(v) => v.truncate(n),
+            ExpressionResult::Block(v) => v.truncate(n),
+            ExpressionResult::Transaction(v) => v.truncate(n),
+            ExpressionResult::Log(v) => v.truncate(n),
+        }
+    }
+}
+
 // TODO: should this be replaced with Alloy's Block?
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
@@ -355,6 +371,7 @@ mod test {
 
     use super::serialize_option_u256;
     use super::TransactionQueryRes;
+    use super::{AccountQueryRes, BlockQueryRes, ExpressionResult, LogQueryRes};
     use alloy::primitives::{Address, U256};
     use serde::Serialize;
     use serde_json::json;
@@ -385,5 +402,70 @@ mod test {
         assert!(json.get("block_number").is_some());
         assert!(json.get("from").is_none());
         assert!(json.get("to").is_none());
+    }
+
+    #[test]
+    fn truncate_caps_each_variant() {
+        let mut res = ExpressionResult::Block(vec![BlockQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Block(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    // `truncate_caps_each_variant` only exercises `Block`; the match in
+    // `ExpressionResult::truncate` has no wildcard arm, so a variant added
+    // later without a corresponding `truncate` arm would fail to compile —
+    // but these three guard against the arm being present yet wrong (e.g.
+    // caps the wrong field, or a copy-paste that truncates a fixed length).
+    #[test]
+    fn truncate_caps_account_variant() {
+        let mut res = ExpressionResult::Account(vec![AccountQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Account(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn truncate_caps_transaction_variant() {
+        let mut res = ExpressionResult::Transaction(vec![TransactionQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Transaction(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn truncate_caps_log_variant() {
+        let mut res = ExpressionResult::Log(vec![LogQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Log(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn truncate_to_zero_empties_the_result() {
+        let mut res = ExpressionResult::Block(vec![BlockQueryRes::default(); 3]);
+        res.truncate(0);
+        let ExpressionResult::Block(rows) = &res else {
+            panic!()
+        };
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn truncate_past_the_row_count_is_a_no_op() {
+        let mut res = ExpressionResult::Block(vec![BlockQueryRes::default(); 3]);
+        res.truncate(10);
+        let ExpressionResult::Block(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 3);
     }
 }
