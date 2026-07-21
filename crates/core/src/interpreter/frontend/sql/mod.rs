@@ -1,4 +1,5 @@
 pub mod prelex;
+pub mod schema;
 
 #[derive(thiserror::Error, Debug)]
 pub enum EqlSqlError {
