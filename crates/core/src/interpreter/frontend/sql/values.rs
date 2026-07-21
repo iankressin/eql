@@ -177,6 +177,36 @@ mod tests {
     }
 
     #[test]
+    fn parses_hashes() {
+        let hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+        assert_eq!(parse_b256(&s(hash)).unwrap(), B256::from_str(hash).unwrap());
+    }
+
+    #[test]
+    fn rejects_bad_hashes() {
+        // Right shape (hex string), wrong length: a 20-byte address is not
+        // a valid 32-byte hash.
+        assert!(parse_b256(&s("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")).is_err());
+        // Not hex at all.
+        assert!(parse_b256(&s("not-hex")).is_err());
+    }
+
+    #[test]
+    fn parses_booleans() {
+        // DuckDB's dialect represents boolean literals as `Value::Boolean`,
+        // the same shape `sqlparser::Parser::parse_value` produces for the
+        // `TRUE`/`FALSE` keywords.
+        assert!(parse_bool(&Expr::Value(Value::Boolean(true))).unwrap());
+        assert!(!parse_bool(&Expr::Value(Value::Boolean(false))).unwrap());
+    }
+
+    #[test]
+    fn rejects_non_boolean() {
+        assert!(parse_bool(&s("true")).is_err());
+        assert!(parse_bool(&n("1")).is_err());
+    }
+
+    #[test]
     fn rejects_negative_numbers() {
         // The real parser never emits a negative `Value::Number` (unary
         // minus wraps the literal in an `Expr::UnaryOp` instead), so these
