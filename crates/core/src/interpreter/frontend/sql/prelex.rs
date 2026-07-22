@@ -17,11 +17,20 @@ fn tokenize(input: &str) -> Vec<Tok> {
             let quote = c;
             let start = i;
             i += 1;
-            while i < chars.len() && chars[i] != quote {
+            while i < chars.len() {
+                if chars[i] == quote {
+                    // SQL escaping: '' inside '...' or "" inside "..."
+                    if chars.get(i + 1) == Some(&quote) {
+                        i += 2;
+                        continue;
+                    }
+                    i += 1;
+                    break;
+                }
                 i += 1;
             }
-            i = (i + 1).min(chars.len());
             toks.push(Tok::Quoted(chars[start..i].iter().collect()));
+        }
         } else if c == '-' && chars.get(i + 1) == Some(&'-') {
             let start = i;
             while i < chars.len() && chars[i] != '\n' {
