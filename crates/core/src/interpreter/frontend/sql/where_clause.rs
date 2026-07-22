@@ -164,8 +164,22 @@ fn chain_value(expr: &Expr) -> Result<Vec<ChainOrRpc>, EqlSqlError> {
 pub fn extract_chains(conds: &mut Vec<Condition>) -> Result<Vec<ChainOrRpc>, EqlSqlError> {
     let mut chains: Vec<ChainOrRpc> = Vec::new();
     let mut kept = Vec::new();
+    // Unlike `blocks.number` (`build_block` in `translate.rs`), which
+    // intentionally allows repeated conditions to combine an exact match
+    // with a range, `chain` has no such use for a second condition:
+    // `chain = a AND chain = b` can never match (a contradiction, and
+    // duplicates every row when `a == b`), so a second `chain` condition is
+    // rejected rather than silently unioned. `IN (...)` is the sanctioned
+    // way to match several chains.
+    let mut chain_conditions = 0u32;
     for cond in conds.drain(..) {
         if cond.column == "chain" {
+            chain_conditions += 1;
+            if chain_conditions > 1 {
+                return Err(EqlSqlError::NotSupported(
+                    "chain is given more than once; use IN (...) to match several chains".into(),
+                ));
+            }
             match cond.op {
                 CondOp::Eq | CondOp::In => {
                     for value in &cond.values {
@@ -250,6 +264,21 @@ mod tests {
         let sel = where_of("SELECT a FROM t WHERE chain IN (eth, base)");
         let mut conds = split_conditions(sel.as_ref()).unwrap();
         assert_eq!(extract_chains(&mut conds).unwrap().len(), 2);
+    }
+
+    // Fix 1: a second, separate `chain` condition is a contradiction in SQL
+    // terms (`chain = a AND chain = b` can never match, and duplicates every
+    // row when `a == b`), not a union — `IN (...)` is the sanctioned way to
+    // match several chains. Unlike `blocks.number` (`build_block` in
+    // `translate.rs`), which intentionally allows repeated conditions to
+    // combine an exact match with a range, `chain` has no such use for a
+    // second condition.
+    #[test]
+    fn duplicate_chain_condition_is_rejected_clearly() {
+        let sel = where_of("SELECT a FROM t WHERE chain = eth AND chain = eth");
+        let mut conds = split_conditions(sel.as_ref()).unwrap();
+        let err = extract_chains(&mut conds).unwrap_err().to_string();
+        assert!(err.contains("chain") && err.contains("IN"), "{err}");
     }
 
     #[test]

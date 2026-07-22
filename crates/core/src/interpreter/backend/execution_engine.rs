@@ -85,14 +85,16 @@ impl ExecutionEngine {
                     ))
                     .into());
                 }
-                // No aliases: preserve the pre-existing behavior of
-                // discarding a failed dump rather than failing the whole
-                // query. Aliases apply to JSON exports only (CSV/Parquet
-                // exports and the REPL table are out of scope for this v1);
-                // a query with aliases but no `dump` at all never reaches
-                // this block, so the aliases are silently unused.
+                // No aliases: same write path as the aliased branch above —
+                // `COPY`'s entire purpose is the file write, so a failed
+                // write (full disk, bad path, ...) must fail the query
+                // rather than silently report success. `dump_results`
+                // returns `Box<dyn Error>`, which doesn't implement
+                // `std::error::Error` itself, so it can't cross a bare `?`
+                // into `anyhow::Result`; convert it explicitly.
                 (None, _) => {
-                    let _ = dump_results(&result, dump);
+                    dump_results(&result, dump)
+                        .map_err(|e| anyhow::anyhow!("failed to write export: {e}"))?;
                 }
             }
         }

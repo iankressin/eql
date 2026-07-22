@@ -470,9 +470,22 @@ fn build_account(fields: &[String], conds: Vec<Condition>) -> Result<Entity, Eql
             .collect::<Result<Vec<_>, _>>()?
     };
     let mut ids = Vec::new();
+    // Unlike `blocks.number` (`build_block` below), which intentionally
+    // allows repeated conditions to combine an exact match with a range,
+    // `address` is a plain identity column: `address = a AND address = b`
+    // can never match (a contradiction), so a second condition is rejected
+    // rather than silently unioned. `IN (...)` is the sanctioned way to
+    // match several addresses.
+    let mut address_seen = false;
     for cond in conds {
         match (cond.column.as_str(), cond.op) {
             ("address", CondOp::Eq) | ("address", CondOp::In) => {
+                if address_seen {
+                    return Err(EqlSqlError::NotSupported(
+                        "accounts.address is given more than once; use IN (...) to match several addresses".into(),
+                    ));
+                }
+                address_seen = true;
                 for value in &cond.values {
                     ids.push(values::parse_name_or_address(value)?);
                 }
@@ -492,6 +505,15 @@ fn build_account(fields: &[String], conds: Vec<Condition>) -> Result<Entity, Eql
     Ok(Entity::Account(Account::new(Some(ids), None, fields)))
 }
 
+// Unlike `accounts.address`/`transactions.hash`/`chain` (Fix 1: see
+// `build_account`, `build_transaction` and `where_clause::extract_chains`),
+// `blocks.number` deliberately allows more than one condition: it's the only
+// way to express a mixed number-and-range selection (e.g. `number = 1 AND
+// number BETWEEN 2 AND 5`), and the legacy `GET`-query translator
+// (`sql/legacy.rs`) renders multi-id legacy block queries — including mixed
+// lists like `1,2:5,10` — as exactly that shape. Do not add duplicate
+// rejection here; see `block_mixed_number_and_range_round_trips` (legacy.rs)
+// and `block_repeated_number_still_unions` (this module's tests).
 fn build_block(fields: &[String], conds: Vec<Condition>) -> Result<Entity, EqlSqlError> {
     let fields = if fields == ["*"] {
         BlockField::all_variants().to_vec()
@@ -636,10 +658,23 @@ fn build_transaction(fields: &[String], conds: Vec<Condition>) -> Result<Entity,
 
     let mut ids: Vec<alloy::primitives::B256> = Vec::new();
     let mut filters: Vec<TransactionFilter> = Vec::new();
+    // Unlike `blocks.number` (`build_block`), which intentionally allows
+    // repeated conditions to combine an exact match with a range, `hash` is
+    // a plain identity column: `hash = a AND hash = b` can never match (a
+    // contradiction), so a second condition is rejected rather than
+    // silently unioned. `IN (...)` is the sanctioned way to match several
+    // hashes.
+    let mut hash_seen = false;
 
     for cond in &conds {
         match (cond.column.as_str(), cond.op) {
             ("hash", CondOp::Eq) | ("hash", CondOp::In) => {
+                if hash_seen {
+                    return Err(EqlSqlError::NotSupported(
+                        "transactions.hash is given more than once; use IN (...) to match several hashes".into(),
+                    ));
+                }
+                hash_seen = true;
                 for value in &cond.values {
                     ids.push(values::parse_b256(value)?);
                 }
@@ -960,6 +995,23 @@ mod tests {
         assert_eq!(account.fields(), AccountField::all_variants().to_vec());
     }
 
+    // Fix 1: a repeated key predicate on a key column (`address`, `hash`,
+    // `chain`) is a contradiction in SQL terms (`x = a AND x = b` can never
+    // match), not a union — `IN (...)` is the sanctioned way to match
+    // several values. `blocks.number` is deliberately exempt (see
+    // `build_block`'s doc comment and `block_repeated_number_still_unions`
+    // below): it's the only way to express a mixed number+range selection.
+
+    #[test]
+    fn account_duplicate_address_is_rejected_clearly() {
+        let err = translate_one(
+            "SELECT nonce FROM accounts WHERE address = ian.eth AND address = vitalik.eth AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("address") && err.contains("IN"), "{err}");
+    }
+
     #[test]
     fn block_number_eq_between_and_limit() {
         let expr = translate_one(
@@ -979,6 +1031,35 @@ mod tests {
                 BlockNumberOrTag::Number(1),
                 Some(BlockNumberOrTag::Number(100)),
             ))]
+        );
+    }
+
+    #[test]
+    fn block_repeated_number_still_unions() {
+        // Blocks are deliberately exempt from Fix 1's duplicate-key
+        // rejection (see `build_block`'s doc comment): repeating `number` is
+        // the only way to combine an exact match with a range in one query
+        // (e.g. `number = 1 AND number BETWEEN 2 AND 5`), and the legacy
+        // `GET`-to-SQL translator (`legacy.rs`) renders multi-id legacy
+        // block queries this way. This test locks in that a repeated
+        // `number` predicate keeps translating (as a union), unlike the
+        // `address`/`hash`/`chain` cases below.
+        let expr = translate_one(
+            "SELECT hash FROM blocks WHERE number = 1 AND number = 2 AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
+        let crate::common::entity::Entity::Block(block) = get.entity else {
+            panic!()
+        };
+        assert_eq!(
+            block.ids().unwrap(),
+            &vec![
+                BlockId::Number(BlockNumberOrTag::Number(1)),
+                BlockId::Number(BlockNumberOrTag::Number(2)),
+            ]
         );
     }
 
@@ -1397,6 +1478,36 @@ mod tests {
             panic!()
         };
         assert_eq!(tx.ids().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn tx_hash_in_list_still_unions() {
+        let expr = translate_one(
+            "SELECT * FROM tx WHERE hash IN (0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247, \
+             0x0000000000000000000000000000000000000000000000000000000000000001) AND chain = eth",
+        )
+        .unwrap();
+        let Expression::Get(get) = expr else {
+            panic!("not a Get")
+        };
+        let crate::common::entity::Entity::Transaction(tx) = get.entity else {
+            panic!()
+        };
+        assert_eq!(tx.ids().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn tx_duplicate_hash_is_rejected_clearly() {
+        // Fix 1: `hash = a AND hash = b` is a contradiction, not a union —
+        // `IN (...)` is the sanctioned way to match several hashes (see the
+        // `Fix 1` comment above `account_duplicate_address_is_rejected_clearly`).
+        let err = translate_one(
+            "SELECT * FROM tx WHERE hash = 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 \
+             AND hash = 0x0000000000000000000000000000000000000000000000000000000000000001 AND chain = eth",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("hash") && err.contains("IN"), "{err}");
     }
 
     #[test]
