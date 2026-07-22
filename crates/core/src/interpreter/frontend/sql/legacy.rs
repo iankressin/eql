@@ -19,7 +19,7 @@
 use super::EqlSqlError;
 use crate::common::{
     account::{Account, AccountField},
-    block::{Block, BlockField, BlockId},
+    block::{Block, BlockField, BlockFilter, BlockId, BlockRange},
     chain::{Chain, ChainOrRpc},
     entity::Entity,
     filters::{ComparisonFilter, EqualityFilter, FilterType},
@@ -78,16 +78,22 @@ fn tag(t: &BlockNumberOrTag) -> String {
     }
 }
 
+/// Renders a `BlockRange` as `{column} = <start>` (no end) or `{column}
+/// BETWEEN <start> AND <end>` — shared by every place a legacy range shows
+/// up: `BlockId::Range` (block/tx ids), `BlockFilter::Range` (the block
+/// entity's `WHERE block = ...` filter), and `LogFilter::BlockRange`.
+fn range_condition(column: &str, range: &BlockRange) -> String {
+    let (start, end) = range.range();
+    match end {
+        Some(end) => format!("{column} BETWEEN {} AND {}", tag(&start), tag(&end)),
+        None => format!("{column} = {}", tag(&start)),
+    }
+}
+
 fn block_id_condition(column: &str, id: &BlockId) -> String {
     match id {
         BlockId::Number(n) => format!("{column} = {}", tag(n)),
-        BlockId::Range(range) => {
-            let (start, end) = range.range();
-            match end {
-                Some(end) => format!("{column} BETWEEN {} AND {}", tag(&start), tag(&end)),
-                None => format!("{column} = {}", tag(&start)),
-            }
-        }
+        BlockId::Range(range) => range_condition(column, range),
     }
 }
 
@@ -178,7 +184,25 @@ fn cmp_condition<T: Display>(column: &str, filter: &FilterType<T>) -> String {
     }
 }
 
-fn render_account(account: &Account) -> (&'static str, String, Vec<String>) {
+/// What rendering one entity produces: either the `(table, fields,
+/// conditions)` that `render` assembles into `SELECT ... FROM ... WHERE
+/// ...`, or — when the new frontend requires a predicate the legacy
+/// grammar never did (`render_logs`/`render_transaction`'s missing-
+/// predicate checks) — a plain-English explanation instead of a query
+/// that would parse as SQL but fail the moment it's pasted in. A query the
+/// user can't paste back in is bad; a query that *looks* runnable but
+/// silently isn't is worse, because it's indistinguishable from a correct
+/// suggestion until it's already been pasted and run.
+enum Rendered {
+    Query {
+        table: &'static str,
+        fields: String,
+        conditions: Vec<String>,
+    },
+    NoEquivalent(String),
+}
+
+fn render_account(account: &Account) -> Rendered {
     let field_list_str = field_list(&account.fields(), AccountField::all_variants());
     let mut conditions = Vec::new();
     // `Account.id` is `Some(non-empty)` for every legacy query that
@@ -193,10 +217,14 @@ fn render_account(account: &Account) -> (&'static str, String, Vec<String>) {
             conditions.push(ids_condition("address", ids));
         }
     }
-    ("accounts", field_list_str, conditions)
+    Rendered::Query {
+        table: "accounts",
+        fields: field_list_str,
+        conditions,
+    }
 }
 
-fn render_block(block: &Block) -> (&'static str, String, Vec<String>) {
+fn render_block(block: &Block) -> Rendered {
     let field_list_str = field_list(block.fields(), BlockField::all_variants());
     let mut conditions = Vec::new();
     if let Some(ids) = block.ids() {
@@ -204,17 +232,39 @@ fn render_block(block: &Block) -> (&'static str, String, Vec<String>) {
             conditions.push(block_id_condition("number", id));
         }
     }
-    ("blocks", field_list_str, conditions)
-}
-
-fn render_transaction(tx: &Transaction) -> (&'static str, String, Vec<String>) {
-    let field_list_str = field_list(tx.fields(), TransactionField::all_variants());
-    let mut conditions = Vec::new();
-    if let Some(ids) = tx.ids() {
-        if !ids.is_empty() {
-            conditions.push(ids_condition("hash", ids));
+    // The legacy grammar's other production for a block entity —
+    // `block_filter_list` (`WHERE block = ...`) — populates `filter`
+    // instead of `ids` (leaving `ids` as `Some(vec![])`). Matched
+    // exhaustively (one variant, `BlockFilter::Range`) so this can't
+    // silently vanish from the suggestion the way it used to: `ids()` and
+    // `filters()` are independent `Option`s on `Block`, and only reading
+    // the first one meant a `WHERE block = ...` legacy query rendered a
+    // suggestion with the block predicate simply missing.
+    if let Some(filters) = block.filters() {
+        for filter in filters {
+            match filter {
+                BlockFilter::Range(range) => conditions.push(range_condition("number", range)),
+            }
         }
     }
+    Rendered::Query {
+        table: "blocks",
+        fields: field_list_str,
+        conditions,
+    }
+}
+
+fn render_transaction(tx: &Transaction) -> Rendered {
+    let field_list_str = field_list(tx.fields(), TransactionField::all_variants());
+    let mut conditions = Vec::new();
+    let has_hash = match tx.ids() {
+        Some(ids) if !ids.is_empty() => {
+            conditions.push(ids_condition("hash", ids));
+            true
+        }
+        _ => false,
+    };
+    let mut has_block = false;
     if let Some(filters) = tx.filters() {
         // At most one `BlockId` filter is ever rendered: the runtime
         // engine's own accessor, `Transaction::get_block_id_filter`, picks
@@ -227,13 +277,12 @@ fn render_transaction(tx: &Transaction) -> (&'static str, String, Vec<String>) {
         // `sql::translate::push_block_id_filter` rejects outright as a
         // duplicate — trading a query that worked (if ambiguously) for
         // one that errors.
-        let mut seen_block_id = false;
         for filter in filters {
             match filter {
                 TransactionFilter::BlockId(id) => {
-                    if !seen_block_id {
+                    if !has_block {
                         conditions.push(block_id_condition("block_number", id));
-                        seen_block_id = true;
+                        has_block = true;
                     }
                 }
                 TransactionFilter::Type(f) => conditions.push(eq_condition("type", f)),
@@ -277,12 +326,32 @@ fn render_transaction(tx: &Transaction) -> (&'static str, String, Vec<String>) {
             }
         }
     }
-    ("transactions", field_list_str, conditions)
+    // Mirrors `sql::translate::build_transaction`'s own requirement: a
+    // transaction needs a hash or a block predicate. The legacy
+    // `tx_filter_list` grammar never enforced this — a query filtering
+    // only on e.g. `gas_price` parses fine — so this is a real gap, not a
+    // rendering choice. There is no predicate for `render` to invent (the
+    // user never wrote one), so rather than emit SQL that parses but then
+    // fails `build_transaction`'s check with no context, say so plainly.
+    if !has_hash && !has_block {
+        return Rendered::NoEquivalent(format!(
+            "EQL 2 has no equivalent for this query: transactions require a hash or a \
+             block predicate (e.g. \"hash = <hash>\" or \"block_number = <n>\"), which this \
+             legacy query never specified. Add one before it can be translated. \
+             (requested fields: {field_list_str})"
+        ));
+    }
+    Rendered::Query {
+        table: "transactions",
+        fields: field_list_str,
+        conditions,
+    }
 }
 
-fn render_logs(logs: &Logs) -> (&'static str, String, Vec<String>) {
+fn render_logs(logs: &Logs) -> Rendered {
     let field_list_str = field_list(logs.fields(), LogField::all_variants());
     let mut conditions = Vec::new();
+    let mut has_block = false;
     for filter in logs.filter() {
         conditions.push(match filter {
             LogFilter::EmitterAddress(a) => format!("address = {a}"),
@@ -290,28 +359,53 @@ fn render_logs(logs: &Logs) -> (&'static str, String, Vec<String>) {
             LogFilter::Topic1(t) => format!("topic1 = {t}"),
             LogFilter::Topic2(t) => format!("topic2 = {t}"),
             LogFilter::Topic3(t) => format!("topic3 = {t}"),
-            LogFilter::BlockHash(h) => format!("block_hash = {h}"),
+            LogFilter::BlockHash(h) => {
+                has_block = true;
+                format!("block_hash = {h}")
+            }
             LogFilter::EventSignature(s) => format!("event_signature = '{s}'"),
             LogFilter::BlockRange(range) => {
-                let (start, end) = range.range();
-                match end {
-                    Some(end) => {
-                        format!("block_number BETWEEN {} AND {}", tag(&start), tag(&end))
-                    }
-                    None => format!("block_number = {}", tag(&start)),
-                }
+                has_block = true;
+                range_condition("block_number", range)
             }
         });
     }
-    ("logs", field_list_str, conditions)
+    // Mirrors `sql::translate::build_logs`'s own requirement: logs need a
+    // `block_number` or `block_hash` predicate. The legacy
+    // `log_filter_list` grammar never enforced this — a query filtering
+    // only on e.g. `address` parses fine — so this is a real gap, not a
+    // rendering choice. There is no predicate for `render` to invent (the
+    // user never wrote one), so rather than emit SQL that parses but then
+    // fails `build_logs`'s check with no context, say so plainly.
+    if !has_block {
+        return Rendered::NoEquivalent(format!(
+            "EQL 2 has no equivalent for this query: logs require a block predicate \
+             (e.g. \"block_number = <n>\", \"block_number BETWEEN <a> AND <b>\", or \
+             \"block_hash = <hash>\"), which this legacy query never specified. Add one \
+             before it can be translated. (requested fields: {field_list_str})"
+        ));
+    }
+    Rendered::Query {
+        table: "logs",
+        fields: field_list_str,
+        conditions,
+    }
 }
 
 fn render(get: &GetExpression) -> String {
-    let (table, field_list_str, mut conditions) = match &get.entity {
+    let rendered = match &get.entity {
         Entity::Account(account) => render_account(account),
         Entity::Block(block) => render_block(block),
         Entity::Transaction(tx) => render_transaction(tx),
         Entity::Logs(logs) => render_logs(logs),
+    };
+    let (table, field_list_str, mut conditions) = match rendered {
+        Rendered::Query {
+            table,
+            fields,
+            conditions,
+        } => (table, fields, conditions),
+        Rendered::NoEquivalent(message) => return message,
     };
     conditions.push(chains_condition(&get.chains));
     let select = format!(
@@ -346,6 +440,36 @@ mod tests {
         for stmt in &stmts {
             super::super::translate::statement_to_expression(stmt)
                 .unwrap_or_else(|e| panic!("translate failed for {sql:?}: {e}"));
+        }
+    }
+
+    /// The complement of `assert_round_trips`, for the "no EQL 2
+    /// equivalent" messages: asserts `text` does **not** parse as SQL at
+    /// all (via the same `prelex` + `sqlparser` pipeline), so a user who
+    /// pastes it verbatim gets an immediate, obvious "this isn't SQL"
+    /// failure rather than something that looks like a runnable query.
+    fn assert_not_valid_sql(text: &str) {
+        let prelexed =
+            super::super::prelex::prelex(text).unwrap_or_else(|e| panic!("{text:?}: {e}"));
+        assert!(
+            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, &prelexed)
+                .is_err(),
+            "expected {text:?} to NOT parse as SQL, but it did"
+        );
+    }
+
+    /// Unwraps `Rendered::Query`, panicking (naming the message) if
+    /// `render_account`/`render_block` ever returned `NoEquivalent` —
+    /// which neither can today, but this keeps the panic message useful
+    /// if that ever changes.
+    fn as_query(rendered: Rendered) -> (&'static str, String, Vec<String>) {
+        match rendered {
+            Rendered::Query {
+                table,
+                fields,
+                conditions,
+            } => (table, fields, conditions),
+            Rendered::NoEquivalent(message) => panic!("expected a Query, got: {message}"),
         }
     }
 
@@ -518,6 +642,69 @@ mod tests {
     }
 
     #[test]
+    fn block_where_filter_range_round_trips() {
+        // Unreachable via any legacy *source string* today: pest's grammar
+        // matches `WHERE block = 100` fine (`blockrange_filter` is a real,
+        // ordinary alternative in `block_get`'s production), but
+        // `BlockFilter::try_from` (block.rs) then does
+        // `value.as_str().trim_start_matches("block ").trim()` — it strips
+        // the literal "block " prefix but never strips the `=` that
+        // follows, so `parse_block_number_or_tag` is always handed a
+        // leftover "= 100" and fails. Confirmed by running the pest parser
+        // directly against "block = 100", "block=100", "block =100", and
+        // "block= 100": every spacing variant errors before `Block::
+        // try_from` ever returns a value with `filter: Some(...)`. This
+        // corrects an imprecise claim in this task's original report,
+        // which said the block WHERE-filter syntax "fails to parse" the
+        // same way accounts' does — the *grammar* parses it; it's this
+        // separate, pre-existing Rust-level trim bug in `block.rs`
+        // (unrelated to this task, not fixed here) that breaks it before
+        // `render` ever sees it.
+        //
+        // `render_block` still has to handle `Block.filter` being
+        // populated correctly: that trim bug is a one-line difference from
+        // `TransactionFilter::try_from`'s equivalent code (which does
+        // strip the `=`), so it's a plausible near-term fix, at which
+        // point this becomes reachable. A `Block`/`GetExpression` built
+        // directly (bypassing pest) is the only way to exercise it today.
+        let get = GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![]),
+                Some(vec![BlockFilter::Range(BlockRange::new(
+                    BlockNumberOrTag::Number(100),
+                    None,
+                ))]),
+                vec![BlockField::Number],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+            limit: None,
+            aliases: None,
+        };
+        let sql = render(&get);
+        assert!(sql.contains("number = 100"), "{sql}");
+        assert_round_trips(&sql);
+
+        let get = GetExpression {
+            entity: Entity::Block(Block::new(
+                Some(vec![]),
+                Some(vec![BlockFilter::Range(BlockRange::new(
+                    BlockNumberOrTag::Number(100),
+                    Some(BlockNumberOrTag::Number(200)),
+                ))]),
+                vec![BlockField::Number],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+            limit: None,
+            aliases: None,
+        };
+        let sql = render(&get);
+        assert!(sql.contains("number BETWEEN 100 AND 200"), "{sql}");
+        assert_round_trips(&sql);
+    }
+
+    #[test]
     fn tx_multiple_hashes_become_in_list() {
         let err = suggestion(
             "GET hash FROM tx 0x8a6a279a4d28dcc62bcb2f2a3214c93345c107b74f3081754e27471c50783f81, \
@@ -596,31 +783,70 @@ mod tests {
         assert_round_trips(&err);
     }
 
-    // --- A known gap: intentionally NOT papered over ------------------
+    // --- Known gaps: no EQL 2 equivalent, said plainly, not papered over -
 
     #[test]
-    fn logs_without_any_block_predicate_does_not_round_trip() {
+    fn logs_without_any_block_predicate_says_so_plainly() {
         // The legacy grammar's `log_filter_list` accepts *any* single log
         // filter (it doesn't require a block one), but
         // `sql::translate::build_logs` (Task 7) requires block_number or
         // block_hash. This is a real gap between what the old grammar
         // accepted and what the new frontend requires — not something
         // `render` can paper over without inventing a predicate the user
-        // never wrote. Documented here rather than silently "fixed" by
-        // fabricating one.
+        // never wrote. Rather than emit SQL that parses but then fails
+        // `build_logs`'s check with an error naming nothing the user
+        // wrote, the suggestion says plainly that there's no equivalent
+        // and names the missing predicate.
         let err = suggestion(
             "GET address FROM log WHERE address = 0x1234567890123456789012345678901234567890 ON eth",
         );
-        let prelexed = super::super::prelex::prelex(&err).unwrap();
-        let stmts =
-            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, &prelexed)
-                .unwrap();
-        let translate_err =
-            super::super::translate::statement_to_expression(&stmts[0]).unwrap_err();
+        assert!(err.to_ascii_lowercase().contains("no equivalent"), "{err}");
         assert!(
-            translate_err.to_string().contains("block"),
-            "{translate_err}"
+            err.contains("block_number") && err.contains("block_hash"),
+            "{err}"
         );
+        assert_not_valid_sql(&err);
+    }
+
+    #[test]
+    fn tx_without_hash_or_block_says_so_plainly() {
+        // `tx_filter_list` makes `block` just one alternative among many —
+        // a query filtering only on e.g. `gas_price` parses fine — but
+        // `sql::translate::build_transaction` (Task 7) requires a hash or
+        // a block predicate. Same treatment as logs above: say so plainly
+        // rather than emit an unrunnable-looking-runnable query.
+        let err = suggestion("GET value FROM tx WHERE gas_price > 100 ON eth");
+        assert!(err.to_ascii_lowercase().contains("no equivalent"), "{err}");
+        assert!(
+            err.contains("hash") && err.contains("block_number"),
+            "{err}"
+        );
+        assert_not_valid_sql(&err);
+    }
+
+    #[test]
+    fn no_equivalent_message_is_returned_as_is_with_no_chain_condition_appended() {
+        // `render` must return the plain message directly, not treat it as
+        // a partial query body and append `AND chain = eth` (or a `COPY`
+        // wrapper) to it — that would turn an honest "no equivalent"
+        // message back into something that looks like a query fragment.
+        let get = GetExpression {
+            entity: Entity::Logs(Logs::new(
+                vec![LogFilter::EmitterAddress(
+                    "0x1234567890123456789012345678901234567890"
+                        .parse()
+                        .unwrap(),
+                )],
+                vec![LogField::Address],
+            )),
+            chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
+            dump: None,
+            limit: None,
+            aliases: None,
+        };
+        let sql = render(&get);
+        assert!(!sql.contains("chain"), "{sql}");
+        assert!(!sql.contains("SELECT"), "{sql}");
     }
 
     // --- Chains --------------------------------------------------------
@@ -722,7 +948,7 @@ mod tests {
         // doc comment), but constructed directly here so `render` is
         // proven not to panic if that ever changed.
         let account = Account::new(None, None, vec![AccountField::Nonce]);
-        let (table, fields, conditions) = render_account(&account);
+        let (table, fields, conditions) = as_query(render_account(&account));
         assert_eq!(table, "accounts");
         assert_eq!(fields, "nonce");
         assert!(conditions.is_empty());
@@ -731,7 +957,7 @@ mod tests {
     #[test]
     fn block_with_empty_ids_does_not_panic() {
         let block = Block::new(Some(vec![]), None, vec![BlockField::Number]);
-        let (table, _fields, conditions) = render_block(&block);
+        let (table, _fields, conditions) = as_query(render_block(&block));
         assert_eq!(table, "blocks");
         assert!(conditions.is_empty());
     }
