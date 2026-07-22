@@ -1,28 +1,28 @@
-GET hash, size  FROM block 1 ON eth
+SELECT hash, size FROM blocks WHERE number = 1 AND chain = eth;
 
-GET hash, size  FROM block 1:10 ON eth
+SELECT hash, size FROM blocks WHERE number BETWEEN 1 AND 10 AND chain = eth;
 
-GET nonce, balance FROM account 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 ON eth
+SELECT nonce, balance FROM accounts
+WHERE address = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 AND chain = eth;
 
-GET from, to, value, gas_price, status FROM tx 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247 ON eth
+SELECT from_address, to_address, value, gas_price, status FROM transactions
+WHERE hash = 0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247
+  AND chain = eth;
 
-GET 
-    from, 
-    to,
-    value,
-    gas_price,
-    status 
-FROM tx 
+SELECT from_address, to_address, value, gas_price, status FROM transactions
+WHERE hash IN (
     0x6f93d4add2ef6cdfbb9f25b9895830d719dd8edf6637b639d5c33e808ded4247,
     0xa9e39789f09753e7afa0838c52e3dd332627f1b18eec07e1652ede6f5a958fa1
-ON eth
+  )
+  AND chain = eth;
 
-GET * 
-FROM log 
-WHERE 
-    block 4638657:4638758, 
-    address 0xdAC17F958D2ee523a2206206994597C13D831ec7, 
-    topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a 
-ON eth
+SELECT * FROM logs
+WHERE address = 0xdAC17F958D2ee523a2206206994597C13D831ec7
+  AND topic0 = 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a
+  AND block_number BETWEEN 4638657 AND 4638758
+  AND chain = eth;
 
-GET * FROM log WHERE event_signature Confirmation(address,uint256), block 4638757 ON eth
+SELECT * FROM logs
+WHERE event_signature = 'Confirmation(address,uint256)'
+  AND block_number = 4638757
+  AND chain = eth;

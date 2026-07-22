@@ -1,1 +1,2 @@
-GET authorization_list FROM tx WHERE block = 45090 ON mekong
+SELECT authorization_list FROM transactions
+WHERE block_number = 45090 AND chain = mekong;

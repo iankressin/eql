@@ -4,7 +4,6 @@ pub mod frontend;
 use crate::common::{query_result::QueryResult, types::Expression};
 use anyhow::Result;
 use backend::execution_engine::ExecutionEngine;
-use frontend::parser::Parser;
 
 pub struct Interpreter;
 
@@ -23,7 +22,7 @@ impl Interpreter {
     }
 
     fn run_frontend(source: &str) -> Result<Vec<Expression>> {
-        let expressions = Parser::new(source).parse_expressions()?;
+        let expressions = frontend::sql::parse_program(source)?;
         Ok(expressions)
     }
 

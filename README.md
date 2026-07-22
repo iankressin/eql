@@ -13,7 +13,7 @@ EQL provides a declarative way to query Ethereum Virtual Machine (EVM) chains. I
 
 ```sql
 # Fetch Vitalik's balance across multiple chains
-GET balance, balance FROM account vitalik.eth ON eth, base, arbitrum
+SELECT balance FROM accounts WHERE address = vitalik.eth AND chain IN (eth, base, arb)
 ```
 
 ## Table of Contents
@@ -69,7 +69,7 @@ EQL uses a two-phase interpreter to transform your queries into RPC calls:
 
 For example, this query:
 ```sql
-GET balance, nonce FROM account vitalik.eth ON eth
+SELECT balance, nonce FROM accounts WHERE address = vitalik.eth AND chain = eth
 ```
 
 Gets transformed into:
@@ -112,7 +112,7 @@ eql_core = "0.1"
 use eql_core::interpreter::Interpreter;
 
 async fn main() {
-    let query = "GET balance FROM account vitalik.eth ON eth";
+    let query = "SELECT balance FROM accounts WHERE address = vitalik.eth AND chain = eth";
     let result = Interpreter::run_program(query).await?;
 }
 ```
@@ -129,7 +129,7 @@ async fn main() {
 - **Logs**
 
 ### Supported Operations
-- **GET**: Query entity data
+- **SELECT**: Query entity data
 - **Filtering**: WHERE clauses for precise queries
 - **Cross-chain**: Query multiple chains in one go
 - **Data Export**: CSV, JSON, Parquet formats
