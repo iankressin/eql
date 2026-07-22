@@ -27,6 +27,22 @@ pub enum ExpressionResult {
     Log(Vec<LogQueryRes>),
 }
 
+impl ExpressionResult {
+    /// Caps the row count to `n`, applying `LIMIT` after the rows have
+    /// already been fetched (v1: no pushdown to Portal). Every arm truncates
+    /// the same underlying `Vec`, so there's deliberately no wildcard arm —
+    /// a variant added to `ExpressionResult` later without a matching arm
+    /// here is a compile error, not a silent no-op for that entity type.
+    pub fn truncate(&mut self, n: usize) {
+        match self {
+            ExpressionResult::Account(v) => v.truncate(n),
+            ExpressionResult::Block(v) => v.truncate(n),
+            ExpressionResult::Transaction(v) => v.truncate(n),
+            ExpressionResult::Log(v) => v.truncate(n),
+        }
+    }
+}
+
 // TODO: should this be replaced with Alloy's Block?
 #[serde_with::skip_serializing_none]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
@@ -106,8 +122,9 @@ pub struct TransactionQueryRes {
     pub chain: Option<Chain>,
     pub r#type: Option<u8>,
     pub hash: Option<FixedBytes<32>>,
-    pub from: Option<Address>,
-    pub to: Option<Address>,
+    pub block_number: Option<u64>,
+    pub from_address: Option<Address>,
+    pub to_address: Option<Address>,
     pub data: Option<Bytes>,
     #[serde(serialize_with = "serialize_option_u256")]
     pub value: Option<U256>,
@@ -132,8 +149,9 @@ impl Default for TransactionQueryRes {
             chain: None,
             r#type: None,
             hash: None,
-            from: None,
-            to: None,
+            block_number: None,
+            from_address: None,
+            to_address: None,
             data: None,
             value: None,
             gas_price: None,
@@ -158,8 +176,9 @@ impl TransactionQueryRes {
         self.chain.is_some()
             || self.r#type.is_some()
             || self.hash.is_some()
-            || self.from.is_some()
-            || self.to.is_some()
+            || self.block_number.is_some()
+            || self.from_address.is_some()
+            || self.to_address.is_some()
             || self.data.is_some()
             || self.value.is_some()
             || self.gas_price.is_some()
@@ -188,11 +207,14 @@ impl TransactionQueryRes {
         if let Some(hash) = &self.hash {
             fields.push(("hash", Some(format!("{hash:?}"))));
         }
-        if let Some(from) = &self.from {
-            fields.push(("from", Some(from.to_string())));
+        if let Some(block_number) = &self.block_number {
+            fields.push(("block_number", Some(block_number.to_string())));
         }
-        if let Some(to) = &self.to {
-            fields.push(("to", Some(to.to_string())));
+        if let Some(from) = &self.from_address {
+            fields.push(("from_address", Some(from.to_string())));
+        }
+        if let Some(to) = &self.to_address {
+            fields.push(("to_address", Some(to.to_string())));
         }
         if let Some(data) = &self.data {
             fields.push(("data", Some(format!("{data:?}"))));
@@ -348,7 +370,9 @@ mod test {
     use std::str::FromStr;
 
     use super::serialize_option_u256;
-    use alloy::primitives::U256;
+    use super::TransactionQueryRes;
+    use super::{AccountQueryRes, BlockQueryRes, ExpressionResult, LogQueryRes};
+    use alloy::primitives::{Address, U256};
     use serde::Serialize;
     use serde_json::json;
 
@@ -364,5 +388,84 @@ mod test {
         let u256 = U256Serializable { value: Some(value) };
         let u256_str = json!(u256).to_string();
         assert_eq!("{\"value\":\"100\"}", u256_str);
+    }
+
+    #[test]
+    fn transaction_res_serializes_renamed_keys() {
+        let mut res = TransactionQueryRes::default();
+        res.from_address = Some(Address::ZERO);
+        res.to_address = Some(Address::ZERO);
+        res.block_number = Some(1u64);
+        let json = serde_json::to_value(&res).unwrap();
+        assert!(json.get("from_address").is_some());
+        assert!(json.get("to_address").is_some());
+        assert!(json.get("block_number").is_some());
+        assert!(json.get("from").is_none());
+        assert!(json.get("to").is_none());
+    }
+
+    #[test]
+    fn truncate_caps_each_variant() {
+        let mut res = ExpressionResult::Block(vec![BlockQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Block(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    // `truncate_caps_each_variant` only exercises `Block`; the match in
+    // `ExpressionResult::truncate` has no wildcard arm, so a variant added
+    // later without a corresponding `truncate` arm would fail to compile —
+    // but these three guard against the arm being present yet wrong (e.g.
+    // caps the wrong field, or a copy-paste that truncates a fixed length).
+    #[test]
+    fn truncate_caps_account_variant() {
+        let mut res = ExpressionResult::Account(vec![AccountQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Account(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn truncate_caps_transaction_variant() {
+        let mut res = ExpressionResult::Transaction(vec![TransactionQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Transaction(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn truncate_caps_log_variant() {
+        let mut res = ExpressionResult::Log(vec![LogQueryRes::default(); 5]);
+        res.truncate(2);
+        let ExpressionResult::Log(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn truncate_to_zero_empties_the_result() {
+        let mut res = ExpressionResult::Block(vec![BlockQueryRes::default(); 3]);
+        res.truncate(0);
+        let ExpressionResult::Block(rows) = &res else {
+            panic!()
+        };
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn truncate_past_the_row_count_is_a_no_op() {
+        let mut res = ExpressionResult::Block(vec![BlockQueryRes::default(); 3]);
+        res.truncate(10);
+        let ExpressionResult::Block(rows) = &res else {
+            panic!()
+        };
+        assert_eq!(rows.len(), 3);
     }
 }

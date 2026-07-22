@@ -10,6 +10,19 @@ use pest::iterators::Pairs;
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Get(GetExpression),
+    Set(SetRpcExpression),
+}
+
+/// A session-scoped RPC override produced by `SET rpc_<chain> = '<url>'`.
+///
+/// The execution engine applies this by calling
+/// `Config::set_session_rpc`, which changes `Chain::rpc_url`'s behavior for
+/// every later query in the process (see `config.rs` for the blast radius).
+/// It never resolves into a `QueryResult` the way `GetExpression` does.
+#[derive(Debug, PartialEq)]
+pub struct SetRpcExpression {
+    pub chain: Chain,
+    pub url: Url,
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,14 +30,24 @@ pub struct GetExpression {
     pub entity: Entity,
     pub chains: Vec<ChainOrRpc>,
     pub dump: Option<Dump>,
+    pub limit: Option<usize>,
+    pub aliases: Option<std::collections::HashMap<String, String>>,
 }
 
 impl GetExpression {
-    fn new(entity: Entity, chains: Vec<ChainOrRpc>, dump: Option<Dump>) -> Self {
+    fn new(
+        entity: Entity,
+        chains: Vec<ChainOrRpc>,
+        dump: Option<Dump>,
+        limit: Option<usize>,
+        aliases: Option<std::collections::HashMap<String, String>>,
+    ) -> Self {
         Self {
             entity,
             chains,
             dump,
+            limit,
+            aliases,
         }
     }
 }
@@ -83,6 +106,8 @@ impl TryFrom<Pairs<'_, Rule>> for GetExpression {
             entity.ok_or(GetExpressionError::MissingEntity)?,
             chains.ok_or(GetExpressionError::MissingChainOrRpc)?,
             dump,
+            None,
+            None,
         ))
     }
 }

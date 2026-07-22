@@ -225,7 +225,10 @@ async fn fetch_transactions_interpreter(num_of_transactions: usize) -> Result<()
         .collect::<Vec<String>>()
         .join(", ")
         .replace("\"", "");
-    Interpreter::run_program(&format!("GET * FROM tx {joined_transactions} ON eth")).await?;
+    Interpreter::run_program(&format!(
+        "SELECT * FROM transactions WHERE hash IN ({joined_transactions}) AND chain = eth"
+    ))
+    .await?;
     Ok(())
 }
 
@@ -243,28 +246,39 @@ async fn fetch_accounts_interpreter(num_of_accounts: usize) -> Result<(), Box<dy
         .join(", ")
         .replace("\"", "");
 
-    Interpreter::run_program(&format!("GET * FROM account {joined_accounts} ON eth")).await?;
+    Interpreter::run_program(&format!(
+        "SELECT * FROM accounts WHERE address IN ({joined_accounts}) AND chain = eth"
+    ))
+    .await?;
     Ok(())
 }
 
 async fn fetch_blocks_interpreter(end_block: u64) -> Result<(), Box<dyn Error>> {
     println!("Fetching {} blocks", end_block);
-    Interpreter::run_program(&format!("GET * FROM block 1:{end_block} ON eth")).await?;
+    Interpreter::run_program(&format!(
+        "SELECT * FROM blocks WHERE number BETWEEN 1 AND {end_block} AND chain = eth"
+    ))
+    .await?;
     Ok(())
 }
 
 async fn fetch_logs_interpreter() -> Result<(), Box<dyn Error>> {
     println!("Fetching logs");
     Interpreter::run_program(
-        "GET * FROM log WHERE block 4638657:4638758, address 0xdAC17F958D2ee523a2206206994597C13D831ec7, topic0 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a ON eth"
-    ).await?;
+        "SELECT * FROM logs \
+         WHERE block_number BETWEEN 4638657 AND 4638758 \
+           AND address = 0xdAC17F958D2ee523a2206206994597C13D831ec7 \
+           AND topic0 = 0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a \
+           AND chain = eth",
+    )
+    .await?;
     Ok(())
 }
 
 async fn dump_blocks_query_builder(end_block: u64, format: &str) -> Result<(), Box<dyn Error>> {
     println!("Dumping {} blocks in {} format", end_block, format);
     Interpreter::run_program(&format!(
-        "GET * FROM block 1:{end_block} ON eth > file.{format}"
+        "COPY (SELECT * FROM blocks WHERE number BETWEEN 1 AND {end_block} AND chain = eth) TO 'file.{format}'"
     ))
     .await?;
     Ok(())

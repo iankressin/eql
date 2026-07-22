@@ -82,6 +82,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let parser = Parser::new(source);
 
@@ -103,6 +105,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let result = Parser::new(source).parse_expressions().unwrap();
 
@@ -139,6 +143,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         let parser = Parser::new(source);
@@ -163,6 +169,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
         let result = Parser::new(source).parse_expressions();
 
@@ -188,6 +196,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -232,6 +242,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -255,6 +267,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -275,6 +289,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: Some(Dump::new("vitalik-balance".to_string(), DumpFormat::Csv)),
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -335,6 +351,8 @@ mod tests {
                 )),
                 chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                 dump: None,
+                limit: None,
+                aliases: None,
             }),
             Expression::Get(GetExpression {
                 entity: Entity::Logs(Logs::new(
@@ -356,6 +374,8 @@ mod tests {
                 )),
                 chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                 dump: None,
+                limit: None,
+                aliases: None,
             }),
         ];
 
@@ -377,6 +397,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Rpc("http://localhost:8545".parse().unwrap())],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -440,6 +462,8 @@ mod tests {
             )),
             chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -493,6 +517,8 @@ mod tests {
                 entity: expected_entity,
                 chains: vec![ChainOrRpc::Chain(Chain::Ethereum)],
                 dump: None,
+                limit: None,
+                aliases: None,
             })];
 
             let parser = Parser::new(source);
@@ -518,6 +544,8 @@ mod tests {
                 ChainOrRpc::Chain(Chain::Arbitrum),
             ],
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {
@@ -540,6 +568,8 @@ mod tests {
                 .map(|c| ChainOrRpc::Chain(c.clone()))
                 .collect(),
             dump: None,
+            limit: None,
+            aliases: None,
         })];
 
         match Parser::new(source).parse_expressions() {

@@ -65,8 +65,10 @@ impl Transaction {
             filters.iter().all(|filter| match filter {
                 TransactionFilter::Type(t) => tx.r#type.as_ref().is_some_and(|v| t.compare(v)),
                 TransactionFilter::Hash(h) => tx.hash.as_ref().is_some_and(|v| h.compare(v)),
-                TransactionFilter::From(f) => tx.from.as_ref().is_some_and(|v| f.compare(v)),
-                TransactionFilter::To(t) => tx.to.as_ref().is_some_and(|v| t.compare(v)),
+                TransactionFilter::From(f) => {
+                    tx.from_address.as_ref().is_some_and(|v| f.compare(v))
+                }
+                TransactionFilter::To(t) => tx.to_address.as_ref().is_some_and(|v| t.compare(v)),
                 TransactionFilter::Data(d) => tx.data.as_ref().is_some_and(|v| d.compare(v)),
                 TransactionFilter::Value(v) => tx.value.as_ref().is_some_and(|n| v.compare(n)),
                 TransactionFilter::GasPrice(gp) => {
@@ -190,6 +192,7 @@ impl TryFrom<Pairs<'_, Rule>> for Transaction {
 pub enum TransactionField {
     Type,
     Hash,
+    BlockNumber,
     From,
     To,
     Data,
@@ -215,8 +218,9 @@ impl std::fmt::Display for TransactionField {
         match self {
             TransactionField::Type => write!(f, "type"),
             TransactionField::Hash => write!(f, "hash"),
-            TransactionField::From => write!(f, "from"),
-            TransactionField::To => write!(f, "to"),
+            TransactionField::BlockNumber => write!(f, "block_number"),
+            TransactionField::From => write!(f, "from_address"),
+            TransactionField::To => write!(f, "to_address"),
             TransactionField::Data => write!(f, "data"),
             TransactionField::Value => write!(f, "value"),
             TransactionField::GasPrice => write!(f, "gas_price"),
@@ -251,8 +255,9 @@ impl TryFrom<&str> for TransactionField {
         match value {
             "type" => Ok(TransactionField::Type),
             "hash" => Ok(TransactionField::Hash),
-            "from" => Ok(TransactionField::From),
-            "to" => Ok(TransactionField::To),
+            "block_number" => Ok(TransactionField::BlockNumber),
+            "from_address" | "from" => Ok(TransactionField::From),
+            "to_address" | "to" => Ok(TransactionField::To),
             "data" => Ok(TransactionField::Data),
             "value" => Ok(TransactionField::Value),
             "gas_price" => Ok(TransactionField::GasPrice),
@@ -537,5 +542,37 @@ mod tests {
         );
 
         assert!(!transaction.filter(&TransactionQueryRes::default()));
+    }
+
+    #[test]
+    fn transaction_field_display_uses_renamed_columns() {
+        assert_eq!(TransactionField::From.to_string(), "from_address");
+        assert_eq!(TransactionField::To.to_string(), "to_address");
+        assert_eq!(TransactionField::BlockNumber.to_string(), "block_number");
+    }
+
+    #[test]
+    fn transaction_field_parses_renamed_columns() {
+        assert_eq!(
+            TransactionField::try_from("from_address").unwrap(),
+            TransactionField::From
+        );
+        assert_eq!(
+            TransactionField::try_from("to_address").unwrap(),
+            TransactionField::To
+        );
+        assert_eq!(
+            TransactionField::try_from("block_number").unwrap(),
+            TransactionField::BlockNumber
+        );
+        // legacy spellings still parse (used by the legacy translator)
+        assert_eq!(
+            TransactionField::try_from("from").unwrap(),
+            TransactionField::From
+        );
+        assert_eq!(
+            TransactionField::try_from("to").unwrap(),
+            TransactionField::To
+        );
     }
 }

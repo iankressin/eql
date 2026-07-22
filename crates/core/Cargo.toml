@@ -27,6 +27,7 @@ parquet = "34.0.0"
 arrow = "34.0.0"
 anyhow = "1.0.90"
 reqwest = { version = "0.12", features = ["json"] }
+sqlparser = "0.52"
 
 [dev-dependencies]
 pretty_assertions = "1"

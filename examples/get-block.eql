@@ -1,1 +1,2 @@
-GET hash, size, parent_hash, timestamp FROM block 1 ON eth
+SELECT hash, size, parent_hash, timestamp FROM blocks
+WHERE number = 1 AND chain = eth;
