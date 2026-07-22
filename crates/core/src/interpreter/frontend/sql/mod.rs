@@ -1,3 +1,4 @@
+pub mod legacy;
 pub mod prelex;
 pub mod schema;
 pub mod translate;
