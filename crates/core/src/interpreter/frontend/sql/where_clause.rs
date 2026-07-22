@@ -176,7 +176,7 @@ pub fn extract_chains(conds: &mut Vec<Condition>) -> Result<Vec<ChainOrRpc>, Eql
         if cond.column == "chain" {
             chain_conditions += 1;
             if chain_conditions > 1 {
-                return Err(EqlSqlError::NotSupported(
+                return Err(EqlSqlError::Validation(
                     "chain is given more than once; use IN (...) to match several chains".into(),
                 ));
             }

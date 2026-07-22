@@ -481,7 +481,7 @@ fn build_account(fields: &[String], conds: Vec<Condition>) -> Result<Entity, Eql
         match (cond.column.as_str(), cond.op) {
             ("address", CondOp::Eq) | ("address", CondOp::In) => {
                 if address_seen {
-                    return Err(EqlSqlError::NotSupported(
+                    return Err(EqlSqlError::Validation(
                         "accounts.address is given more than once; use IN (...) to match several addresses".into(),
                     ));
                 }
@@ -670,7 +670,7 @@ fn build_transaction(fields: &[String], conds: Vec<Condition>) -> Result<Entity,
         match (cond.column.as_str(), cond.op) {
             ("hash", CondOp::Eq) | ("hash", CondOp::In) => {
                 if hash_seen {
-                    return Err(EqlSqlError::NotSupported(
+                    return Err(EqlSqlError::Validation(
                         "transactions.hash is given more than once; use IN (...) to match several hashes".into(),
                     ));
                 }
