@@ -11,7 +11,7 @@ use super::{
 use alloy::primitives::U256;
 use arrow::array::{ArrayRef, BooleanArray, Decimal128Array, StringArray, UInt64Array, UInt8Array};
 use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::{RecordBatch, RecordBatchOptions};
+use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 use serde::Serialize;
 
@@ -113,27 +113,19 @@ fn serialize_csv<T: Serialize>(results: &Vec<T>) -> Result<String, Box<dyn Error
 }
 
 fn serialize_parquet(result: &ExpressionResult) -> Result<Vec<u8>, Box<dyn Error>> {
-    let (columns, num_rows) = match result {
-        ExpressionResult::Account(rows) => (account_columns(rows)?, rows.len()),
-        ExpressionResult::Block(rows) => (block_columns(rows)?, rows.len()),
-        ExpressionResult::Transaction(rows) => (transaction_columns(rows)?, rows.len()),
-        ExpressionResult::Log(rows) => (log_columns(rows)?, rows.len()),
-    };
+    let mut columns = entity_columns(result, false)?;
+
+    // No columns means an empty result, or a query whose selected fields were
+    // all null. A zero-column Parquet file is malformed — readers reject it
+    // ("Need at least one non-root column") — so emit the entity's full schema
+    // with zero rows instead: a valid, empty, readable table.
+    if columns.is_empty() {
+        columns = entity_columns(result, true)?;
+    }
 
     let (fields, arrays): (Vec<Field>, Vec<ArrayRef>) = columns.into_iter().unzip();
     let schema = Arc::new(Schema::new(fields));
-
-    // With no columns (an empty result, or a query whose selected fields are
-    // all null) Arrow can't infer the row count from the arrays, so pass it.
-    let batch = if arrays.is_empty() {
-        RecordBatch::try_new_with_options(
-            schema.clone(),
-            arrays,
-            &RecordBatchOptions::new().with_row_count(Some(num_rows)),
-        )?
-    } else {
-        RecordBatch::try_new(schema.clone(), arrays)?
-    };
+    let batch = RecordBatch::try_new(schema.clone(), arrays)?;
 
     let mut buf = Vec::new();
     let mut writer = ArrowWriter::try_new(&mut buf, schema, None)?;
@@ -142,6 +134,23 @@ fn serialize_parquet(result: &ExpressionResult) -> Result<Vec<u8>, Box<dyn Error
     writer.close()?;
 
     Ok(buf)
+}
+
+/// Typed columns for `result`. With `schema_only`, the builders run over no
+/// rows, which (via `skip`) keeps every field and so yields the full typed
+/// schema as zero-row columns.
+fn entity_columns(
+    result: &ExpressionResult,
+    schema_only: bool,
+) -> Result<Vec<Column>, Box<dyn Error>> {
+    match result {
+        ExpressionResult::Account(rows) => account_columns(if schema_only { &[] } else { rows }),
+        ExpressionResult::Block(rows) => block_columns(if schema_only { &[] } else { rows }),
+        ExpressionResult::Transaction(rows) => {
+            transaction_columns(if schema_only { &[] } else { rows })
+        }
+        ExpressionResult::Log(rows) => log_columns(if schema_only { &[] } else { rows }),
+    }
 }
 
 // --- Typed Parquet columns ---------------------------------------------------
@@ -158,6 +167,14 @@ fn all_none<T>(vals: &[Option<T>]) -> bool {
     vals.iter().all(Option::is_none)
 }
 
+/// Whether to drop a column: only when it has rows and every one is null (an
+/// all-null *populated* field). Empty `vals` — a result with no rows — keeps
+/// the column, so an empty result still yields the full typed schema rather
+/// than a malformed zero-column file.
+fn skip<T>(vals: &[Option<T>]) -> bool {
+    !vals.is_empty() && all_none(vals)
+}
+
 fn col<R, T>(rows: &[R], f: impl Fn(&R) -> Option<T>) -> Vec<Option<T>> {
     rows.iter().map(f).collect()
 }
@@ -169,7 +186,7 @@ fn push(cols: &mut Vec<Column>, column: Option<Column>) {
 }
 
 fn u64_col(name: &str, vals: Vec<Option<u64>>) -> Option<Column> {
-    if all_none(&vals) {
+    if skip(&vals) {
         return None;
     }
     Some((
@@ -179,7 +196,7 @@ fn u64_col(name: &str, vals: Vec<Option<u64>>) -> Option<Column> {
 }
 
 fn u8_col(name: &str, vals: Vec<Option<u8>>) -> Option<Column> {
-    if all_none(&vals) {
+    if skip(&vals) {
         return None;
     }
     Some((
@@ -189,7 +206,7 @@ fn u8_col(name: &str, vals: Vec<Option<u8>>) -> Option<Column> {
 }
 
 fn bool_col(name: &str, vals: Vec<Option<bool>>) -> Option<Column> {
-    if all_none(&vals) {
+    if skip(&vals) {
         return None;
     }
     Some((
@@ -199,7 +216,7 @@ fn bool_col(name: &str, vals: Vec<Option<bool>>) -> Option<Column> {
 }
 
 fn str_col(name: &str, vals: Vec<Option<String>>) -> Option<Column> {
-    if all_none(&vals) {
+    if skip(&vals) {
         return None;
     }
     Some((
@@ -217,7 +234,7 @@ fn str_col(name: &str, vals: Vec<Option<String>>) -> Option<Column> {
 /// test-net balance — falls back to lossless decimal strings rather than being
 /// truncated. Full-range signature fields (`r`/`s`) are always decimal strings.
 fn u256_col(name: &str, vals: Vec<Option<U256>>) -> Result<Option<Column>, Box<dyn Error>> {
-    if all_none(&vals) {
+    if skip(&vals) {
         return Ok(None);
     }
     // 10^38 is Decimal128(38, 0)'s exclusive upper bound.
@@ -248,7 +265,7 @@ fn u256_to_i128(value: U256) -> Result<i128, Box<dyn Error>> {
 /// gas value. A value at/above 10^38 (never a real gas price) can't fit and
 /// makes the column fall back to lossless decimal strings, same as `u256_col`.
 fn u128_col(name: &str, vals: Vec<Option<u128>>) -> Result<Option<Column>, Box<dyn Error>> {
-    if all_none(&vals) {
+    if skip(&vals) {
         return Ok(None);
     }
     let limit = 10u128.pow(38);
@@ -287,7 +304,7 @@ fn account_columns(rows: &[AccountQueryRes]) -> Result<Vec<Column>, Box<dyn Erro
         &mut cols,
         str_col(
             "address",
-            col(rows, |r| r.address.as_ref().map(|a| format!("{a:?}"))),
+            col(rows, |r| r.address.as_ref().map(|a| format!("{a:#x}"))),
         ),
     );
     push(
@@ -434,14 +451,14 @@ fn transaction_columns(rows: &[TransactionQueryRes]) -> Result<Vec<Column>, Box<
         &mut cols,
         str_col(
             "from_address",
-            col(rows, |r| r.from_address.as_ref().map(|a| format!("{a:?}"))),
+            col(rows, |r| r.from_address.as_ref().map(|a| format!("{a:#x}"))),
         ),
     );
     push(
         &mut cols,
         str_col(
             "to_address",
-            col(rows, |r| r.to_address.as_ref().map(|a| format!("{a:?}"))),
+            col(rows, |r| r.to_address.as_ref().map(|a| format!("{a:#x}"))),
         ),
     );
     push(
@@ -491,6 +508,8 @@ fn transaction_columns(rows: &[TransactionQueryRes]) -> Result<Vec<Column>, Box<
         )?,
     );
     push(&mut cols, bool_col("y_parity", col(rows, |r| r.y_parity)));
+    // Serialize the authorization list to JSON, propagating any error rather
+    // than swallowing it into an empty string.
     let authorization_list = rows
         .iter()
         .map(|r| {
@@ -499,7 +518,7 @@ fn transaction_columns(rows: &[TransactionQueryRes]) -> Result<Vec<Column>, Box<
                 .map(serde_json::to_string)
                 .transpose()
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<Option<String>>, _>>()?;
     push(&mut cols, str_col("authorization_list", authorization_list));
     Ok(cols)
 }
@@ -517,7 +536,7 @@ fn log_columns(rows: &[LogQueryRes]) -> Result<Vec<Column>, Box<dyn Error>> {
         &mut cols,
         str_col(
             "address",
-            col(rows, |r| r.address.as_ref().map(|a| format!("{a:?}"))),
+            col(rows, |r| r.address.as_ref().map(|a| format!("{a:#x}"))),
         ),
     );
     push(
@@ -796,6 +815,46 @@ mod test {
         }];
         let cols = account_columns(&rows).unwrap();
         assert_eq!(column_types(&cols)["balance"], DataType::Decimal128(38, 0));
+    }
+
+    #[test]
+    fn parquet_empty_result_writes_readable_full_schema() {
+        use arrow::record_batch::RecordBatchReader;
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        // An empty result must produce a valid, readable Parquet file with the
+        // entity's full schema and zero rows — not a malformed zero-column file.
+        let empty = ExpressionResult::Log(Vec::<LogQueryRes>::new());
+        let bytes = serialize_parquet(&empty).unwrap();
+        assert!(!bytes.is_empty());
+
+        let path = std::env::temp_dir().join(format!("eql_empty_{}.parquet", std::process::id()));
+        std::fs::write(&path, &bytes).unwrap();
+        let file = std::fs::File::open(&path).unwrap();
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
+            .unwrap()
+            .build()
+            .unwrap();
+        let schema = reader.schema();
+        for name in ["chain", "address", "topic0", "block_number", "removed"] {
+            assert!(
+                schema.field_with_name(name).is_ok(),
+                "missing column {name}"
+            );
+        }
+        let rows: usize = reader.map(|b| b.unwrap().num_rows()).sum();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn parquet_all_null_rows_still_write_a_valid_file() {
+        // Rows present but every selected field null (e.g. only contract-creation
+        // txs when `to_address` was selected): all columns are skipped, so the
+        // full-schema fallback keeps the file valid.
+        let result = ExpressionResult::Transaction(vec![TransactionQueryRes::default(); 3]);
+        let bytes = serialize_parquet(&result).unwrap();
+        assert!(!bytes.is_empty());
     }
 
     #[test]
