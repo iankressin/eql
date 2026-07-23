@@ -491,17 +491,16 @@ fn transaction_columns(rows: &[TransactionQueryRes]) -> Result<Vec<Column>, Box<
         )?,
     );
     push(&mut cols, bool_col("y_parity", col(rows, |r| r.y_parity)));
-    push(
-        &mut cols,
-        str_col(
-            "authorization_list",
-            col(rows, |r| {
-                r.authorization_list
-                    .as_ref()
-                    .map(|a| serde_json::to_string(a).unwrap_or_default())
-            }),
-        ),
-    );
+    let authorization_list = rows
+        .iter()
+        .map(|r| {
+            r.authorization_list
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    push(&mut cols, str_col("authorization_list", authorization_list));
     Ok(cols)
 }
 
