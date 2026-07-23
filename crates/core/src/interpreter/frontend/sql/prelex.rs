@@ -30,7 +30,6 @@ fn tokenize(input: &str) -> Vec<Tok> {
                 i += 1;
             }
             toks.push(Tok::Quoted(chars[start..i].iter().collect()));
-        }
         } else if c == '-' && chars.get(i + 1) == Some(&'-') {
             let start = i;
             while i < chars.len() && chars[i] != '\n' {
